@@ -46,12 +46,40 @@ devices joined to the tailnet (the phone already is, for the ntfy alerts channel
 why the manifest carries no cleartext-traffic exception: Serve terminates real HTTPS, so there's
 no bare-IP problem to work around the way Hawksnest has.
 
-## What's deferred to Phase 8
+## Remote auto-redeploy (Phase 8, as built)
 
-Remote auto-redeploy (a dedicated `magpie` self-hosted runner, `vars.MAGPIE_DIR`, a no-tunnel
-`redeploy.ps1`, and the post-deploy synthetic smoke) lands with suite membership in Phase 8, same
-shape as the sibling apps minus the tunnel step. Until then, deploys here are a manual
-`git pull && docker compose up -d --build` on this host.
+`.github/workflows/deploy.yml` fires on `workflow_run` after CI goes green on `main` (or manual
+`workflow_dispatch`, which doubles as a rollback lever — pass a prior SHA). It runs on a
+self-hosted runner labeled `magpie` and calls `deploy/redeploy.ps1`, same shape as the sibling
+apps' deploy workflows minus the tunnel step.
+
+**One-time host setup** (mirrors the sibling apps' runner setup, e.g. Cookbook's
+`C:\actions-runner-cookbook`):
+1. Register a new self-hosted runner (GitHub repo → Settings → Actions → Runners → New
+   self-hosted runner) at `C:\actions-runner-magpie`, label it `magpie`, install as a Windows
+   service (`.\svc.cmd install` / `start`) so it survives reboots.
+2. Set the `MAGPIE_DIR` repository Actions **variable** to this canonical clone's path
+   (`C:\Code\Magpie`) — the workflow deploys that clone (which owns `server/.env` and the
+   `pgdata` volume), never the runner's ephemeral checkout.
+3. Reuse the suite's `KEYSTORE_BASE64`/`KEYSTORE_PASSWORD`/`KEY_ALIAS`/`KEY_PASSWORD` secrets
+   (same signing key as every sibling app) for `release.yml`.
+4. Set `MAGPIE_SMOKE_CLIENT_ID`/`MAGPIE_SMOKE_CLIENT_SECRET` repository **secrets** — a
+   dedicated confidential client registered on dragonfly-id's `SMOKE_CLIENTS` (separate from
+   the real `magpie` OAuth client; see CLAUDE.md §9 and dragonfly-id's `app/routers/smoke.py`).
+   If unset, the post-deploy smoke step logs a warning and skips (the health gate above it
+   still runs and still fails the deploy on its own).
+
+**`redeploy.ps1`'s one deliberate addition over the sibling scripts**: a `pg_dump` snapshot
+*before* `docker compose up -d --build` (kept in a sibling `magpie-db-backups/` directory,
+last 5 retained) — migrations run on container boot against real financial history, so a bad
+migration must be a restore, never a loss (CLAUDE.md §9).
+
+**Post-deploy synthetic smoke** (`scripts/synthetic_smoke.py`, run inside the server container):
+Magpie is SSO-only, so unlike the sibling apps' smokes there is no `/auth/register` to script.
+Instead it mints a suite-audience token from dragonfly-id's dedicated `POST /smoke/token`
+(enabled by `SMOKE_CLIENTS` — a small, separately-revocable credential, never the real OAuth
+client), trades it for a Magpie session via `POST /auth/suite` exactly like a real sign-in,
+then creates → reads → deletes a manual cash transaction.
 
 ## Verify a deploy
 

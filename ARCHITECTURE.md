@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Magpie (software-level)
 
-> **Status: Phases 0–7 built and deployed (2026-07-05).** Server: SSO-only auth, the full data
+> **Status: Phases 0–7 built and deployed; Phase 8 partially built (2026-07-05).** Server: SSO-only auth, the full data
 > model, `app/ledger/` (classify/rollups/balances/per-category, all pure and exhaustively
 > tested), accounts/categories/transactions CRUD, CSV reconciliation (`app/imports/`), email
 > ingestion (`app/ingest/`), the rules engine + review queue, bill matching + the first ntfy
@@ -51,6 +51,16 @@
 >    keep pace across phases; it's a small, well-understood gap, not an unknown one.
 >    "First insights" (plain-language summary text, CLAUDE.md's other Phase 7 scope item)
 >    is also not built — only category-suggestion drafts are.
+> 8. **Phase 8 (suite membership) is code-complete but not yet running end-to-end.** The
+>    dragonfly-id `magpie` client + smoke-token mechanism, `release.yml`/`deploy.yml`/
+>    `redeploy.ps1`/the synthetic smoke, and Dragonfly's app-registry/status-dashboard/config-
+>    broker onboarding are all built and verified (redeploy + smoke run live, green). **What's
+>    missing is host-level and needs credentials this session didn't have**: the `magpie`
+>    self-hosted runner service itself (no registration token available), the `MAGPIE_DIR`/
+>    `MAGPIE_SMOKE_CLIENT_*` repo Actions variables/secrets (no `gh` CLI, no API token with
+>    repo-admin scope), uptime-kuma monitor, `Test-SuiteInvariants.ps1`'s Magpie exception +
+>    checks, and confirming the nightly backup glob picks up magpie-db. See "Operational fit"
+>    below for the exact remaining steps.
 >
 > Per the suite docs rule, convert each section to as-built language in the same PR that
 > lands it. Suite-level context: `C:\Code\ARCHITECTURE.md`. Build spec + locked decisions:
@@ -429,15 +439,42 @@ forward once someone wants to actually test the sign-in flow on a phone.
 6. **Tailscale outage** → app degrades to cached reads; ingestion pauses and catches up
    (IMAP is pull — nothing is lost, the label retains the mail).
 
-## Operational fit (host-side, lands in Phase 8)
+## Operational fit (host-side, Phase 8)
 
-Monitoring a tunnel-less app needs its own answer: **uptime-kuma** watches
-`http://host.docker.internal:8005/health` (server liveness — kuma is a container and can't
-reach the tailnet mapping), while **`Test-SuiteInvariants.ps1`** watches what kuma can't:
-`tailscale serve status` still carries the Magpie mapping. The invariant checker also needs
-a **per-app exception list** — Magpie legitimately fails the suite-wide
-`COMPOSE_PROFILES=tunnel` assertion, and must be exempted *before* first deploy or it pages
-a false alarm. Config distribution: the hub's broker serves `config/magpie` (the ts.net
-base URL) to the app's `SuiteConfigReader`, same as siblings. Backups: magpie-db rides the
-nightly `*-db-1` dump pipeline (verify the glob picks it up) — which is itself gated on the
-encrypted-dumps precondition.
+**Built (2026-07-05):**
+- `magpie` registered as a static public OIDC client on dragonfly-id (`<package>:/oauth2redirect`
+  = `com.magpie:/oauth2redirect`), plus a dedicated `POST /smoke/token` mechanism on dragonfly-id
+  itself (a confidential `SMOKE_CLIENTS` credential, separate from the real OAuth client) so this
+  SSO-only app's post-deploy synthetic smoke has something to mint a session token against — the
+  §9 recommendation, implemented as designed.
+- `release.yml` (suite key, `version.json`, apksigner pin — identical shape to the siblings) and
+  `deploy.yml` + `deploy/redeploy.ps1` (the no-tunnel variant: no cloudflared step, health-gates
+  on loopback `/health`, and takes a `pg_dump` snapshot into a repo-adjacent `magpie-db-backups/`
+  directory *before* every `docker compose up -d --build`, keeping the last 5 — migrations run on
+  boot against real financial history, so a bad migration is a restore, never a loss). Both
+  verified end-to-end live on this host: `redeploy.ps1` run directly (snapshot → rebuild → health
+  gate, all green) and `scripts/synthetic_smoke.py` run inside the server container against the
+  live deploy (mint smoke token → `/auth/suite` → create/read/delete a transaction, all green).
+- Dragonfly-side app onboarding: `magpie` added to `AppRegistry` + the manifest `<queries>` block
+  (closes the update-channel gap) and to `ServiceRegistry` as a `SUITE`-probe,
+  `TAILNET_ONLY`-reachability entry at `https://dragonfly.tail2ce561.ts.net` (this host's own
+  Tailscale MagicDNS name) — the Suite status dashboard now carries Magpie, degrading to
+  "off-network" rather than a false "down" for anyone off the tailnet. The config broker needed
+  no code change: `SuiteConfigProvider` and the Settings "Managed app servers" card are already
+  generic over `AppRegistry.apps`, so the registry entry alone is what makes
+  `content://com.dragonfly.suiteconfig/config/magpie` resolve.
+
+**Not yet done — needs either a self-hosted runner registration token or interactive host access
+neither of which this session had the credentials for:**
+- The `magpie` self-hosted GitHub Actions runner service itself (`C:\actions-runner-magpie`) —
+  registering a runner requires a short-lived token from the GitHub UI/API that wasn't available
+  this session. `deploy.yml` is written and tested manually; it just has no runner to listen for
+  it yet.
+- The `MAGPIE_DIR` repository Actions variable and `MAGPIE_SMOKE_CLIENT_ID`/
+  `MAGPIE_SMOKE_CLIENT_SECRET` repository secrets — same blocker (no `gh` CLI on this host, no
+  API token with repo-admin scope available to this session). Exact values and setup steps are
+  in `deploy/README.md`.
+- **uptime-kuma** monitor on `http://host.docker.internal:8005/health`, **`Test-SuiteInvariants
+  .ps1`**'s per-app tunnel-exception + Magpie-specific checks (runner service, `.env` ACL,
+  `tailscale serve status` still carries the mapping), and confirming magpie-db rides the nightly
+  `*-db-1` backup glob — all host-level changes outside any single repo, not started this pass.

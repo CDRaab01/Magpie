@@ -1,0 +1,168 @@
+<#
+.SYNOPSIS
+  Redeploy the Magpie server from the canonical deployment clone (Windows / Docker Desktop).
+
+.DESCRIPTION
+  Snapshots the database, pulls the requested ref, rebuilds the server image, restarts the
+  stack, and waits for the API to report healthy. Idempotent and safe to re-run.
+
+  This is the single source of redeploy logic — both the Deploy GitHub Actions workflow
+  (.github/workflows/deploy.yml) and a human at the keyboard call it, so automated and manual
+  deploys behave identically.
+
+  The script resolves its own location to find the repo root, so it operates on the real
+  deployment clone (which owns server/.env and the pgdata volume), never on a runner's
+  ephemeral checkout. .env is gitignored and pgdata is a Docker named volume, so neither is
+  touched by `git reset --hard`.
+
+  Database migrations run automatically when the container starts
+  (server/docker-entrypoint.sh -> alembic upgrade head) — which is exactly why this script
+  takes a pg_dump snapshot FIRST (CLAUDE.md §9 Magpie-specific CD hardening): migrations run
+  on boot against financial history, so a bad migration must be a restore, never a loss. The
+  last 5 snapshots are kept in a repo-adjacent backups directory (outside the repo, so a
+  `git clean` can never touch them).
+
+  No cloudflared/tunnel step — Magpie is tailnet-only by design (CLAUDE.md §0/§8); reachability
+  beyond this host is Tailscale Serve fronting the loopback port, set up once per deploy/README.md
+  and not something this script needs to touch on every redeploy.
+
+.PARAMETER Ref
+  Commit SHA or branch to deploy. Defaults to origin/main. Pass a prior SHA to roll back.
+
+.PARAMETER HealthUrl
+  Health endpoint to poll after restart. Defaults to http://127.0.0.1:8005/health (Magpie's
+  reserved port — see deploy/README.md's port table).
+
+.PARAMETER TimeoutSeconds
+  How long to wait for the health check before failing. Defaults to 120.
+
+.PARAMETER FailureLogLines
+  Container log tail dumped on health-gate failure (so an unattended deploy is debuggable
+  from the run output). Defaults to 100.
+
+.PARAMETER BackupDir
+  Where pg_dump snapshots are kept. Defaults to a sibling of the repo root
+  (..\magpie-db-backups relative to this script's parent), never inside the repo itself.
+
+.PARAMETER KeepBackups
+  How many recent snapshots to retain. Defaults to 5.
+
+.EXAMPLE
+  powershell deploy/redeploy.ps1
+
+.EXAMPLE
+  powershell deploy/redeploy.ps1 -Ref 1a2b3c4   # roll back to a prior commit
+#>
+[CmdletBinding()]
+param(
+  [string]$Ref = "origin/main",
+  [string]$HealthUrl = "http://127.0.0.1:8005/health",
+  [int]$TimeoutSeconds = 120,
+  [int]$FailureLogLines = 100,
+  [string]$BackupDir,
+  [int]$KeepBackups = 5
+)
+
+$ErrorActionPreference = "Stop"
+
+# Repo root = parent of this script's directory (deploy/).
+$RepoDir = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($BackupDir)) {
+  $BackupDir = Join-Path (Split-Path -Parent $RepoDir) "magpie-db-backups"
+}
+
+# $ArgList (not $Args — that's an automatic variable) so splatting is unambiguous under both
+# Windows PowerShell 5.1 and PowerShell 7.
+function Invoke-Checked {
+  param([string]$Exe, [string[]]$ArgList)
+  Write-Host "> $Exe $($ArgList -join ' ')"
+  & $Exe @ArgList
+  if ($LASTEXITCODE -ne 0) {
+    throw "Command failed ($LASTEXITCODE): $Exe $($ArgList -join ' ')"
+  }
+}
+
+Write-Host "=== Magpie redeploy ==="
+Write-Host "Repo:   $RepoDir"
+Write-Host "Ref:    $Ref"
+
+# 0. Git refuses to operate on a repo owned by a different account than the one running it
+#    (CVE-2022-24765 mitigation) -- exactly the case when a Windows service account (e.g.
+#    NetworkService, running the self-hosted runner) redeploys a clone owned by an interactive
+#    user. --global (not --system) so this self-heals under whichever account runs the script,
+#    with no admin step.
+& git config --global --add safe.directory $RepoDir 2>$null
+
+# 1. Snapshot the database BEFORE touching anything — migrations run on container boot
+#    (server/docker-entrypoint.sh), so this is the last point at which "restore" is possible
+#    if the incoming migration turns out to be bad. Best-effort: a snapshot failure warns but
+#    does not block the deploy (an unreachable db container on a fresh install has nothing to
+#    dump yet), matching the health gate below being the actual safety net.
+if (-not (Test-Path $BackupDir)) {
+  New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null
+}
+$stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
+$dumpFile = Join-Path $BackupDir "magpie-$stamp.sql"
+Write-Host "Snapshotting database to $dumpFile ..."
+$dbId = (& docker compose --project-directory $RepoDir ps -q db 2>$null)
+if ($dbId) {
+  & docker compose --project-directory $RepoDir exec -T db `
+    pg_dump -U magpie -d magpie --no-owner --no-acl 2>$null | Out-File -FilePath $dumpFile -Encoding utf8
+  if ($LASTEXITCODE -eq 0 -and (Test-Path $dumpFile) -and (Get-Item $dumpFile).Length -gt 0) {
+    Write-Host "Snapshot OK ($((Get-Item $dumpFile).Length) bytes)."
+  } else {
+    Write-Warning "Snapshot may have failed or is empty - proceeding anyway (health gate below is the hard stop)."
+  }
+  # Keep only the most recent $KeepBackups snapshots.
+  Get-ChildItem -Path $BackupDir -Filter "magpie-*.sql" |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -Skip $KeepBackups |
+    Remove-Item -Force
+} else {
+  Write-Warning "db container not running yet - skipping snapshot (nothing to back up on a fresh install)."
+}
+
+# 2. Fetch latest refs.
+Invoke-Checked git @("-C", $RepoDir, "fetch", "--prune", "origin")
+
+# 3. Check out the exact ref (clean, reproducible deploy).
+Invoke-Checked git @("-C", $RepoDir, "reset", "--hard", $Ref)
+$deployedSha = (& git -C $RepoDir rev-parse --short HEAD).Trim()
+Write-Host "Deployed commit: $deployedSha"
+
+# 4. Rebuild + restart. Migrations run on container boot via the entrypoint. Stamp the build so
+#    GET /version reports what's actually running.
+$env:GIT_SHA = $deployedSha
+$env:BUILT_AT = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+Invoke-Checked docker @("compose", "--project-directory", $RepoDir, "up", "-d", "--build", "--remove-orphans")
+
+# 5. Health gate — fail the run if the API doesn't come back healthy.
+Write-Host "Waiting for $HealthUrl (timeout ${TimeoutSeconds}s)..."
+$deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+$healthy = $false
+while ((Get-Date) -lt $deadline) {
+  try {
+    $resp = Invoke-RestMethod -Uri $HealthUrl -TimeoutSec 5
+    if ($resp.status -eq "ok") { $healthy = $true; break }
+  } catch {
+    # not up yet
+  }
+  Start-Sleep -Seconds 3
+}
+if (-not $healthy) {
+  # Dump recent container logs so a failed deploy is debuggable from the run output (the
+  # runner is unattended; without this the failure is opaque).
+  Write-Host "--- docker compose logs (last ${FailureLogLines} lines) ---"
+  & docker compose --project-directory $RepoDir logs --no-color --tail $FailureLogLines 2>$null
+  Write-Host "A pre-migration snapshot is at: $dumpFile"
+  throw "Health check failed: $HealthUrl did not report ok within ${TimeoutSeconds}s."
+}
+Write-Host "Health check passed."
+
+# No cloudflared step here — Magpie is tailnet-only. Tailscale Serve fronts the loopback port
+# independently of this script (set up once, see deploy/README.md); nothing to report per-deploy.
+
+# 6. Reclaim disk from superseded image layers.
+Invoke-Checked docker @("image", "prune", "-f")
+
+Write-Host "=== Redeploy complete ($deployedSha) ==="
