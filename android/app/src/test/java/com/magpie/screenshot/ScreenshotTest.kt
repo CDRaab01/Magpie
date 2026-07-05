@@ -12,7 +12,10 @@ import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.magpie.data.remote.AccountOut
 import com.magpie.data.remote.MonthlySummaryOut
+import com.magpie.ui.accounts.AccountsContent
+import com.magpie.ui.accounts.AccountsUiState
 import com.magpie.ui.home.HomeContent
 import com.magpie.ui.home.HomeUiState
 import com.magpie.ui.theme.MagpieTheme
@@ -66,6 +69,12 @@ class ScreenshotTest {
 
     @Test
     fun home_needs_account_dark() = capture("home_needs_account_dark", dark = true) { HomeNeedsAccountScene() }
+
+    @Test
+    fun accounts_light() = capture("accounts_light", dark = false) { AccountsScene() }
+
+    @Test
+    fun accounts_dark() = capture("accounts_dark", dark = true) { AccountsScene() }
 }
 
 @Composable
@@ -83,6 +92,7 @@ private fun HomeReadyScene() {
         ),
         onAddTransaction = {},
         onViewTransactions = {},
+        onViewAccounts = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
 }
@@ -93,6 +103,41 @@ private fun HomeNeedsAccountScene() {
         state = HomeUiState.NeedsAccount,
         onAddTransaction = {},
         onViewTransactions = {},
+        onViewAccounts = {},
         onCreateFirstAccount = { _, _, _ -> },
+    )
+}
+
+@Composable
+private fun AccountsScene() {
+    AccountsContent(
+        state = AccountsUiState(
+            accounts = listOf(
+                AccountOut(
+                    id = "1",
+                    name = "Checking",
+                    institution = "US Bank",
+                    type = "depository",
+                    last4 = null,
+                    active = true,
+                    balanceCents = 318000,
+                    balanceDeltaCents = 0,
+                ),
+                AccountOut(
+                    id = "2",
+                    name = "Amex",
+                    institution = "American Express",
+                    type = "card",
+                    last4 = "1234",
+                    active = true,
+                    balanceCents = -132000,
+                    balanceDeltaCents = null,
+                ),
+            ),
+            loading = false,
+        ),
+        onBack = {},
+        onStartImport = {},
+        onDismissImportResult = {},
     )
 }

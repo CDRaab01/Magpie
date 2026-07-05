@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, field_validator
 
 from app.models.account import ACCOUNT_TYPES
 
@@ -32,11 +32,13 @@ class AccountUpdate(BaseModel):
 
 
 class AccountOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     name: str
     institution: str
     type: str
     last4: str | None
     active: bool
+    # Computed, not stored — app/ledger/balances.py. balance_delta_cents is None until this
+    # account has a statement_checkpoint (i.e. has been through at least one CSV import).
+    balance_cents: int
+    balance_delta_cents: int | None

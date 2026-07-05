@@ -19,6 +19,18 @@ data class AccountOut(
     val type: String,
     val last4: String?,
     val active: Boolean,
+    // Computed server-side (app/ledger/balances.py) — not stored.
+    @SerialName("balance_cents") val balanceCents: Long,
+    @SerialName("balance_delta_cents") val balanceDeltaCents: Long?,
+)
+
+@Serializable
+data class ImportSummaryOut(
+    @SerialName("row_count") val rowCount: Int,
+    @SerialName("created_count") val createdCount: Int,
+    @SerialName("matched_count") val matchedCount: Int,
+    @SerialName("skipped_count") val skippedCount: Int,
+    @SerialName("checkpoint_created") val checkpointCreated: Boolean,
 )
 
 @Serializable

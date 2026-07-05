@@ -48,6 +48,7 @@ fun HomeScreen(navController: NavController) {
         state = state,
         onAddTransaction = { navController.navigate(Routes.CASH_ENTRY) },
         onViewTransactions = { navController.navigate(Routes.TRANSACTIONS) },
+        onViewAccounts = { navController.navigate(Routes.ACCOUNTS) },
         onCreateFirstAccount = viewModel::createFirstAccount,
     )
 }
@@ -57,6 +58,7 @@ internal fun HomeContent(
     state: HomeUiState,
     onAddTransaction: () -> Unit,
     onViewTransactions: () -> Unit,
+    onViewAccounts: () -> Unit,
     onCreateFirstAccount: (name: String, institution: String, type: String) -> Unit,
 ) {
     Scaffold(
@@ -87,6 +89,8 @@ internal fun HomeContent(
                     MonthPanel(state.summary)
                     Spacer(Modifier.height(16.dp))
                     PulseButton(text = "View transactions", tonal = true, onClick = onViewTransactions)
+                    Spacer(Modifier.height(8.dp))
+                    PulseButton(text = "Accounts", tonal = true, onClick = onViewAccounts)
                 }
             }
         }

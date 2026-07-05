@@ -7,6 +7,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.magpie.ui.accounts.AccountsScreen
 import com.magpie.ui.cashentry.CashEntryScreen
 import com.magpie.ui.home.HomeScreen
 import com.magpie.ui.signin.SignInScreen
@@ -31,6 +32,7 @@ fun MagpieNavHost() {
                 composable(Routes.HOME) { HomeScreen(navController) }
                 composable(Routes.TRANSACTIONS) { TransactionsScreen(navController) }
                 composable(Routes.CASH_ENTRY) { CashEntryScreen(navController) }
+                composable(Routes.ACCOUNTS) { AccountsScreen(navController) }
             }
         }
     }

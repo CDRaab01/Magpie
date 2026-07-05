@@ -1,14 +1,18 @@
 # ARCHITECTURE.md — Magpie (software-level)
 
-> **Status: Phases 0–2 built and deployed (2026-07-05).** Server: SSO-only auth, the full data
-> model, `app/ledger/` (pure, exhaustively tested), and accounts/categories/transactions CRUD
-> are live at `https://dragonfly.tail2ce561.ts.net`. Android: a real Home/Transactions/
-> cash-entry app on Retrofit+Room+Hilt+navigation-compose, with the first Roborazzi baselines
-> recorded. **One known gap: the suite SSO client `magpie` is not yet registered on
-> dragonfly-id**, so on-device sign-in can't complete end-to-end until that (small, additive)
-> registration happens — see "Open items" below. Ingestion/rules/bills/budgets (Phase 3+) are
-> still target design — marked where it applies. Per the suite docs rule, convert each section
-> to as-built language in the same PR that lands it. Suite-level context:
+> **Status: Phases 0–3 built and deployed (2026-07-05).** Server: SSO-only auth, the full data
+> model, `app/ledger/` (classify/rollups/balances, all pure and exhaustively tested),
+> accounts/categories/transactions CRUD, and CSV reconciliation (`app/imports/`) are live at
+> `https://dragonfly.tail2ce561.ts.net`. Android: Home/Transactions/CashEntry/Accounts on
+> Retrofit+Room+Hilt+navigation-compose, with Roborazzi baselines for all four. **One known
+> gap: the suite SSO client `magpie` is not yet registered on dragonfly-id**, so on-device
+> sign-in can't complete end-to-end until that (small, additive) registration happens — see
+> "Open items" below. **Also honest about scope: the CSV parser is generic/institution-agnostic**
+> (no real Amex/Discover/US Bank sample exports were available to build per-issuer parsers
+> against, unlike Phase −1's email corpus) — importing real 12-month history is a human step,
+> not something fabricated here. Email ingestion/rules/bills/budgets (Phase 4+) are still
+> target design — marked where it applies. Per the suite docs rule, convert each section to
+> as-built language in the same PR that lands it. Suite-level context:
 > `C:\Code\ARCHITECTURE.md`. Build spec + locked decisions: [CLAUDE.md](CLAUDE.md). Post-v1
 > direction: [ROADMAP.md](ROADMAP.md).
 
@@ -45,13 +49,20 @@ Pulse composite build, suite signing/release/deploy conventions.
 
 ### The two pure domain packages (the correctness core — no I/O, table-driven tests)
 
-- **`app/ledger/`** (built, Phase 2) — `classify.py` (sign-convention enforcement: spend < 0,
+- **`app/ledger/`** (built, Phase 2–3) — `classify.py` (sign-convention enforcement: spend < 0,
   income/refund > 0, transfer-pair zero-sum invariant) + `rollups.py` (monthly income/spend/net,
-  transfers excluded, refunds netted into spend not income). 29 table-driven tests. Per-category
-  and vs-budget rollups are not built yet (Budgets CRUD is Phase 7 per CLAUDE.md's own phase
-  list — the exit criterion `spendCents == -120000 - 8500 + 1500` proves the netting live in
-  `test_monthly_summary_matches_ledger_math`, not just unit-tested). If a number on the phone is
-  wrong, the bug is here or in what feeds it — the `nutrition/` / `lists/merge.py` precedent.
+  transfers excluded, refunds netted into spend not income) + `balances.py` (**Phase 3** — an
+  account's OWN balance, deliberately distinct from the household rollup: it sums every
+  transaction including transfer legs, since money genuinely moved through that specific
+  account; `balance_delta` is the ledger-vs-statement honesty meter). 34 table-driven tests
+  total. Per-category and vs-budget rollups are not built yet (Budgets CRUD is Phase 7 per
+  CLAUDE.md's own phase list). If a number on the phone is wrong, the bug is here or in what
+  feeds it — the `nutrition/` / `lists/merge.py` precedent.
+- **`app/imports/csv_parser.py`** (built, Phase 3) — pure, no DB: auto-detects Date/
+  Description/Amount-or-Debit+Credit/Balance columns from common header aliases (no real
+  institution sample exports were available, so this is deliberately generic rather than
+  per-issuer — see the status header). Handles `$1,234.56`, parenthetical-negative `(12.34)`,
+  and six date formats. 28 tests.
 - **`app/rules/`** — recurrence matching: cadence windows (biweekly/monthly ± slack),
   amount tolerance bands (rolling median ± pct, for seasonal utilities), merchant
   normalization + matching, transfer-match heuristics, and deviation detection (missing /
@@ -111,7 +122,7 @@ manual cash entries are optional detail drawing that bucket down — never paral
 
 ### Domain map
 
-**Built (Phase 0–2):** `app/main.py` (`/health`, `/version`), `app/routers/suite_auth.py` +
+**Built (Phase 0–3):** `app/main.py` (`/health`, `/version`), `app/routers/suite_auth.py` +
 `app/services/suite_auth.py` (suite login), `app/routers/auth.py` (`POST /auth/refresh` — a
 Phase 1 gap: refresh tokens were minted but nothing could redeem them until this landed),
 `app/security.py` (local HS256 session tokens). Full CRUD for accounts, categories, and
@@ -119,18 +130,23 @@ transactions (`app/routers/{accounts,categories,transactions}.py` +
 `app/services/{account,category,transaction}_service.py`), all scoped to `CurrentUser` by
 filtering on `user_id` in the query itself (never a separate ownership check — a cross-user
 `test_*_not_visible_to_a_different_user` test pins this per domain). `GET /transactions/summary`
-is the Home month-panel read, backed by `app/ledger/rollups.py`. All ten §4 tables exist as
-SQLAlchemy models (migration `0001`, unchanged since Phase 1 — Phase 2 added zero migrations).
+is the Home month-panel read, backed by `app/ledger/rollups.py`; `AccountOut` now carries
+computed `balance_cents`/`balance_delta_cents` (`app/ledger/balances.py`). `POST /imports/csv`
+(`app/routers/imports.py` + `app/services/import_service.py`) parses via `csv_parser.py`,
+dedupes against existing transactions by an (account, date, amount, description) fingerprint
+(no message-id to key on, unlike email ingestion), creates `needs_review` transactions
+(kind guessed from sign only — a CSV row is never a manual confirmation), and optionally a
+`StatementCheckpoint` when a Balance column is present. All ten §4 tables exist as SQLAlchemy
+models (migration `0001`, unchanged since Phase 1 — Phases 2 and 3 both added zero migrations).
 
-**Planned (Phase 3+):**
+**Planned (Phase 4+):**
 
 | Domain | Router | Service | Models |
 |---|---|---|---|
 | Rules | `rules.py` | `rule_service` (+ `rules/`) | `Rule` (exists) |
 | Bills/calendar | `bills.py` | `bill_service` | `BillStatement` (exists) |
-| Balance anchors | (via `imports.py`) | `import_service` (+ `ledger/`) | `StatementCheckpoint` (exists) — stated balance per statement; ledger-vs-statement delta per account is the app's honesty meter and the statement-parity gate's input |
 | Budgets | `budgets.py` | `budget_service` (+ `ledger/`) | `Budget` (exists) |
-| Import | `imports.py` | `import_service` | `ImportBatch`, `IngestEvent` (exist) |
+| Email ingestion | (poller, no router) | `app/ingest/` | `IngestEvent` (exists) |
 | AI | `ai.py` | `services/ai/` (guardrailed) | drafts only, no writes |
 
 ## Android design (`android/`, package `com.magpie`)
@@ -155,17 +171,23 @@ reconnect (Cookbook's `NetworkSyncObserver` precedent).
 
 Screens: `ui/signin/SignInScreen` ("Sign in with Dragonfly," the only auth path) ·
 `ui/home/HomeScreen` (month in/out/net panel via `HomeContent`, gates on having ≥1 account —
-shows an inline create-account form instead of the summary when none exist) ·
-`ui/transactions/TransactionsScreen` (list) · `ui/cashentry/CashEntryScreen` (the offline-capable
-manual entry form — kind/amount/account/merchant/category). `ui/navigation/MagpieNavHost` gates
-the whole graph on `AuthGateViewModel.isSignedIn` (a `TokenStore` Flow) — no explicit
-post-sign-in navigation call is needed, since saving a session makes the Flow re-emit.
-Review queue · Bills calendar · Budgets · Accounts (dedicated screen) · Settings are
-Phase 3+ (rules/bills/budgets don't exist server-side yet either).
+shows an inline create-account form instead of the summary when none exist, and now links to
+Accounts) · `ui/transactions/TransactionsScreen` (list) · `ui/cashentry/CashEntryScreen` (the
+offline-capable manual entry form) · `ui/accounts/AccountsScreen` (**Phase 3** — lists accounts
+with computed balance + a "Reconciled"/"Off by $X" delta line when a checkpoint exists; each
+row has an "Import CSV" action opening a dialog: institution field, `ActivityResultContracts
+.GetContent()` file picker, multipart upload via `ApiService.importCsv`). `ui/navigation
+/MagpieNavHost` gates the whole graph on `AuthGateViewModel.isSignedIn` (a `TokenStore` Flow) —
+no explicit post-sign-in navigation call is needed, since saving a session makes the Flow
+re-emit. Review queue · Bills calendar · Budgets · Settings are Phase 4+ (rules/bills/budgets
+don't exist server-side yet either).
 
 Each screen splits into a thin ViewModel-wired composable and a pure `*Content` composable
-taking plain state + callbacks (`HomeScreen` → `HomeContent`) — the Roborazzi baselines
-screenshot the pure half directly, so no Hilt DI is needed in the screenshot test.
+taking plain state + callbacks (`HomeScreen` → `HomeContent`, `AccountsScreen` →
+`AccountsContent`) — the Roborazzi baselines screenshot the pure half directly, so no Hilt DI
+is needed in the screenshot test. **A real layout bug was caught this way in Phase 2**: three
+`StatTile`s in a `Row` without `weight()` silently overflowed off-frame — the recorded PNG
+was the thing that surfaced it, not code review.
 
 Offline model: the **only entry surface that's offline is cash entry** (the Room queue above);
 everything else is online-first against the tailnet — no broader read cache yet (unlike
@@ -210,9 +232,11 @@ forward once someone wants to actually test the sign-in flow on a phone.
    (every `transfer_group` sums to zero) + the ATM-is-the-spend cash rule; these are the
    classic self-built-tracker bugs and they're designed out at the model layer.
 3. **Balance drift from reality** (unknown opening balance, missed events, interest) →
-   `statement_checkpoints` anchor the ledger to each statement's stated balance; the
-   per-account delta is surfaced, and the **statement-parity gate** (two consecutive months
-   to the penny post-reconciliation) is v1's acceptance criterion.
+   `statement_checkpoints` (built, Phase 3) anchor the ledger to each statement's stated
+   balance; the per-account delta is surfaced on the Accounts screen ("Reconciled" / "Off by
+   $X"), and the **statement-parity gate** (two consecutive months to the penny
+   post-reconciliation) remains v1's acceptance criterion — real bank CSVs, not the synthetic
+   fixtures the parser is tested against, are what that gate actually measures.
 4. **Pending/posted drift** (tip adjustments) and **auth holds that never post** → CSV
    reconciliation updates matched rows in place; the expiry sweep drops unmatched pendings
    after ~7 days with an audit note.

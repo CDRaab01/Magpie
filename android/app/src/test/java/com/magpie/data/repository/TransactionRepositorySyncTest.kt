@@ -7,6 +7,7 @@ import com.magpie.data.remote.AccountOut
 import com.magpie.data.remote.ApiService
 import com.magpie.data.remote.CategoryCreate
 import com.magpie.data.remote.CategoryOut
+import com.magpie.data.remote.ImportSummaryOut
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.data.remote.RefreshRequest
 import com.magpie.data.remote.SuiteLoginRequest
@@ -90,6 +91,13 @@ private class FakeApi : ApiService {
 
     override suspend fun monthlySummary(year: Int, month: Int): MonthlySummaryOut = error("unused")
     override suspend fun deleteTransaction(id: String) = error("unused")
+
+    override suspend fun importCsv(
+        accountId: okhttp3.RequestBody,
+        institution: okhttp3.RequestBody,
+        file: okhttp3.MultipartBody.Part,
+    ): ImportSummaryOut = error("unused")
+
     override suspend fun getVersion(): VersionOut = error("unused")
 }
 
