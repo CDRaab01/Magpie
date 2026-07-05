@@ -13,6 +13,8 @@ val localProperties = Properties().apply {
     if (f.exists()) load(f.inputStream())
 }
 
+val keystorePath: String? = System.getenv("KEYSTORE_PATH")
+
 android {
     namespace = "com.magpie"
     compileSdk = 37
@@ -42,12 +44,20 @@ android {
         // A stable, committed key so every build — debug, local release, CI release — shares one
         // signing identity. New APKs install over the top of existing ones without Android
         // complaining about INSTALL_FAILED_UPDATE_INCOMPATIBLE. Password is not secret.
-        // The suite release key (Phase 8) supersedes this for real releases.
         create("stable") {
             storeFile = file("magpie-debug.keystore")
             storePassword = "magpie01"
             keyAlias = "magpie"
             keyPassword = "magpie01"
+        }
+        // CI's real suite release key, only when KEYSTORE_PATH is supplied in the environment.
+        if (keystorePath != null) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
         }
     }
 
@@ -56,7 +66,9 @@ android {
             signingConfig = signingConfigs.getByName("stable")
         }
         release {
-            signingConfig = signingConfigs.getByName("stable")
+            // Prefer CI's release key; fall back to the stable committed key for local releases.
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("stable")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
