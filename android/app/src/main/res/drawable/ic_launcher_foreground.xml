@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two simple chevron wing-strokes over the money gradient — a light abstraction of a
+     magpie's wing, not literal plumage art. Placeholder branding, refine later. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M20,60 L54,38 L88,60 L88,70 L54,50 L20,70 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M20,78 L54,56 L88,78 L88,88 L54,68 L20,88 Z" />
+</vector>
