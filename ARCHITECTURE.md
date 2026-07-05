@@ -335,6 +335,25 @@ teal = money/primary, green = income/under-budget, amber = needs-review, a red c
 locally from Pulse's proven `PulseRed`/`PulseRedDeep` (not a new library accent) =
 over-budget/deviation.
 
+**Design-parity + color review (2026-07-05, vs Spotter/Plate/Cookbook — the work is V1.md
+Tier 4):** the screens are functionally correct but sit at Spotter's pre-PULSE-redesign
+fidelity. Concretely missing vs every sibling: the hero greeting panel (the "magpie"
+indigo→teal→green gradient is plumbed into `MagpieTheme.heroGradient` and **used by no
+screen**), a bottom nav shell (Home is a stacked-button menu), content on Home (siblings show
+today's data; Magpie shows links), compact stat-tile values (`$4,500.00` wraps across three
+lines — siblings keep tile values short), and designed empty/error states. **Color grammar
+as-used contradicts the theme's own docstring**: `overBudget` red paints every ordinary
+spend row and every negative account balance (the app's most common datum wears the alarm
+color; a card's normal statement balance reads as an error), Bills colors the *amount* by
+paid/missing status (a green −$45 breaks the sign grammar), and teal carries four unrelated
+meanings (primary, net/transfer, awaiting-payment, AI-suggestion text). Corrective rules,
+binding for Tier 4: ordinary spend + normal balances = neutral foreground; red strictly for
+over-budget/out-of-band/missing; Bills colors the status word, never the amount; teal =
+brand/primary + money-total only; AI drafts get their own voice (violet — unclaimed inside
+Magpie); ≤2 channels per card. What was right and stays: the green/amber assignments, the
+channel-triple structure, and deriving red from proven Pulse hues instead of inventing new
+ones.
+
 **Built (Phase 2):** `data/remote/` — `ApiService` (Retrofit + kotlinx-serialization),
 `AuthInterceptor` + `TokenRefreshAuthenticator` (mirrors Spotter/Cookbook's hardened
 authenticator: serialized refreshes, only an explicit auth rejection signs out, a transient
