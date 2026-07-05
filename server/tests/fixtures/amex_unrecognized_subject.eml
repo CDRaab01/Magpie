@@ -1,0 +1,9 @@
+From: American Express <AmericanExpress@welcome.americanexpress.com>
+To: sentinel@example.com
+Subject: Your account has been credited
+Message-ID: <sanitized-amex-unrecognized-0001@welcome.americanexpress.com>
+Date: Fri, 27 Jun 2026 09:00:00 -0400
+Content-Type: text/plain; charset=UTF-8
+
+This is a template Phase 4's parser has never seen before — it should surface
+as an unparsed ingest_event, not crash the poller and not silently vanish.

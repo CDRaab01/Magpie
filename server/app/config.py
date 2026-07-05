@@ -43,5 +43,20 @@ class Settings(BaseSettings):
     # Timeout (seconds) for the outbound JWKS fetch.
     external_timeout_seconds: float = 8.0
 
+    # Email ingestion (CLAUDE.md Phase 4). Unset imap_host ⇒ the lifespan poller never starts
+    # — same "absence disables the feature" pattern as suite_jwks_url above. Read-only by
+    # design (CLAUDE.md §8): the ingest module only ever fetches, never deletes/moves mail.
+    imap_host: str | None = None
+    imap_port: int = 993
+    imap_user: str | None = None
+    imap_password: str | None = None
+    imap_label: str = "magpie-ingest"
+    imap_poll_interval_minutes: int = 15
+    # Whose accounts a parsed event's last4 should be matched against — this Magpie instance
+    # is single-household, but every table is still user-scoped per suite convention, so the
+    # poller needs to know which user's accounts to match against without an HTTP request
+    # driving it.
+    ingest_user_email: str | None = None
+
 
 settings = Settings()

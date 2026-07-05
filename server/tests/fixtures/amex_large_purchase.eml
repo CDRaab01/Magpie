@@ -1,0 +1,24 @@
+From: American Express <AmericanExpress@welcome.americanexpress.com>
+To: sentinel@example.com
+Subject: Large Purchase Approved
+Message-ID: <sanitized-amex-purchase-0001@welcome.americanexpress.com>
+Date: Sun, 5 Jul 2026 12:33:00 -0400
+Content-Type: text/plain; charset=UTF-8
+
+Dear SENTINEL USER,
+
+As you requested, we're letting you know that this purchase on your Additional
+Card ending 000000 was more than $1.00.
+
+You can change the dollar amount of these large purchase notifications online.
+
+TEST MERCHANT CO
+$42.00*
+
+Sun, Jul 5, 2026
+
+*The amount above may not reflect the final amount as some merchants issue a
+pre-authorization charge.
+
+If you still have questions about this transaction, we suggest contacting the
+merchant directly.

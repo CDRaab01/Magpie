@@ -1,3 +1,7 @@
+import asyncio
+import contextlib
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -6,11 +10,30 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.config import settings
+from app.ingest.poller import poll_loop
 from app.limiter import limiter
-from app.routers import accounts, auth, categories, imports, suite_auth, transactions
+from app.routers import accounts, auth, categories, imports, ingest, suite_auth, transactions
 
 # Single source for the human-facing version, reused by GET /version below.
 APP_VERSION = "0.1.0"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    poll_task = None
+    if (
+        settings.imap_host
+        and settings.imap_user
+        and settings.imap_password
+        and settings.ingest_user_email
+    ):
+        poll_task = asyncio.create_task(poll_loop())
+    yield
+    if poll_task is not None:
+        poll_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await poll_task
+
 
 # Interactive docs are handy locally but an unnecessary surface once this is reachable
 # over the tailnet.
@@ -20,6 +43,7 @@ app = FastAPI(
     docs_url="/docs" if settings.docs_enabled else None,
     redoc_url="/redoc" if settings.docs_enabled else None,
     openapi_url="/openapi.json" if settings.docs_enabled else None,
+    lifespan=lifespan,
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -79,6 +103,7 @@ app.include_router(accounts.router)
 app.include_router(categories.router)
 app.include_router(transactions.router)
 app.include_router(imports.router)
+app.include_router(ingest.router)
 
 
 @app.get("/health", tags=["health"])

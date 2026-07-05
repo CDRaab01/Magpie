@@ -1,20 +1,34 @@
 # ARCHITECTURE.md — Magpie (software-level)
 
-> **Status: Phases 0–3 built and deployed (2026-07-05).** Server: SSO-only auth, the full data
+> **Status: Phases 0–4 built and deployed (2026-07-05).** Server: SSO-only auth, the full data
 > model, `app/ledger/` (classify/rollups/balances, all pure and exhaustively tested),
-> accounts/categories/transactions CRUD, and CSV reconciliation (`app/imports/`) are live at
-> `https://dragonfly.tail2ce561.ts.net`. Android: Home/Transactions/CashEntry/Accounts on
-> Retrofit+Room+Hilt+navigation-compose, with Roborazzi baselines for all four. **One known
-> gap: the suite SSO client `magpie` is not yet registered on dragonfly-id**, so on-device
-> sign-in can't complete end-to-end until that (small, additive) registration happens — see
-> "Open items" below. **Also honest about scope: the CSV parser is generic/institution-agnostic**
-> (no real Amex/Discover/US Bank sample exports were available to build per-issuer parsers
-> against, unlike Phase −1's email corpus) — importing real 12-month history is a human step,
-> not something fabricated here. Email ingestion/rules/bills/budgets (Phase 4+) are still
-> target design — marked where it applies. Per the suite docs rule, convert each section to
-> as-built language in the same PR that lands it. Suite-level context:
-> `C:\Code\ARCHITECTURE.md`. Build spec + locked decisions: [CLAUDE.md](CLAUDE.md). Post-v1
-> direction: [ROADMAP.md](ROADMAP.md).
+> accounts/categories/transactions CRUD, CSV reconciliation (`app/imports/`), and email
+> ingestion (`app/ingest/`) are live at `https://dragonfly.tail2ce561.ts.net`. Android:
+> Home/Transactions/CashEntry/Accounts on Retrofit+Room+Hilt+navigation-compose, with
+> Roborazzi baselines for all four. **Known gaps, all deliberate, none silent:**
+> 1. The suite SSO client `magpie` is not yet registered on dragonfly-id, so on-device sign-in
+>    can't complete end-to-end — see "Open items" below.
+> 2. The CSV parser is generic/institution-agnostic (no real per-issuer sample exports were
+>    available when it was built) — importing real 12-month history is a human step.
+> 3. **Email ingestion has real parsers for exactly two issuers — Amex and US Bank — built
+>    from the real Phase −1 corpus.** Discover has no email parser because it has no confirmed
+>    real per-transaction alert email at all (its account-level preferences appear to route
+>    alerts to push notifications instead); the Visa account named in CLAUDE.md's Phase −1
+>    scope hasn't been checked this pass. Guessing at either would violate the entire point
+>    of Phase −1 — coverage gaps are written down, not papered over with an untested parser.
+> 4. **The live end-to-end proof of the ingestion pipeline is still pending a human step**:
+>    Phase 4's IMAP poller needs real credentials for the dedicated ingestion mailbox
+>    (account details in `C:\Users\Sonic\.dragonfly-suite\`), which requires finishing
+>    Gmail's forwarding-address verification (blocked mid-setup by Google's own
+>    anti-automation check) and then generating an app password. Everything upstream of
+>    that credential is built and proven against real (sanitized) fixtures via a
+>    mock-the-seam test — only the final "does a live
+>    swipe really show up" proof is outstanding.
+>
+> Rules/bills/budgets (Phase 5+) are still target design — marked where it applies. Per the
+> suite docs rule, convert each section to as-built language in the same PR that lands it.
+> Suite-level context: `C:\Code\ARCHITECTURE.md`. Build spec + locked decisions:
+> [CLAUDE.md](CLAUDE.md). Post-v1 direction: [ROADMAP.md](ROADMAP.md).
 
 Magpie is household cash-flow tracking with a review-not-enter product law: money events
 arrive automatically (alert emails, monthly CSV), deterministic rules file the regular ones,
@@ -73,19 +87,21 @@ Pulse composite build, suite signing/release/deploy conventions.
 
 ```
 Gmail filters → label "magpie-ingest" → IMAP poll (lifespan task, every N min)
-  → per-issuer parser template (amex.py / discover.py / usbank.py / …)
-  → normalized event: card_swipe | deposit | ach_debit | bill_issued
+  → per-issuer parser (amex.py / usbank.py — Discover/Visa: no real sample, no parser)
   → dedupe (message-id + payload hash → ingest_events)
-  → rules evaluation (see order below) → transaction row (pending) or bill_statement row
-CSV/OFX import (monthly) → institution mapping → match pending→posted / create missed → import_batches
+  → account resolved by last4 hint → transaction row (status=pending, needs_review)
+  → no matching account, or no recognized template → outcome="unparsed"
+CSV/OFX import (monthly) → institution mapping → creates its own rows independently
+  (pending↔posted matching against email-sourced rows is NOT built yet — see below)
 Manual entry (cash only) → same pipeline tail
 ```
 
 **Testability seams (architectural):** four injected dependencies, each one interface with
 a fake — the **clock** (`rules/` and all sweeps take `now`; every recurrence/expiry/
-freshness test is a time-travel test), the IMAP fetcher, the LLM client, and the ntfy
-publisher (alert tests assert **latching**: one publish per condition episode, not per
-sweep). Nothing in the pipeline reads a wall clock or opens a socket directly.
+freshness test is a time-travel test — not built yet, Phase 5), **the IMAP fetcher** (built,
+Phase 4 — see below), the LLM client, and the ntfy publisher (alert tests assert **latching**:
+one publish per condition episode, not per sweep — not built yet). Nothing in the pipeline
+reads a wall clock or opens a socket directly.
 
 **Built (Phase 1):** the suite-token test helper — `tests/conftest.py` generates one local RSA
 keypair per test session and stubs the JWKS fetch, so tests mint valid RS256 suite tokens
@@ -98,13 +114,52 @@ the module-level keygen once — a token signed via one and verified via the oth
 importable function; fixtures always resolve through pytest's single cached module. Future test
 files should request the fixture, not import the function.
 
+**Built (Phase 4):** `app/ingest/parsers.py` — pure, no I/O — recognizes exactly two real
+sender templates: Amex's "Large Purchase Approved" (spend) / "Merchant credit/refund was
+issued" (refund), and US Bank's "A new Zelle payment..." / "You received a Zelle payment"
+(income). Each extracts amount, merchant, date, and a last4 hint via regex against the real
+Phase −1 corpus's structure; anything else — an unrecognized subject, a recognized subject
+with no dollar figure, or a resolved parse with no matching account — raises `UnparsedEmail`
+and becomes an `outcome="unparsed"` `ingest_event`, never a crash and never silent data loss.
+**Two real bugs the tests caught before deploy:** the amount regex originally matched the
+*first* dollar figure in an Amex body, which is the alert-threshold sentence ("...was more
+than $1.00"), not the real charge that appears later — fixed to anchor on the *last* match.
+And the merchant-extraction word-walk broke on a trailing hyphen a signed amount leaves behind
+("...ONLINE -$18.00"), silently falling back to the entire flattened sentence — fixed by
+stripping trailing separator punctuation first.
+
+`app/ingest/imap_client.py` is the injected IMAP-fetcher seam: `RealImapFetcher` issues
+`BODY.PEEK[]` (never plain `BODY[]`), so polling never sets the `\Seen` flag — the mailbox
+stays read-only *by construction*, not just by convention (CLAUDE.md §8). Since flags are
+never touched, "already processed" is tracked entirely by `ingest_events.message_id`, and
+every poll re-scans a rolling window. `FakeImapFetcher` is the test double; `tests/fixtures/
+*.eml` are sanitized (fabricated amounts/merchants/last4s) but structurally real, and
+`test_ingest_service.py` feeds them through the actual parsers and a real throwaway DB — the
+mock-the-seam E2E pattern, with only the socket faked. `app/ingest/poller.py` is the lifespan
+background task (wired in `app/main.py`); it only starts if `imap_host` is configured, the
+same "absence disables the feature" pattern as `suite_jwks_url`. `GET /ingest/events` is the
+unparsed-backlog operator view; `POST /ingest/poll` triggers an out-of-band poll for
+verification without waiting out the interval.
+
+**Not built yet, called out rather than silently skipped:** pending→posted matching against
+CSV truth (an email-sourced pending transaction and a later CSV-imported posted row for the
+same swipe currently become two separate rows, not one reconciled row — a real fast-follow,
+not folded into Phase 4 since it also touches Phase 3's `import_service.py` matching logic);
+the rules engine (Phase 5) that would auto-file recurring matches instead of leaving
+everything `needs_review`; the clock-driven sweeps (auth-hold expiry, freshness alerts); and
+the ntfy unparsed-backlog alert. **The live proof of the whole pipeline — a real swipe
+appearing as a pending transaction within one poll interval — has not happened yet**: it
+needs IMAP credentials for the dedicated ingestion mailbox, which is blocked on finishing
+Gmail's forwarding verification (see the status header). What's shippable *right now* is
+everything upstream of that one external credential.
+
 Design rules: parsers are one module per issuer with **committed sanitized `.eml` fixtures**
 (public repo — nothing real in git); an email that parses to nothing becomes an `unparsed`
-ingest_event surfaced in an operator view + ntfy when the backlog grows, because a silently
-broken parser is the pipeline's worst failure mode (the ledger quietly goes stale); the
-ingest code never mutates the mailbox (read-only by behavior); every transaction carries
-provenance (`source` + event/batch id) so any number is traceable to the email or CSV row
-that produced it.
+ingest_event surfaced in an operator view (+ ntfy on backlog growth, once Phase 6 lands ntfy)
+because a silently broken parser is the pipeline's worst failure mode (the ledger quietly
+goes stale); the ingest code never mutates the mailbox (read-only by behavior, enforced via
+`BODY.PEEK[]`, not just documented); every transaction carries provenance (`source` +
+`ingest_event_id`) so any number is traceable to the email that produced it.
 
 ### Rules evaluation order (deterministic first, AI last — always)
 
@@ -122,7 +177,7 @@ manual cash entries are optional detail drawing that bucket down — never paral
 
 ### Domain map
 
-**Built (Phase 0–3):** `app/main.py` (`/health`, `/version`), `app/routers/suite_auth.py` +
+**Built (Phase 0–4):** `app/main.py` (`/health`, `/version`), `app/routers/suite_auth.py` +
 `app/services/suite_auth.py` (suite login), `app/routers/auth.py` (`POST /auth/refresh` — a
 Phase 1 gap: refresh tokens were minted but nothing could redeem them until this landed),
 `app/security.py` (local HS256 session tokens). Full CRUD for accounts, categories, and
@@ -136,18 +191,24 @@ computed `balance_cents`/`balance_delta_cents` (`app/ledger/balances.py`). `POST
 dedupes against existing transactions by an (account, date, amount, description) fingerprint
 (no message-id to key on, unlike email ingestion), creates `needs_review` transactions
 (kind guessed from sign only — a CSV row is never a manual confirmation), and optionally a
-`StatementCheckpoint` when a Balance column is present. All ten §4 tables exist as SQLAlchemy
-models (migration `0001`, unchanged since Phase 1 — Phases 2 and 3 both added zero migrations).
+`StatementCheckpoint` when a Balance column is present. `POST /ingest/poll` + `GET
+/ingest/events` (`app/routers/ingest.py` + `app/services/ingest_service.py`) are the email
+pipeline's manual-trigger and operator-view surface. All ten §4 tables exist as SQLAlchemy
+models; migration `0002` (Phase 4) added `ingest_events.raw_payload` (the actual body, not
+just its hash — needed so a fixed parser can replay history, which the Phase 1 migration's
+comment promised but the columns didn't yet back) plus `account_id`/`user_id` for scoping.
 
-**Planned (Phase 4+):**
+**Planned (Phase 5+):**
 
 | Domain | Router | Service | Models |
 |---|---|---|---|
 | Rules | `rules.py` | `rule_service` (+ `rules/`) | `Rule` (exists) |
 | Bills/calendar | `bills.py` | `bill_service` | `BillStatement` (exists) |
 | Budgets | `budgets.py` | `budget_service` (+ `ledger/`) | `Budget` (exists) |
-| Email ingestion | (poller, no router) | `app/ingest/` | `IngestEvent` (exists) |
 | AI | `ai.py` | `services/ai/` (guardrailed) | drafts only, no writes |
+
+**Deferred fast-follow, not a full phase:** pending→posted matching between email-sourced and
+CSV-sourced rows for the same swipe (see the ingestion pipeline section above).
 
 ## Android design (`android/`, package `com.magpie`)
 
@@ -224,10 +285,14 @@ forward once someone wants to actually test the sign-in flow on a phone.
 
 ## Failure modes to design for (ranked)
 
-1. **Silent parser rot** (issuer redesigns its email) → unparsed-event counter + ntfy on
-   backlog growth + fixtures pinning every template (sourced from the Phase −1 real-email
-   corpus) + raw payloads kept in `ingest_events` with `parse_version` so a fixed parser
-   **replays history** — a bad parse is recoverable, never permanent.
+1. **Silent parser rot** (issuer redesigns its email) → unparsed-event counter (built, Phase 4:
+   `GET /ingest/events?outcome=unparsed`; the ntfy backlog alert itself is still Phase 6) +
+   fixtures pinning every template (sourced from the Phase −1 real-email corpus) + raw
+   payloads kept in `ingest_events.raw_payload` with `parse_version` so a fixed parser
+   **replays history** — a bad parse is recoverable, never permanent. Already proved useful
+   once: two real parser bugs (an amount regex anchored on the first dollar figure instead of
+   the last, a merchant-name walk that broke on trailing punctuation) surfaced as test
+   failures before deploy, not as silently wrong dollar amounts in production.
 2. **Double-count via transfers or cash** → `ledger/` transfer semantics + pairing tests
    (every `transfer_group` sums to zero) + the ATM-is-the-spend cash rule; these are the
    classic self-built-tracker bugs and they're designed out at the model layer.

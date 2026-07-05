@@ -1,0 +1,16 @@
+From: U.S. Bank Alerts <usbank@notifications.usbank.com>
+To: sentinel@example.com
+Subject: A new Zelle payment is in your account.
+Message-ID: <sanitized-usbank-zelle-0001@notifications.usbank.com>
+Date: Thu, 2 Jul 2026 10:59:00 -0400
+Content-Type: text/plain; charset=UTF-8
+
+Log in
+
+A new payment of $75.00 from Jordan Q Sample was deposited in your account.
+Credited to account ending in: 0000
+Received date: 07/02/2026
+
+The money is ready for use right now.
+
+Thanks for using Zelle at U.S. Bank.

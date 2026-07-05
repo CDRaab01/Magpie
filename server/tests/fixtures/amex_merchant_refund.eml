@@ -1,0 +1,17 @@
+From: American Express <AmericanExpress@welcome.americanexpress.com>
+To: sentinel@example.com
+Subject: Merchant credit/refund was issued to your account
+Message-ID: <sanitized-amex-refund-0001@welcome.americanexpress.com>
+Date: Fri, 27 Jun 2026 09:00:00 -0400
+Content-Type: text/plain; charset=UTF-8
+
+See the merchant credit details
+
+SENTINEL USER
+Account Ending: 0000
+
+Your account has been credited
+
+Here's more information about any merchant credits you received
+
+SAMPLE STORE ONLINE -$18.00
