@@ -81,11 +81,13 @@ jobs:
             exit 0
           }
           # Run the smoke INSIDE the server container (python is there; the runner has no host
-          # python on PATH), hitting the app on its internal port 8005.
+          # python on PATH), hitting the app on its INTERNAL port 8000 -- 8005 is only the
+          # host-published mapping (docker-compose.yml "127.0.0.1:8005:8000"), which doesn't
+          # exist inside the container's own network namespace.
           docker compose -f "$proj\docker-compose.yml" cp "$proj\scripts\synthetic_smoke.py" server:/tmp/smoke.py
           if ($LASTEXITCODE -ne 0) { throw "copying smoke script into container failed" }
           docker compose -f "$proj\docker-compose.yml" exec -T `
-            -e MAGPIE_URL=http://localhost:8005 `
+            -e MAGPIE_URL=http://localhost:8000 `
             -e SMOKE_CLIENT_ID=$env:SMOKE_CLIENT_ID `
             -e SMOKE_CLIENT_SECRET=$env:SMOKE_CLIENT_SECRET `
             server python /tmp/smoke.py
