@@ -15,10 +15,9 @@ on:
 # the composite build's includeBuild("../../Pulse") (relative to Magpie/android) resolves inside
 # the workspace. Pulse is public, so the default token suffices.
 #
-# No android-screenshots job yet (deliberately): Phase 0 ships an empty placeholder screen with
-# nothing worth baselining. Add that job in Phase 2 when the first real screens land, alongside
-# the first recorded baselines — not before (a permanently-empty screenshot job was a known gap
-# in an earlier suite app; don't repeat it here).
+# android-screenshots landed in Phase 2 alongside the first recorded baselines (Home, dark+light,
+# ready + needs-account states) — never shipped as a baseline-less job (a known gap in an earlier
+# suite app).
 
 jobs:
   # ── Server ────────────────────────────────────────────────────────────────
@@ -94,7 +93,46 @@ jobs:
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v6
       - run: echo "sdk.dir=$ANDROID_HOME" > local.properties
-      - run: ./gradlew :app:testDebugUnitTest --no-daemon
+      # Exclude Robolectric NATIVE-graphics screenshot tests from the gating job (they download a
+      # large android-all runtime and can stall CI); they run on demand in the screenshots job.
+      - run: ./gradlew :app:testDebugUnitTest --no-daemon -PexcludeScreenshots
+
+  android-screenshots:
+    name: "Android — UI Screenshots"
+    runs-on: ubuntu-latest
+    # Manual-only: the Robolectric native-graphics path is flaky on CI, so it doesn't gate
+    # push/PR (or the auto-deploy). Run from the Actions tab to record/compare screenshots.
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: Magpie/android
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: Magpie
+      - uses: actions/checkout@v7
+        with:
+          repository: CDRaab01/Pulse
+          path: Pulse
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v6
+      - run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+      - run: >-
+          ./gradlew :app:testDebugUnitTest
+          --tests "com.magpie.screenshot.ScreenshotTest"
+          --no-daemon -Proborazzi.test.compare=true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ui-screenshots-${{ github.sha }}
+          path: |
+            Magpie/android/app/screenshots/**
+            Magpie/android/app/build/outputs/roborazzi/**
+          retention-days: 30
 
   android-build:
     name: "Android — Assemble Debug APK"

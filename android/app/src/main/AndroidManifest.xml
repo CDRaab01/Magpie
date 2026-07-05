@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -27,6 +28,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- AppAuth (suite SSO) themes its AuthorizationManagementActivity as AppCompat but
+             leaves RedirectUriReceiverActivity to inherit the app theme, which isn't AppCompat
+             -> it crashes on the redirect ("You need to use a Theme.AppCompat theme"). Force an
+             AppCompat translucent theme on it — load-bearing, every suite app carries this. -->
+        <activity
+            android:name="net.openid.appauth.RedirectUriReceiverActivity"
+            android:theme="@style/Theme.AppCompat.Translucent.NoTitleBar"
+            tools:node="merge" />
     </application>
 
 </manifest>

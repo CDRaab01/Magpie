@@ -7,7 +7,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.config import settings
 from app.limiter import limiter
-from app.routers import suite_auth
+from app.routers import accounts, auth, categories, suite_auth, transactions
 
 # Single source for the human-facing version, reused by GET /version below.
 APP_VERSION = "0.1.0"
@@ -44,7 +44,7 @@ async def dbapi_error_handler(request: Request, exc: DBAPIError) -> Response:
     sqlstate = getattr(getattr(exc, "orig", None), "sqlstate", None)
     if sqlstate and str(sqlstate).startswith("22"):
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={"detail": "Request contains a value that cannot be stored."},
         )
     raise exc
@@ -74,6 +74,10 @@ async def security_headers(request: Request, call_next) -> Response:
 
 
 app.include_router(suite_auth.router)
+app.include_router(auth.router)
+app.include_router(accounts.router)
+app.include_router(categories.router)
+app.include_router(transactions.router)
 
 
 @app.get("/health", tags=["health"])

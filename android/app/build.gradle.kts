@@ -1,8 +1,16 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+}
+
+val localProperties = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) load(f.inputStream())
 }
 
 android {
@@ -18,6 +26,16 @@ android {
         versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1
         versionName = System.getenv("VERSION_NAME") ?: "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // AppAuth's redirect receiver activity binds to this scheme — the custom-scheme half
+        // of the com.magpie:/oauth2redirect URI registered as a static client on dragonfly-id.
+        manifestPlaceholders["appAuthRedirectScheme"] = "com.magpie"
+        // Tailnet-only (CLAUDE.md §2/§8) — the default is the real Tailscale Serve HTTPS URL,
+        // not a public hostname. Override via local.properties `server.url` for an emulator
+        // pointed at a dev instance.
+        buildConfigField(
+            "String", "SERVER_URL",
+            "\"${localProperties.getProperty("server.url", "https://dragonfly.tail2ce561.ts.net/")}\""
+        )
     }
 
     signingConfigs {
@@ -54,6 +72,26 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
+    }
+}
+
+tasks.withType<Test>().configureEach {
+    listOf(
+        "roborazzi.test.record",
+        "roborazzi.test.verify",
+        "roborazzi.test.compare",
+    ).forEach { key ->
+        (project.findProperty(key) as String?)?.let { systemProperty(key, it) }
+    }
+    // The Robolectric NATIVE-graphics screenshot tests download a large android-all runtime at
+    // test time, which can stall CI. Pass -PexcludeScreenshots to skip them (the gating
+    // "Android — Unit Tests" job does this); they still run in the dedicated screenshots job.
+    if (project.hasProperty("excludeScreenshots")) {
+        filter { excludeTestsMatching("com.magpie.screenshot.*") }
+    }
 }
 
 dependencies {
@@ -62,12 +100,15 @@ dependencies {
     compileOnly("com.google.errorprone:error_prone_annotations:2.50.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.material.icons.extended)
+    implementation(libs.androidx.navigation.compose)
 
     // PULSE design system (theme tokens + component kit), from the sibling Pulse repo via the
     // composite build declared in settings.gradle.kts. Magpie leads PulseAccent.Teal.
@@ -75,9 +116,41 @@ dependencies {
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    implementation(libs.hilt.navigation.compose)
+
+    implementation(libs.retrofit)
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.retrofit.kotlinx.serialization)
+
+    implementation(libs.datastore.preferences)
+
+    // Suite SSO: OpenID Connect authorization-code + PKCE via AppAuth (CLAUDE.md §2, §8 —
+    // the BROKER 2e pilot: this is Magpie's ONLY auth path, no password fallback).
+    implementation(libs.appauth)
+
+    // Room: the offline cash-entry queue only (CLAUDE.md — the ONE entry surface that's
+    // offline; everything else is online-first against the tailnet).
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
+
+    implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)
+    testImplementation(libs.mockito.kotlin)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(kotlin("test"))
 
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.rule)
+
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
     debugImplementation(libs.androidx.ui.tooling)
 }

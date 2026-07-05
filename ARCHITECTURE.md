@@ -1,12 +1,16 @@
 # ARCHITECTURE.md — Magpie (software-level)
 
-> **Status: Phases 0–1 built and deployed (2026-07-05).** Server skeleton, Android shell on
-> Pulse, CI/CD, and SSO-only auth + the full data model are live at
-> `https://dragonfly.tail2ce561.ts.net` on the real host. Everything from Phase 2 onward
-> (ledger/rules packages, ingestion, screens) below is still target design — marked where it
-> applies. Per the suite docs rule, convert each section to as-built language in the same PR
-> that lands it. Suite-level context: `C:\Code\ARCHITECTURE.md`. Build spec + locked
-> decisions: [CLAUDE.md](CLAUDE.md). Post-v1 direction: [ROADMAP.md](ROADMAP.md).
+> **Status: Phases 0–2 built and deployed (2026-07-05).** Server: SSO-only auth, the full data
+> model, `app/ledger/` (pure, exhaustively tested), and accounts/categories/transactions CRUD
+> are live at `https://dragonfly.tail2ce561.ts.net`. Android: a real Home/Transactions/
+> cash-entry app on Retrofit+Room+Hilt+navigation-compose, with the first Roborazzi baselines
+> recorded. **One known gap: the suite SSO client `magpie` is not yet registered on
+> dragonfly-id**, so on-device sign-in can't complete end-to-end until that (small, additive)
+> registration happens — see "Open items" below. Ingestion/rules/bills/budgets (Phase 3+) are
+> still target design — marked where it applies. Per the suite docs rule, convert each section
+> to as-built language in the same PR that lands it. Suite-level context:
+> `C:\Code\ARCHITECTURE.md`. Build spec + locked decisions: [CLAUDE.md](CLAUDE.md). Post-v1
+> direction: [ROADMAP.md](ROADMAP.md).
 
 Magpie is household cash-flow tracking with a review-not-enter product law: money events
 arrive automatically (alert emails, monthly CSV), deterministic rules file the regular ones,
@@ -41,10 +45,13 @@ Pulse composite build, suite signing/release/deploy conventions.
 
 ### The two pure domain packages (the correctness core — no I/O, table-driven tests)
 
-- **`app/ledger/`** — signed-integer-cents arithmetic and classification semantics:
-  transfer pairing (card payment ↔ checking outflow nets to zero), refund-as-negative-spend,
-  monthly rollups (in/out/by-category/vs-budget). If a number on the phone is wrong, the bug
-  is here or in what feeds it — the `nutrition/` / `lists/merge.py` precedent.
+- **`app/ledger/`** (built, Phase 2) — `classify.py` (sign-convention enforcement: spend < 0,
+  income/refund > 0, transfer-pair zero-sum invariant) + `rollups.py` (monthly income/spend/net,
+  transfers excluded, refunds netted into spend not income). 29 table-driven tests. Per-category
+  and vs-budget rollups are not built yet (Budgets CRUD is Phase 7 per CLAUDE.md's own phase
+  list — the exit criterion `spendCents == -120000 - 8500 + 1500` proves the netting live in
+  `test_monthly_summary_matches_ledger_math`, not just unit-tested). If a number on the phone is
+  wrong, the bug is here or in what feeds it — the `nutrition/` / `lists/merge.py` precedent.
 - **`app/rules/`** — recurrence matching: cadence windows (biweekly/monthly ± slack),
   amount tolerance bands (rolling median ± pct, for seasonal utilities), merchant
   normalization + matching, transfer-match heuristics, and deviation detection (missing /
@@ -104,20 +111,21 @@ manual cash entries are optional detail drawing that bucket down — never paral
 
 ### Domain map
 
-**Built (Phase 0–1):** `app/main.py` (`/health`, `/version`), `app/routers/suite_auth.py` +
-`app/services/suite_auth.py` (the only auth surface — no password endpoints exist or ever
-will), `app/security.py` (local HS256 session tokens minted after a successful suite login).
-All ten §4 tables exist as SQLAlchemy models (migration `0001`) — `User`, `Account`,
-`Category`, `Transaction`, `Budget`, `Rule`, `BillStatement`, `StatementCheckpoint`,
-`IngestEvent`, `ImportBatch` — but **no CRUD routers/services beyond auth yet**; that's
-Phase 2+.
+**Built (Phase 0–2):** `app/main.py` (`/health`, `/version`), `app/routers/suite_auth.py` +
+`app/services/suite_auth.py` (suite login), `app/routers/auth.py` (`POST /auth/refresh` — a
+Phase 1 gap: refresh tokens were minted but nothing could redeem them until this landed),
+`app/security.py` (local HS256 session tokens). Full CRUD for accounts, categories, and
+transactions (`app/routers/{accounts,categories,transactions}.py` +
+`app/services/{account,category,transaction}_service.py`), all scoped to `CurrentUser` by
+filtering on `user_id` in the query itself (never a separate ownership check — a cross-user
+`test_*_not_visible_to_a_different_user` test pins this per domain). `GET /transactions/summary`
+is the Home month-panel read, backed by `app/ledger/rollups.py`. All ten §4 tables exist as
+SQLAlchemy models (migration `0001`, unchanged since Phase 1 — Phase 2 added zero migrations).
 
-**Planned (Phase 2+):**
+**Planned (Phase 3+):**
 
 | Domain | Router | Service | Models |
 |---|---|---|---|
-| Accounts/categories | `accounts.py`, `categories.py` | thin CRUD | `Account`, `Category` (exist) |
-| Transactions + review | `transactions.py` | `transaction_service` (+ `ledger/`) | `Transaction` (exists) |
 | Rules | `rules.py` | `rule_service` (+ `rules/`) | `Rule` (exists) |
 | Bills/calendar | `bills.py` | `bill_service` | `BillStatement` (exists) |
 | Balance anchors | (via `imports.py`) | `import_service` (+ `ledger/`) | `StatementCheckpoint` (exists) — stated balance per statement; ledger-vs-statement delta per account is the app's honesty meter and the statement-parity gate's input |
@@ -128,19 +136,54 @@ Phase 2+.
 ## Android design (`android/`, package `com.magpie`)
 
 Suite MVVM (Room + Retrofit + Hilt), Pulse composite build, **teal accent**
-(`PulseAccent.Teal` — added to the library in Phase 0). Channel semantics: teal =
-money/primary, green = income/under-budget, amber = needs-review, shared red family =
+(`PulseAccent.Teal` — added to the library in Phase 0). Channel semantics (`MagpieTheme.kt`):
+teal = money/primary, green = income/under-budget, amber = needs-review, a red channel built
+locally from Pulse's proven `PulseRed`/`PulseRedDeep` (not a new library accent) =
 over-budget/deviation.
 
-Screens: Home (month in/out/budget panel + review badge + upcoming-bills strip) · Review
-queue (the primary interaction — approve/correct) · Transactions · Bills calendar ("due
-before next paycheck") · Budgets · Accounts · Settings (rules + categories editors).
+**Built (Phase 2):** `data/remote/` — `ApiService` (Retrofit + kotlinx-serialization),
+`AuthInterceptor` + `TokenRefreshAuthenticator` (mirrors Spotter/Cookbook's hardened
+authenticator: serialized refreshes, only an explicit auth rejection signs out, a transient
+network failure mid-refresh keeps the session), `SuiteAuthManager` (AppAuth PKCE — see the open
+item below). `data/local/db/` — `PendingCashEntryEntity` + `CashEntryDao` (Room, the offline
+cash-entry queue only — no broader read cache yet). `data/repository/TransactionRepository` —
+the write-through: tries the server immediately, catches only `IOException` (genuine offline)
+to queue locally, lets any HTTP error propagate as a real bug rather than a silent queue (5
+repository tests against fakes pin this distinction, the `nutrition`/`merge.py`-style
+correctness core on the client side). `util/NetworkSyncObserver` drains the queue on
+reconnect (Cookbook's `NetworkSyncObserver` precedent).
 
-Offline model: read cache in Room; the **only entry surface is cash entry**, which queues
-offline (Cookbook check-off precedent). Everything else assumes tailnet reachability —
-acceptable because the phone is on Tailscale wherever it has signal. Because Tailscale
-Serve provides HTTPS, the manifest needs **no cleartext exception** (unlike Hawksnest's
-bare-IP problem).
+Screens: `ui/signin/SignInScreen` ("Sign in with Dragonfly," the only auth path) ·
+`ui/home/HomeScreen` (month in/out/net panel via `HomeContent`, gates on having ≥1 account —
+shows an inline create-account form instead of the summary when none exist) ·
+`ui/transactions/TransactionsScreen` (list) · `ui/cashentry/CashEntryScreen` (the offline-capable
+manual entry form — kind/amount/account/merchant/category). `ui/navigation/MagpieNavHost` gates
+the whole graph on `AuthGateViewModel.isSignedIn` (a `TokenStore` Flow) — no explicit
+post-sign-in navigation call is needed, since saving a session makes the Flow re-emit.
+Review queue · Bills calendar · Budgets · Accounts (dedicated screen) · Settings are
+Phase 3+ (rules/bills/budgets don't exist server-side yet either).
+
+Each screen splits into a thin ViewModel-wired composable and a pure `*Content` composable
+taking plain state + callbacks (`HomeScreen` → `HomeContent`) — the Roborazzi baselines
+screenshot the pure half directly, so no Hilt DI is needed in the screenshot test.
+
+Offline model: the **only entry surface that's offline is cash entry** (the Room queue above);
+everything else is online-first against the tailnet — no broader read cache yet (unlike
+Cookbook's recipe cache). Acceptable because the phone is on Tailscale wherever it has signal.
+Because Tailscale Serve provides HTTPS, the manifest needs **no cleartext exception** (unlike
+Hawksnest's bare-IP problem).
+
+### Open item: the `magpie` suite OAuth client isn't registered yet
+
+`SuiteAuthManager` is wired for client id `magpie`, redirect `com.magpie:/oauth2redirect` — the
+naming CLAUDE.md's Phase 8 section already commits to. But dragonfly-id's static client list
+(`Dragonfly/server/app/oidc/clients.py`) only has `spotter`/`plate`/`cookbook`/`dragonfly`/
+`localdev` today. **On-device sign-in cannot complete until `magpie` is added there** — a small,
+additive change to a live production identity server, deliberately not made without a separate
+go-ahead (same caution as the Pulse `PulseAccent.Teal` change: touching shared/live suite
+infrastructure gets its own explicit authorization, not a silent side effect of an app-repo
+task). CLAUDE.md's own Phase 8 scopes this registration there; it may make sense to pull it
+forward once someone wants to actually test the sign-in flow on a phone.
 
 ## Trust boundaries
 
