@@ -63,7 +63,11 @@ private class FakeApi : ApiService {
     override suspend fun listCategories(): List<CategoryOut> = error("unused")
     override suspend fun createCategory(req: CategoryCreate): CategoryOut = error("unused")
 
-    override suspend fun listTransactions(start: String?, end: String?): List<TransactionOut> {
+    override suspend fun listTransactions(
+        start: String?,
+        end: String?,
+        reviewState: String?,
+    ): List<TransactionOut> {
         gate()
         return emptyList()
     }
@@ -90,6 +94,12 @@ private class FakeApi : ApiService {
     }
 
     override suspend fun monthlySummary(year: Int, month: Int): MonthlySummaryOut = error("unused")
+
+    override suspend fun updateTransaction(
+        id: String,
+        req: com.magpie.data.remote.TransactionUpdate,
+    ): TransactionOut = error("unused")
+
     override suspend fun deleteTransaction(id: String) = error("unused")
 
     override suspend fun importCsv(

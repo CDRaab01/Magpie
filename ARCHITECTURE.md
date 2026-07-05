@@ -1,11 +1,12 @@
 # ARCHITECTURE.md — Magpie (software-level)
 
-> **Status: Phases 0–4 built and deployed (2026-07-05).** Server: SSO-only auth, the full data
+> **Status: Phases 0–5 built and deployed (2026-07-05).** Server: SSO-only auth, the full data
 > model, `app/ledger/` (classify/rollups/balances, all pure and exhaustively tested),
-> accounts/categories/transactions CRUD, CSV reconciliation (`app/imports/`), and email
-> ingestion (`app/ingest/`) are live at `https://dragonfly.tail2ce561.ts.net`. Android:
-> Home/Transactions/CashEntry/Accounts on Retrofit+Room+Hilt+navigation-compose, with
-> Roborazzi baselines for all four. **Known gaps, all deliberate, none silent:**
+> accounts/categories/transactions CRUD, CSV reconciliation (`app/imports/`), email
+> ingestion (`app/ingest/`), and the rules engine + review queue (`app/rules/`) are live at
+> `https://dragonfly.tail2ce561.ts.net`. Android: Home/Transactions/CashEntry/Accounts/
+> Review-queue on Retrofit+Room+Hilt+navigation-compose, with Roborazzi baselines for all
+> five. **Known gaps, all deliberate, none silent:**
 > 1. The suite SSO client `magpie` is not yet registered on dragonfly-id, so on-device sign-in
 >    can't complete end-to-end — see "Open items" below.
 > 2. The CSV parser is generic/institution-agnostic (no real per-issuer sample exports were
@@ -24,9 +25,13 @@
 >    that credential is built and proven against real (sanitized) fixtures via a
 >    mock-the-seam test — only the final "does a live
 >    swipe really show up" proof is outstanding.
+> 5. **Phase 5's rules engine auto-files transfers, recurring income/bills, and
+>    merchant→category matches — but pending→posted matching (item 4's fast-follow) still
+>    isn't built**, so a CSV-truth reconciliation pass won't yet merge with an email-sourced
+>    pending row for the same swipe; they land as two rows until that lands.
 >
-> Rules/bills/budgets (Phase 5+) are still target design — marked where it applies. Per the
-> suite docs rule, convert each section to as-built language in the same PR that lands it.
+> Bills/budgets (Phase 6+) are still target design — marked where it applies. Per the suite
+> docs rule, convert each section to as-built language in the same PR that lands it.
 > Suite-level context: `C:\Code\ARCHITECTURE.md`. Build spec + locked decisions:
 > [CLAUDE.md](CLAUDE.md). Post-v1 direction: [ROADMAP.md](ROADMAP.md).
 
@@ -77,11 +82,18 @@ Pulse composite build, suite signing/release/deploy conventions.
   institution sample exports were available, so this is deliberately generic rather than
   per-issuer — see the status header). Handles `$1,234.56`, parenthetical-negative `(12.34)`,
   and six date formats. 28 tests.
-- **`app/rules/`** — recurrence matching: cadence windows (biweekly/monthly ± slack),
-  amount tolerance bands (rolling median ± pct, for seasonal utilities), merchant
-  normalization + matching, transfer-match heuristics, and deviation detection (missing /
-  out-of-band / short-paycheck). Deterministic and explainable — every auto-filed
-  transaction can cite its rule.
+- **`app/rules/`** (built, Phase 5) — `clock.py` (the injected time seam — `SystemClock` in
+  production, `FixedClock` in tests, so cadence/band logic gets real time-travel tests)
+  + `recurrence.py` (cadence windows — weekly/biweekly/monthly ± `slack_days`, monthly
+  clamps to the last valid day so Jan 31 → Feb 28 doesn't crash) + `bands.py` (rolling
+  median ± pct tolerance, compared on magnitude so a $45 bill and a refund-shaped -$45 read
+  the same) + `merchant_match.py` (normalization strips card-network noise like `SQ *` /
+  trailing transaction IDs, then substring match either direction) + `transfer_matching.py`
+  (pairs an outflow on one account with an exactly-cancelling inflow on a *different*
+  account within a day window — never same-account, never a partial match). All pure, 21
+  table-driven tests. Deviation detection (missing bill / out-of-band / short-paycheck) is
+  Phase 6, not built yet — the clock/band primitives exist, the alert sweeps that use them
+  don't.
 
 ### The ingestion pipeline (`app/ingest/`)
 
@@ -163,21 +175,34 @@ goes stale); the ingest code never mutates the mailbox (read-only by behavior, e
 
 ### Rules evaluation order (deterministic first, AI last — always)
 
-1. dedupe → 2. transfer matching → 3. recurring income/bills (in-band ⇒ auto-filed) →
-4. merchant→category rules → 5. LLM category suggestion ⇒ `needs_review` draft.
-The review queue is the only place AI output meets the ledger, and only via user confirm —
-the suite's draft-commit trust model applied to money.
+**Built (Phase 5), wired into both `import_service.py` and `ingest_service.py` so every
+CSV row and every ingested email goes through the same evaluator — `app/services
+/rule_service.py::evaluate_transaction`:** 1. dedupe (already done upstream by each caller
+before a row ever reaches the evaluator) → 2. transfer matching (an exact-cancelling pair on
+a different account ⇒ both legs `kind="transfer"`, `review_state="auto"`, no review) →
+3. recurring income/bill rules (≥3 observations + within cadence window + within amount band
+⇒ auto-filed with `rule_note` = `"Matched rule: X"`; below threshold or out of band ⇒
+`needs_review` with an explanation naming the rule and the reason) → 4. merchant→category
+rules (deterministic category assignment ⇒ auto) → 5. LLM category suggestion ⇒
+`needs_review` draft — **not built yet, Phase 7**; today, falling through all four rule
+stages just leaves a transaction `needs_review` with no draft category. **A rule only ever
+decides *category*, never *kind*** — the amount's sign is the single source of truth for
+spend/income/refund (`app/ledger/classify.py`), so a mismatched rule can never force an
+invalid sign combination onto a transaction.
 
-**Cold start:** no rule auto-files until ≥3 observations (seeded by the Phase 3 twelve-month
-CSV backfill — bands are rolling medians over matched history). **Scheduled sweeps** (same
-lifespan scheduler as the poller): auth-hold expiry (pending, unmatched after ~7 days →
-auto-drop with audit note), per-account freshness (no events in N days → staleness alert),
-unparsed-backlog check. **Cash rule:** the ATM withdrawal *is* the spend (category `cash`);
-manual cash entries are optional detail drawing that bucket down — never parallel spend.
+**Cold start:** no rule auto-files until ≥3 observations, counted from *every* matching
+transaction on that account regardless of whether it predates the rule — Phase 3's CSV
+backfill history counts the same as live events, exactly as CLAUDE.md's cold-start bar
+intends. Below threshold, the review queue shows *why* ("Looks like XCEL ENERGY, 2/3
+observations"), not just that it needs a look. **Not built yet:** the clock-driven scheduled
+sweeps (auth-hold expiry, per-account freshness, unparsed-backlog check) and the ntfy alerts
+they'd trigger — `app/rules/clock.py`'s `Clock` seam exists for exactly this, Phase 6 is
+what actually calls it on a schedule. **Cash rule** (the ATM withdrawal *is* the spend,
+manual cash entries draw that bucket down) is still target design, not built.
 
 ### Domain map
 
-**Built (Phase 0–4):** `app/main.py` (`/health`, `/version`), `app/routers/suite_auth.py` +
+**Built (Phase 0–5):** `app/main.py` (`/health`, `/version`), `app/routers/suite_auth.py` +
 `app/services/suite_auth.py` (suite login), `app/routers/auth.py` (`POST /auth/refresh` — a
 Phase 1 gap: refresh tokens were minted but nothing could redeem them until this landed),
 `app/security.py` (local HS256 session tokens). Full CRUD for accounts, categories, and
@@ -197,12 +222,20 @@ pipeline's manual-trigger and operator-view surface. All ten §4 tables exist as
 models; migration `0002` (Phase 4) added `ingest_events.raw_payload` (the actual body, not
 just its hash — needed so a fixed parser can replay history, which the Phase 1 migration's
 comment promised but the columns didn't yet back) plus `account_id`/`user_id` for scoping.
+Migration `0003` (Phase 5) added `rules.user_id` (the same CurrentUser-scoping gap
+`ingest_events` had before Phase 4, caught the same way) plus `transactions
+.matched_rule_id`/`rule_note` — the review queue's "why", captured as a fact at evaluation
+time rather than re-derived later from whatever the rule looks like now. `GET/POST /rules`,
+`GET/PATCH/DELETE /rules/{id}` (`app/routers/rules.py` + `app/services/rule_service.py`) are
+plain CurrentUser-scoped CRUD; `PATCH /transactions/{id}` gained `review_state` and `kind`
+(the review queue's confirm/correct action — `kind` only re-validates the sign invariant
+when supplied, never blindly trusted); `GET /transactions?review_state=needs_review` is the
+review queue's read.
 
-**Planned (Phase 5+):**
+**Planned (Phase 6+):**
 
 | Domain | Router | Service | Models |
 |---|---|---|---|
-| Rules | `rules.py` | `rule_service` (+ `rules/`) | `Rule` (exists) |
 | Bills/calendar | `bills.py` | `bill_service` | `BillStatement` (exists) |
 | Budgets | `budgets.py` | `budget_service` (+ `ledger/`) | `Budget` (exists) |
 | AI | `ai.py` | `services/ai/` (guardrailed) | drafts only, no writes |
@@ -233,15 +266,22 @@ reconnect (Cookbook's `NetworkSyncObserver` precedent).
 Screens: `ui/signin/SignInScreen` ("Sign in with Dragonfly," the only auth path) ·
 `ui/home/HomeScreen` (month in/out/net panel via `HomeContent`, gates on having ≥1 account —
 shows an inline create-account form instead of the summary when none exist, and now links to
-Accounts) · `ui/transactions/TransactionsScreen` (list) · `ui/cashentry/CashEntryScreen` (the
-offline-capable manual entry form) · `ui/accounts/AccountsScreen` (**Phase 3** — lists accounts
-with computed balance + a "Reconciled"/"Off by $X" delta line when a checkpoint exists; each
-row has an "Import CSV" action opening a dialog: institution field, `ActivityResultContracts
-.GetContent()` file picker, multipart upload via `ApiService.importCsv`). `ui/navigation
-/MagpieNavHost` gates the whole graph on `AuthGateViewModel.isSignedIn` (a `TokenStore` Flow) —
-no explicit post-sign-in navigation call is needed, since saving a session makes the Flow
-re-emit. Review queue · Bills calendar · Budgets · Settings are Phase 4+ (rules/bills/budgets
-don't exist server-side yet either).
+Accounts and Review queue) · `ui/transactions/TransactionsScreen` (list) ·
+`ui/cashentry/CashEntryScreen` (the offline-capable manual entry form) ·
+`ui/accounts/AccountsScreen` (**Phase 3** — lists accounts with computed balance + a
+"Reconciled"/"Off by $X" delta line when a checkpoint exists; each row has an "Import CSV"
+action opening a dialog: institution field, `ActivityResultContracts.GetContent()` file
+picker, multipart upload via `ApiService.importCsv`) · `ui/reviewqueue/ReviewQueueScreen`
+(**Phase 5** — `GET /transactions?review_state=needs_review`; each row shows the amount,
+merchant, and `rule_note` when a rule fired but didn't clear the auto-file bar — CLAUDE.md's
+"the review queue shows why" made literal on-screen, not just a server-side concept; a
+"Confirm" action `PATCH`es `review_state="confirmed"`). `ui/navigation/MagpieNavHost` gates
+the whole graph on `AuthGateViewModel.isSignedIn` (a `TokenStore` Flow) — no explicit
+post-sign-in navigation call is needed, since saving a session makes the Flow re-emit. Bills
+calendar · Budgets · Settings are Phase 6+ (bills/budgets don't exist server-side yet
+either). **Not built this pass:** a badge count on Home showing the review queue's size
+(CLAUDE.md's target design) — the screen itself exists, the Home-panel summary of it doesn't
+yet.
 
 Each screen splits into a thin ViewModel-wired composable and a pure `*Content` composable
 taking plain state + callbacks (`HomeScreen` → `HomeContent`, `AccountsScreen` →

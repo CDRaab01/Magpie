@@ -33,8 +33,11 @@ async def all_transactions(
     db: DbSession,
     start: datetime.date | None = Query(default=None),
     end: datetime.date | None = Query(default=None),
+    review_state: str | None = Query(default=None),
 ):
-    return await list_transactions(db, current_user.id, start=start, end=end)
+    return await list_transactions(
+        db, current_user.id, start=start, end=end, review_state=review_state
+    )
 
 
 @router.post("", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)

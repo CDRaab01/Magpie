@@ -54,6 +54,12 @@ class Transaction(Base):
     import_batch_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("import_batches.id", ondelete="SET NULL"), nullable=True
     )
+    # The review queue's "why" (CLAUDE.md §5) — captured once at evaluation time, not
+    # re-derived later from whatever the rule looks like now.
+    matched_rule_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("rules.id", ondelete="SET NULL"), nullable=True
+    )
+    rule_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

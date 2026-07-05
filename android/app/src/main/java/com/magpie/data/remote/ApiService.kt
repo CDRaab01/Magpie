@@ -6,6 +6,7 @@ import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Multipart
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Part
 import retrofit2.http.Path
@@ -39,6 +40,7 @@ interface ApiService {
     suspend fun listTransactions(
         @Query("start") start: String? = null,
         @Query("end") end: String? = null,
+        @Query("review_state") reviewState: String? = null,
     ): List<TransactionOut>
 
     @POST("transactions")
@@ -49,6 +51,12 @@ interface ApiService {
         @Query("year") year: Int,
         @Query("month") month: Int,
     ): MonthlySummaryOut
+
+    @PATCH("transactions/{id}")
+    suspend fun updateTransaction(
+        @Path("id") id: String,
+        @Body req: TransactionUpdate,
+    ): TransactionOut
 
     @DELETE("transactions/{id}")
     suspend fun deleteTransaction(@Path("id") id: String)

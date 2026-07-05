@@ -14,10 +14,13 @@ import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.magpie.data.remote.AccountOut
 import com.magpie.data.remote.MonthlySummaryOut
+import com.magpie.data.remote.TransactionOut
 import com.magpie.ui.accounts.AccountsContent
 import com.magpie.ui.accounts.AccountsUiState
 import com.magpie.ui.home.HomeContent
 import com.magpie.ui.home.HomeUiState
+import com.magpie.ui.reviewqueue.ReviewQueueContent
+import com.magpie.ui.reviewqueue.ReviewQueueUiState
 import com.magpie.ui.theme.MagpieTheme
 import org.junit.Rule
 import org.junit.Test
@@ -75,6 +78,12 @@ class ScreenshotTest {
 
     @Test
     fun accounts_dark() = capture("accounts_dark", dark = true) { AccountsScene() }
+
+    @Test
+    fun review_queue_light() = capture("review_queue_light", dark = false) { ReviewQueueScene() }
+
+    @Test
+    fun review_queue_dark() = capture("review_queue_dark", dark = true) { ReviewQueueScene() }
 }
 
 @Composable
@@ -93,6 +102,7 @@ private fun HomeReadyScene() {
         onAddTransaction = {},
         onViewTransactions = {},
         onViewAccounts = {},
+        onViewReviewQueue = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
 }
@@ -104,6 +114,7 @@ private fun HomeNeedsAccountScene() {
         onAddTransaction = {},
         onViewTransactions = {},
         onViewAccounts = {},
+        onViewReviewQueue = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
 }
@@ -139,5 +150,54 @@ private fun AccountsScene() {
         onBack = {},
         onStartImport = {},
         onDismissImportResult = {},
+    )
+}
+
+@Composable
+private fun ReviewQueueScene() {
+    ReviewQueueContent(
+        state = ReviewQueueUiState(
+            transactions = listOf(
+                TransactionOut(
+                    id = "1",
+                    accountId = "acct-1",
+                    amount = -3500,
+                    currency = "USD",
+                    date = "2026-07-15",
+                    status = "posted",
+                    merchantRaw = "XCEL ENERGY",
+                    merchantNorm = "XCEL ENERGY",
+                    categoryId = null,
+                    kind = "spend",
+                    transferGroup = null,
+                    reviewState = "needs_review",
+                    source = "csv",
+                    matchedRuleId = "rule-1",
+                    ruleNote = "Looks like XCEL ENERGY, 2/3 observations",
+                    createdAt = "2026-07-15T00:00:00Z",
+                ),
+                TransactionOut(
+                    id = "2",
+                    accountId = "acct-1",
+                    amount = -1899,
+                    currency = "USD",
+                    date = "2026-07-14",
+                    status = "posted",
+                    merchantRaw = "SAMPLE STORE ONLINE",
+                    merchantNorm = "SAMPLE STORE ONLINE",
+                    categoryId = null,
+                    kind = "spend",
+                    transferGroup = null,
+                    reviewState = "needs_review",
+                    source = "email",
+                    matchedRuleId = null,
+                    ruleNote = null,
+                    createdAt = "2026-07-14T00:00:00Z",
+                ),
+            ),
+            loading = false,
+        ),
+        onBack = {},
+        onConfirm = {},
     )
 }

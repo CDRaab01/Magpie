@@ -5,4 +5,5 @@ object Routes {
     const val TRANSACTIONS = "transactions"
     const val CASH_ENTRY = "cash_entry"
     const val ACCOUNTS = "accounts"
+    const val REVIEW_QUEUE = "review_queue"
 }

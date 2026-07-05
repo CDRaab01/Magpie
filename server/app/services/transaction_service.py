@@ -59,6 +59,7 @@ async def list_transactions(
     *,
     start: datetime.date | None = None,
     end: datetime.date | None = None,
+    review_state: str | None = None,
 ) -> list[Transaction]:
     query = (
         select(Transaction)
@@ -70,6 +71,8 @@ async def list_transactions(
         query = query.where(Transaction.date >= start)
     if end is not None:
         query = query.where(Transaction.date <= end)
+    if review_state is not None:
+        query = query.where(Transaction.review_state == review_state)
     result = await db.execute(query)
     return list(result.scalars().all())
 
@@ -91,11 +94,23 @@ async def get_transaction(
 async def update_transaction(
     db: AsyncSession, user_id: uuid.UUID, transaction_id: uuid.UUID, req: TransactionUpdate
 ) -> Transaction:
+    """The review queue's confirm/correct action lives here too: a human accepting or fixing a
+    rule/AI draft (Phase 5) sets review_state (and optionally kind) alongside category —
+    `kind` only re-validates the sign invariant when both are supplied together, since a
+    lone `kind` change without knowing the current amount's sign would be unsafe to check."""
     txn = await get_transaction(db, user_id, transaction_id)
     if req.category_id is not None:
         txn.category_id = req.category_id
     if req.merchant_raw is not None:
         txn.merchant_raw = req.merchant_raw
+    if req.kind is not None:
+        try:
+            validate_kind_amount_sign(req.kind, txn.amount)
+        except ValueError as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
+        txn.kind = req.kind
+    if req.review_state is not None:
+        txn.review_state = req.review_state
     await db.commit()
     await db.refresh(txn)
     return txn

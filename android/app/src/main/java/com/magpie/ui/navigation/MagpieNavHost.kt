@@ -10,6 +10,7 @@ import androidx.navigation.compose.rememberNavController
 import com.magpie.ui.accounts.AccountsScreen
 import com.magpie.ui.cashentry.CashEntryScreen
 import com.magpie.ui.home.HomeScreen
+import com.magpie.ui.reviewqueue.ReviewQueueScreen
 import com.magpie.ui.signin.SignInScreen
 import com.magpie.ui.transactions.TransactionsScreen
 
@@ -33,6 +34,7 @@ fun MagpieNavHost() {
                 composable(Routes.TRANSACTIONS) { TransactionsScreen(navController) }
                 composable(Routes.CASH_ENTRY) { CashEntryScreen(navController) }
                 composable(Routes.ACCOUNTS) { AccountsScreen(navController) }
+                composable(Routes.REVIEW_QUEUE) { ReviewQueueScreen(navController) }
             }
         }
     }

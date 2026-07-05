@@ -58,6 +58,14 @@ data class TransactionCreate(
 )
 
 @Serializable
+data class TransactionUpdate(
+    @SerialName("category_id") val categoryId: String? = null,
+    @SerialName("merchant_raw") val merchantRaw: String? = null,
+    @SerialName("review_state") val reviewState: String? = null,
+    val kind: String? = null,
+)
+
+@Serializable
 data class TransactionOut(
     val id: String,
     @SerialName("account_id") val accountId: String,
@@ -72,6 +80,8 @@ data class TransactionOut(
     @SerialName("transfer_group") val transferGroup: String?,
     @SerialName("review_state") val reviewState: String,
     val source: String,
+    @SerialName("matched_rule_id") val matchedRuleId: String? = null,
+    @SerialName("rule_note") val ruleNote: String? = null,
     @SerialName("created_at") val createdAt: String,
 )
 

@@ -7,6 +7,7 @@ that's a distinct, separately-scoped increment touching `import_service.py`'s ma
 not something to fold in silently here. Documented as a fast-follow in ARCHITECTURE.md.
 """
 
+import datetime
 import hashlib
 import uuid
 from dataclasses import dataclass
@@ -19,6 +20,8 @@ from app.ingest.parsers import UnparsedEmail, parse_email
 from app.models.account import Account
 from app.models.ingest_event import IngestEvent
 from app.models.transaction import Transaction
+from app.rules.merchant_match import normalize_merchant
+from app.services.rule_service import evaluate_transaction
 
 
 @dataclass(frozen=True)
@@ -41,8 +44,13 @@ async def _match_account(
 
 
 async def run_ingest_poll(
-    db: AsyncSession, user_id: uuid.UUID, fetcher: ImapFetcher
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    fetcher: ImapFetcher,
+    *,
+    now: datetime.datetime | None = None,
 ) -> IngestPollSummary:
+    now = now or datetime.datetime.now(datetime.timezone.utc)
     fetched = fetcher.fetch_recent()
     created = duplicate = unparsed = 0
 
@@ -97,19 +105,36 @@ async def run_ingest_poll(
             unparsed += 1
             continue
 
+        txn_date = parsed.event_date or item.received_at.date()
+        evaluation = await evaluate_transaction(
+            db,
+            user_id,
+            account_id=account.id,
+            amount_cents=parsed.amount_cents,
+            txn_date=txn_date,
+            merchant_raw=parsed.merchant,
+            default_kind=parsed.kind,
+            now=now,
+        )
         db.add(
             Transaction(
                 account_id=account.id,
                 amount=parsed.amount_cents,
-                date=parsed.event_date or item.received_at.date(),
+                date=txn_date,
                 status="pending",
                 merchant_raw=parsed.merchant,
-                kind=parsed.kind,
-                review_state="needs_review",
+                merchant_norm=normalize_merchant(parsed.merchant) if parsed.merchant else None,
+                kind=evaluation.kind,
+                review_state=evaluation.review_state,
+                category_id=evaluation.category_id,
+                matched_rule_id=evaluation.matched_rule_id,
+                rule_note=evaluation.rule_note,
+                transfer_group=evaluation.transfer_group,
                 source="email",
                 ingest_event_id=event.id,
             )
         )
+        await db.flush()
         created += 1
 
     await db.commit()

@@ -4,7 +4,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.ledger.classify import TRANSACTION_KINDS
-from app.models.transaction import TRANSACTION_STATUSES
+from app.models.transaction import REVIEW_STATES, TRANSACTION_STATUSES
 
 
 class TransactionCreate(BaseModel):
@@ -47,6 +47,25 @@ class TransactionUpdate(BaseModel):
     # it in Phase 2 — every transaction here is manually entered, already categorized or not).
     category_id: uuid.UUID | None = None
     merchant_raw: str | None = None
+    # Phase 5: the review queue's "confirm" action — a human correcting or accepting a
+    # rule/AI draft. `kind` is only meaningful together with review_state="confirmed" (the
+    # service re-validates the sign invariant if both are supplied).
+    review_state: str | None = None
+    kind: str | None = None
+
+    @field_validator("kind")
+    @classmethod
+    def kind_valid(cls, v: str | None) -> str | None:
+        if v is not None and v not in TRANSACTION_KINDS:
+            raise ValueError(f"kind must be one of {TRANSACTION_KINDS}")
+        return v
+
+    @field_validator("review_state")
+    @classmethod
+    def review_state_valid(cls, v: str | None) -> str | None:
+        if v is not None and v not in REVIEW_STATES:
+            raise ValueError(f"review_state must be one of {REVIEW_STATES}")
+        return v
 
 
 class TransactionOut(BaseModel):
@@ -65,6 +84,8 @@ class TransactionOut(BaseModel):
     transfer_group: str | None
     review_state: str
     source: str
+    matched_rule_id: uuid.UUID | None
+    rule_note: str | None
     created_at: datetime.datetime
 
 

@@ -1,9 +1,11 @@
 """CSV reconciliation (CLAUDE.md Phase 3). Parses via the generic `app/imports/csv_parser.py`,
-dedupes against existing transactions, and creates a needs_review draft per new row — CSV
-rows are a best-effort kind guess (sign only), never a manual confirmation, so unlike manual
-cash entries they start in review, not confirmed (CLAUDE.md's draft-confirm trust model).
+dedupes against existing transactions, and routes each new row through the rules engine
+(Phase 5) — a CSV row's sign is a reliable direction signal but never a manual confirmation,
+so unlike manual cash entries it can be auto-filed by a matched rule but never starts
+pre-confirmed (CLAUDE.md's draft-confirm trust model).
 """
 
+import datetime
 import hashlib
 import uuid
 
@@ -16,7 +18,9 @@ from app.models.account import Account
 from app.models.import_batch import ImportBatch
 from app.models.statement_checkpoint import StatementCheckpoint
 from app.models.transaction import Transaction
+from app.rules.merchant_match import normalize_merchant
 from app.schemas.imports import ImportSummaryOut
+from app.services.rule_service import evaluate_transaction
 
 
 async def _owned_account(db: AsyncSession, user_id: uuid.UUID, account_id: uuid.UUID) -> Account:
@@ -50,7 +54,10 @@ async def import_csv(
     account_id: uuid.UUID,
     institution: str,
     file_bytes: bytes,
+    *,
+    now: datetime.datetime | None = None,
 ) -> ImportSummaryOut:
+    now = now or datetime.datetime.now(datetime.timezone.utc)
     await _owned_account(db, user_id, account_id)
 
     try:
@@ -58,6 +65,11 @@ async def import_csv(
         rows = parse_csv(text)
     except (CsvParseError, UnicodeDecodeError) as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
+
+    # Oldest first, regardless of the file's own order (bank exports are often newest-first):
+    # rule evaluation's cadence/observation logic assumes it sees history chronologically —
+    # matters a lot for a 12-month backfill file containing many instances of one bill.
+    rows = sorted(rows, key=lambda r: r.date)
 
     file_hash = hashlib.sha256(file_bytes).hexdigest()
     batch = ImportBatch(file_hash=file_hash, institution=institution, row_count=len(rows))
@@ -70,6 +82,18 @@ async def import_csv(
         if await _is_duplicate(db, account_id, row):
             skipped += 1
             continue
+
+        default_kind = "income" if row.amount_cents > 0 else "spend"
+        evaluation = await evaluate_transaction(
+            db,
+            user_id,
+            account_id=account_id,
+            amount_cents=row.amount_cents,
+            txn_date=row.date,
+            merchant_raw=row.description,
+            default_kind=default_kind,
+            now=now,
+        )
         db.add(
             Transaction(
                 account_id=account_id,
@@ -78,14 +102,21 @@ async def import_csv(
                 date=row.date,
                 status="posted",
                 merchant_raw=row.description,
-                # Sign-only guess — CSV rows carry no reliable kind signal beyond direction
-                # until the rules engine (Phase 5) can classify by merchant/cadence.
-                kind="income" if row.amount_cents > 0 else "spend",
-                review_state="needs_review",
+                merchant_norm=normalize_merchant(row.description) if row.description else None,
+                kind=evaluation.kind,
+                review_state=evaluation.review_state,
+                category_id=evaluation.category_id,
+                matched_rule_id=evaluation.matched_rule_id,
+                rule_note=evaluation.rule_note,
+                transfer_group=evaluation.transfer_group,
                 source="csv",
                 import_batch_id=batch.id,
             )
         )
+        # Flush (not commit) so this row is visible to the *next* row's rule evaluation within
+        # the same batch — a 12-month backfill file may contain a dozen instances of one
+        # recurring bill, and cold-start observation counting must see them as they're added.
+        await db.flush()
         created += 1
 
     batch.created_count = created
