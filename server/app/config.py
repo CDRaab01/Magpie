@@ -58,5 +58,11 @@ class Settings(BaseSettings):
     # driving it.
     ingest_user_email: str | None = None
 
+    # Deviation alerts (CLAUDE.md Phase 6). Unset ntfy_base_url ⇒ the sweep never publishes —
+    # same "absence disables the feature" pattern as imap_host above.
+    ntfy_base_url: str | None = None
+    ntfy_topic: str = "magpie-alerts"
+    sweep_interval_minutes: int = 15
+
 
 settings = Settings()

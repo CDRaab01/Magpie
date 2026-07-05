@@ -15,8 +15,11 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.magpie.data.remote.AccountOut
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.data.remote.TransactionOut
+import com.magpie.data.remote.BillOut
 import com.magpie.ui.accounts.AccountsContent
 import com.magpie.ui.accounts.AccountsUiState
+import com.magpie.ui.bills.BillsContent
+import com.magpie.ui.bills.BillsUiState
 import com.magpie.ui.home.HomeContent
 import com.magpie.ui.home.HomeUiState
 import com.magpie.ui.reviewqueue.ReviewQueueContent
@@ -84,6 +87,12 @@ class ScreenshotTest {
 
     @Test
     fun review_queue_dark() = capture("review_queue_dark", dark = true) { ReviewQueueScene() }
+
+    @Test
+    fun bills_light() = capture("bills_light", dark = false) { BillsScene() }
+
+    @Test
+    fun bills_dark() = capture("bills_dark", dark = true) { BillsScene() }
 }
 
 @Composable
@@ -103,6 +112,7 @@ private fun HomeReadyScene() {
         onViewTransactions = {},
         onViewAccounts = {},
         onViewReviewQueue = {},
+        onViewBills = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
 }
@@ -115,6 +125,7 @@ private fun HomeNeedsAccountScene() {
         onViewTransactions = {},
         onViewAccounts = {},
         onViewReviewQueue = {},
+        onViewBills = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
 }
@@ -199,5 +210,37 @@ private fun ReviewQueueScene() {
         ),
         onBack = {},
         onConfirm = {},
+    )
+}
+
+@Composable
+private fun BillsScene() {
+    BillsContent(
+        state = BillsUiState(
+            bills = listOf(
+                BillOut(
+                    id = "1",
+                    biller = "XCEL ENERGY",
+                    accountId = "acct-1",
+                    amountDue = 4500,
+                    dueDate = "2026-07-15",
+                    issuedAt = "2026-06-15T00:00:00Z",
+                    matchedTransactionId = "txn-1",
+                    isMissing = false,
+                ),
+                BillOut(
+                    id = "2",
+                    biller = "SAMPLE INTERNET CO",
+                    accountId = "acct-1",
+                    amountDue = 6000,
+                    dueDate = "2026-06-20",
+                    issuedAt = "2026-05-20T00:00:00Z",
+                    matchedTransactionId = null,
+                    isMissing = true,
+                ),
+            ),
+            loading = false,
+        ),
+        onBack = {},
     )
 }

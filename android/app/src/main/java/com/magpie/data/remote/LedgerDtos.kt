@@ -25,6 +25,18 @@ data class AccountOut(
 )
 
 @Serializable
+data class BillOut(
+    val id: String,
+    val biller: String,
+    @SerialName("account_id") val accountId: String,
+    @SerialName("amount_due") val amountDue: Long,
+    @SerialName("due_date") val dueDate: String,
+    @SerialName("issued_at") val issuedAt: String,
+    @SerialName("matched_transaction_id") val matchedTransactionId: String?,
+    @SerialName("is_missing") val isMissing: Boolean,
+)
+
+@Serializable
 data class ImportSummaryOut(
     @SerialName("row_count") val rowCount: Int,
     @SerialName("created_count") val createdCount: Int,

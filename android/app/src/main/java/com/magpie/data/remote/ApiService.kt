@@ -61,6 +61,10 @@ interface ApiService {
     @DELETE("transactions/{id}")
     suspend fun deleteTransaction(@Path("id") id: String)
 
+    // --- Bills ---
+    @GET("bills")
+    suspend fun listBills(): List<BillOut>
+
     // --- Imports ---
     @Multipart
     @POST("imports/csv")

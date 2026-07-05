@@ -1,12 +1,13 @@
 # ARCHITECTURE.md — Magpie (software-level)
 
-> **Status: Phases 0–5 built and deployed (2026-07-05).** Server: SSO-only auth, the full data
+> **Status: Phases 0–6 built and deployed (2026-07-05).** Server: SSO-only auth, the full data
 > model, `app/ledger/` (classify/rollups/balances, all pure and exhaustively tested),
 > accounts/categories/transactions CRUD, CSV reconciliation (`app/imports/`), email
-> ingestion (`app/ingest/`), and the rules engine + review queue (`app/rules/`) are live at
+> ingestion (`app/ingest/`), the rules engine + review queue, and bill matching + the first
+> ntfy alert (`app/rules/`, `app/services/bill_service.py`/`sweep_service.py`) are live at
 > `https://dragonfly.tail2ce561.ts.net`. Android: Home/Transactions/CashEntry/Accounts/
-> Review-queue on Retrofit+Room+Hilt+navigation-compose, with Roborazzi baselines for all
-> five. **Known gaps, all deliberate, none silent:**
+> Review-queue/Bills on Retrofit+Room+Hilt+navigation-compose, with Roborazzi baselines for
+> all six. **Known gaps, all deliberate, none silent:**
 > 1. The suite SSO client `magpie` is not yet registered on dragonfly-id, so on-device sign-in
 >    can't complete end-to-end — see "Open items" below.
 > 2. The CSV parser is generic/institution-agnostic (no real per-issuer sample exports were
@@ -29,8 +30,19 @@
 >    merchant→category matches — but pending→posted matching (item 4's fast-follow) still
 >    isn't built**, so a CSV-truth reconciliation pass won't yet merge with an email-sourced
 >    pending row for the same swipe; they land as two rows until that lands.
+> 6. **Phase 6's bill matching and "missing bill" detection are fully built and tested, but
+>    there is still no `bill_issued` *email* parser for any issuer.** Real "statement ready"
+>    emails with genuine structured data (statement date, balance) were confirmed for
+>    Discover specifically during this phase — but the exact sender address couldn't be
+>    confirmed (repeated attempts to open a sample email hit browser-automation flakiness),
+>    and per the same Phase −1 discipline that kept Discover's transaction parser unbuilt,
+>    guessing at the address here would be the same mistake. Bills exist today only via
+>    `POST /bills` (manual/CSV-adjacent creation) — real bill-issued emails becoming
+>    `BillStatement` rows automatically is a fast-follow once a sender is confirmed. Only
+>    one of the four named alert sweeps (unparsed-email backlog) is built; auth-hold expiry,
+>    per-account freshness, missing-bill, and paycheck-deviation alerts are not.
 >
-> Bills/budgets (Phase 6+) are still target design — marked where it applies. Per the suite
+> Budgets + AI (Phase 7+) are still target design — marked where it applies. Per the suite
 > docs rule, convert each section to as-built language in the same PR that lands it.
 > Suite-level context: `C:\Code\ARCHITECTURE.md`. Build spec + locked decisions:
 > [CLAUDE.md](CLAUDE.md). Post-v1 direction: [ROADMAP.md](ROADMAP.md).
@@ -194,15 +206,35 @@ invalid sign combination onto a transaction.
 transaction on that account regardless of whether it predates the rule — Phase 3's CSV
 backfill history counts the same as live events, exactly as CLAUDE.md's cold-start bar
 intends. Below threshold, the review queue shows *why* ("Looks like XCEL ENERGY, 2/3
-observations"), not just that it needs a look. **Not built yet:** the clock-driven scheduled
-sweeps (auth-hold expiry, per-account freshness, unparsed-backlog check) and the ntfy alerts
-they'd trigger — `app/rules/clock.py`'s `Clock` seam exists for exactly this, Phase 6 is
-what actually calls it on a schedule. **Cash rule** (the ATM withdrawal *is* the spend,
-manual cash entries draw that bucket down) is still target design, not built.
+observations"), not just that it needs a look.
+
+**Bill matching (built, Phase 6):** `app/rules/bill_matching.py` — pure — pairs a
+`BillStatement` to the closest-dated payment on its bound account (CLAUDE.md §2: each
+biller rides one payment rail) within a 10-day window either side of the due date, exact
+amount only; `is_bill_missing` answers the time question (due date + a 3-day grace passed,
+still unmatched) that `app/services/bill_service.py` combines with "no match yet" to decide
+`is_missing`. `POST /bills` tries an immediate match (a backfilled historical bill
+shouldn't sit "missing" forever) and `POST /bills/{id}/rematch` re-checks after a later
+import/poll brings in the settling payment.
+
+**Alert latching (built, Phase 6):** `app/rules/alerts.py::should_alert` — pure, fires only
+on the true rising edge (a condition becoming true), stays silent while it persists, and
+fires again if it resolves and recurs — exactly CLAUDE.md's "once per episode, not once per
+sweep" bar, proven with a fake-clock-free logic test plus a real DB-backed
+`test_sweep_service.py` exercising all three cases. **`app/services/ntfy_client.py`** is the
+fourth and final injected seam (clock, IMAP fetcher, ntfy publisher, LLM client — the LLM
+client is still Phase 7): `FakeNtfyPublisher` records what would have been sent,
+`HttpNtfyPublisher` POSTs for real. **Built and wired into a lifespan sweep loop: exactly
+one alert** — the unparsed-email backlog, latched, checked every `sweep_interval_minutes`.
+**Not built yet:** auth-hold expiry, per-account freshness, missing-bill, and
+paycheck-deviation sweeps — `app/rules/clock.py`'s `Clock` seam and the bill-matching/rule
+primitives they'd need already exist; nothing schedules them yet. **Cash rule** (the ATM
+withdrawal *is* the spend, manual cash entries draw that bucket down) is still target
+design, not built.
 
 ### Domain map
 
-**Built (Phase 0–5):** `app/main.py` (`/health`, `/version`), `app/routers/suite_auth.py` +
+**Built (Phase 0–6):** `app/main.py` (`/health`, `/version`), `app/routers/suite_auth.py` +
 `app/services/suite_auth.py` (suite login), `app/routers/auth.py` (`POST /auth/refresh` — a
 Phase 1 gap: refresh tokens were minted but nothing could redeem them until this landed),
 `app/security.py` (local HS256 session tokens). Full CRUD for accounts, categories, and
@@ -230,13 +262,17 @@ time rather than re-derived later from whatever the rule looks like now. `GET/PO
 plain CurrentUser-scoped CRUD; `PATCH /transactions/{id}` gained `review_state` and `kind`
 (the review queue's confirm/correct action — `kind` only re-validates the sign invariant
 when supplied, never blindly trusted); `GET /transactions?review_state=needs_review` is the
-review queue's read.
+review queue's read. `GET/POST /bills`, `POST /bills/{id}/rematch` (`app/routers/bills.py` +
+`app/services/bill_service.py`) — no migration needed: `BillStatement.account_id` is
+required, so it scopes via the same join-to-`Account.user_id` pattern Phase 3's
+`StatementCheckpoint` already established, no nullable-join gap to close. `is_missing` is
+computed at read time (`_to_out()`, mirroring `AccountOut`'s balance fields from Phase 3),
+never stored.
 
-**Planned (Phase 6+):**
+**Planned (Phase 7+):**
 
 | Domain | Router | Service | Models |
 |---|---|---|---|
-| Bills/calendar | `bills.py` | `bill_service` | `BillStatement` (exists) |
 | Budgets | `budgets.py` | `budget_service` (+ `ledger/`) | `Budget` (exists) |
 | AI | `ai.py` | `services/ai/` (guardrailed) | drafts only, no writes |
 
@@ -266,7 +302,7 @@ reconnect (Cookbook's `NetworkSyncObserver` precedent).
 Screens: `ui/signin/SignInScreen` ("Sign in with Dragonfly," the only auth path) ·
 `ui/home/HomeScreen` (month in/out/net panel via `HomeContent`, gates on having ≥1 account —
 shows an inline create-account form instead of the summary when none exist, and now links to
-Accounts and Review queue) · `ui/transactions/TransactionsScreen` (list) ·
+Accounts, Review queue, and Bills) · `ui/transactions/TransactionsScreen` (list) ·
 `ui/cashentry/CashEntryScreen` (the offline-capable manual entry form) ·
 `ui/accounts/AccountsScreen` (**Phase 3** — lists accounts with computed balance + a
 "Reconciled"/"Off by $X" delta line when a checkpoint exists; each row has an "Import CSV"
@@ -275,13 +311,16 @@ picker, multipart upload via `ApiService.importCsv`) · `ui/reviewqueue/ReviewQu
 (**Phase 5** — `GET /transactions?review_state=needs_review`; each row shows the amount,
 merchant, and `rule_note` when a rule fired but didn't clear the auto-file bar — CLAUDE.md's
 "the review queue shows why" made literal on-screen, not just a server-side concept; a
-"Confirm" action `PATCH`es `review_state="confirmed"`). `ui/navigation/MagpieNavHost` gates
-the whole graph on `AuthGateViewModel.isSignedIn` (a `TokenStore` Flow) — no explicit
-post-sign-in navigation call is needed, since saving a session makes the Flow re-emit. Bills
-calendar · Budgets · Settings are Phase 6+ (bills/budgets don't exist server-side yet
-either). **Not built this pass:** a badge count on Home showing the review queue's size
-(CLAUDE.md's target design) — the screen itself exists, the Home-panel summary of it doesn't
-yet.
+"Confirm" action `PATCH`es `review_state="confirmed"`) · `ui/bills/BillsScreen` (**Phase 6**
+— `GET /bills`; each row shows the biller, due date, and a Paid/Missing/Awaiting-payment
+status derived from `matched_transaction_id`/`is_missing`, not a full "due before next
+paycheck" calendar view yet — that cross-reference against a paycheck rule's cadence isn't
+built). `ui/navigation/MagpieNavHost` gates the whole graph on
+`AuthGateViewModel.isSignedIn` (a `TokenStore` Flow) — no explicit post-sign-in navigation
+call is needed, since saving a session makes the Flow re-emit. Budgets · Settings are Phase
+7+ (budgets don't exist server-side yet either). **Not built this pass:** badge counts on
+Home for the review queue's size or the bills-missing count (CLAUDE.md's target design) —
+both screens exist, the Home-panel summary of either doesn't yet.
 
 Each screen splits into a thin ViewModel-wired composable and a pure `*Content` composable
 taking plain state + callbacks (`HomeScreen` → `HomeContent`, `AccountsScreen` →
@@ -343,10 +382,12 @@ forward once someone wants to actually test the sign-in flow on a phone.
    post-reconciliation) remains v1's acceptance criterion — real bank CSVs, not the synthetic
    fixtures the parser is tested against, are what that gate actually measures.
 4. **Pending/posted drift** (tip adjustments) and **auth holds that never post** → CSV
-   reconciliation updates matched rows in place; the expiry sweep drops unmatched pendings
-   after ~7 days with an audit note.
-5. **Alert-coverage illusion** (an account quietly stops alerting) → per-account
-   "last event seen" freshness on the Accounts screen + a staleness alert via ntfy.
+   reconciliation updates matched rows in place (not built); the expiry sweep drops
+   unmatched pendings after ~7 days with an audit note (not built — `app/rules/clock.py`'s
+   seam exists, nothing schedules this sweep yet).
+5. **Alert-coverage illusion** (an account quietly stops alerting) → per-account "last event
+   seen" freshness + a staleness alert via ntfy — **not built**; the one alert that exists
+   today (Phase 6) is the unparsed-email backlog, not per-account freshness.
 6. **Tailscale outage** → app degrades to cached reads; ingestion pauses and catches up
    (IMAP is pull — nothing is lost, the label retains the mail).
 

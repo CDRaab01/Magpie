@@ -12,7 +12,18 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from app.config import settings
 from app.ingest.poller import poll_loop
 from app.limiter import limiter
-from app.routers import accounts, auth, categories, imports, ingest, rules, suite_auth, transactions
+from app.routers import (
+    accounts,
+    auth,
+    bills,
+    categories,
+    imports,
+    ingest,
+    rules,
+    suite_auth,
+    transactions,
+)
+from app.services.sweep_service import sweep_loop
 
 # Single source for the human-facing version, reused by GET /version below.
 APP_VERSION = "0.1.0"
@@ -21,6 +32,7 @@ APP_VERSION = "0.1.0"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     poll_task = None
+    sweep_task = None
     if (
         settings.imap_host
         and settings.imap_user
@@ -28,11 +40,14 @@ async def lifespan(app: FastAPI):
         and settings.ingest_user_email
     ):
         poll_task = asyncio.create_task(poll_loop())
+    if settings.ntfy_base_url and settings.ingest_user_email:
+        sweep_task = asyncio.create_task(sweep_loop())
     yield
-    if poll_task is not None:
-        poll_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await poll_task
+    for task in (poll_task, sweep_task):
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
 
 # Interactive docs are handy locally but an unnecessary surface once this is reachable
@@ -105,6 +120,7 @@ app.include_router(transactions.router)
 app.include_router(imports.router)
 app.include_router(ingest.router)
 app.include_router(rules.router)
+app.include_router(bills.router)
 
 
 @app.get("/health", tags=["health"])
