@@ -45,3 +45,25 @@ def rollup_month(transactions: Iterable[TransactionForRollup]) -> MonthlyRollup:
         spend_cents=spend_cents,
         net_cents=income_cents + spend_cents,
     )
+
+
+class TransactionForCategoryRollup(NamedTuple):
+    category_id: str | None
+    kind: str
+    amount: int  # signed integer cents
+
+
+def rollup_by_category(
+    transactions: Iterable[TransactionForCategoryRollup],
+) -> dict[str | None, int]:
+    """Month-vs-budget (CLAUDE.md Phase 7) needs spend *per category*, not just the
+    household total — same kind rules as `rollup_month` (transfers excluded, refunds net
+    spend down, never counted as income), grouped by `category_id` instead of summed flat."""
+    totals: dict[str | None, int] = {}
+    for t in transactions:
+        if t.kind == "transfer" or t.kind == "income":
+            continue
+        if t.kind not in ("spend", "refund"):
+            raise ValueError(f"Unknown transaction kind: {t.kind!r}")
+        totals[t.category_id] = totals.get(t.category_id, 0) + t.amount
+    return totals

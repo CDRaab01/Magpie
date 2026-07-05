@@ -1,7 +1,9 @@
 """Rules CRUD + the evaluation orchestrator (CLAUDE.md §5). Evaluation order for every new
 transaction: (1) transfer matching -> (2) recurring income/bill rules -> (3) merchant->category
-rules -> (4) fall through to needs_review (the LLM stage, Phase 7, doesn't exist yet). Dedupe
-happens upstream (import_service/ingest_service already dedupe before a row ever reaches here).
+rules -> (4) the LLM proposes a category as a draft only (ai_suggested_category_id, never
+category_id) when `llm_client` is supplied, else falls straight to needs_review with no draft.
+Dedupe happens upstream (import_service/ingest_service already dedupe before a row ever
+reaches here).
 """
 
 import datetime
@@ -13,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
+from app.models.category import Category
 from app.models.rule import Rule
 from app.models.transaction import Transaction
 from app.rules.bands import is_within_band
@@ -20,6 +23,8 @@ from app.rules.merchant_match import matches, normalize_merchant
 from app.rules.recurrence import is_within_cadence_window
 from app.rules.transfer_matching import TransferCandidate, find_transfer_match
 from app.schemas.rule import RuleCreate, RuleUpdate
+from app.services.ai.categorize import suggest_category
+from app.services.ai.llm_client import LlmClient
 
 MIN_OBSERVATIONS_TO_AUTOFILE = 3
 
@@ -97,6 +102,9 @@ class EvaluationResult:
     category_id: uuid.UUID | None
     matched_rule_id: uuid.UUID | None
     rule_note: str | None
+    # A draft only (CLAUDE.md §6 guardrail) — never set alongside category_id; stays
+    # needs_review either way, since accepting it is a human action, not this evaluator's.
+    ai_suggested_category_id: uuid.UUID | None = None
     transfer_group: str | None = None
 
 
@@ -177,6 +185,15 @@ async def _observation_history(
     ]
 
 
+async def _available_categories(db: AsyncSession, user_id: uuid.UUID) -> dict[str, uuid.UUID]:
+    """The AI's entire vocabulary (CLAUDE.md §6 guardrail) — every shared/seeded category
+    plus this user's own, name -> id. The model may only pick from what's already here."""
+    result = await db.execute(
+        select(Category).where((Category.user_id.is_(None)) | (Category.user_id == user_id))
+    )
+    return {c.name: c.id for c in result.scalars().all()}
+
+
 async def evaluate_transaction(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -187,6 +204,7 @@ async def evaluate_transaction(
     merchant_raw: str | None,
     default_kind: str,
     now: datetime.datetime,
+    llm_client: LlmClient | None = None,
 ) -> EvaluationResult:
     merchant_norm = normalize_merchant(merchant_raw) if merchant_raw else None
 
@@ -276,11 +294,25 @@ async def evaluate_transaction(
             rule_note=f"Matched rule: {category_rule.matcher}",
         )
 
-    # 4. Nothing matched — falls to review (the LLM draft stage, Phase 7, isn't built yet).
+    # 4. Nothing deterministic matched — the LLM proposes a category as a draft only
+    #    (CLAUDE.md §6): it is NEVER written to category_id, only ai_suggested_category_id,
+    #    and review_state stays needs_review regardless — accepting a draft is a human action.
+    ai_suggested = None
+    if llm_client is not None:
+        available = await _available_categories(db, user_id)
+        ai_suggested = await suggest_category(
+            llm_client,
+            merchant=merchant_raw,
+            amount_cents=amount_cents,
+            kind=default_kind,
+            categories=available,
+        )
+
     return EvaluationResult(
         kind=default_kind,
         review_state="needs_review",
         category_id=None,
         matched_rule_id=None,
         rule_note=None,
+        ai_suggested_category_id=ai_suggested,
     )

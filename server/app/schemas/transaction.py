@@ -86,6 +86,7 @@ class TransactionOut(BaseModel):
     source: str
     matched_rule_id: uuid.UUID | None
     rule_note: str | None
+    ai_suggested_category_id: uuid.UUID | None
     created_at: datetime.datetime
 
 

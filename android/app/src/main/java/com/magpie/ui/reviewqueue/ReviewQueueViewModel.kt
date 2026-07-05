@@ -13,6 +13,10 @@ import kotlinx.coroutines.launch
 
 data class ReviewQueueUiState(
     val transactions: List<TransactionOut> = emptyList(),
+    // Populated alongside transactions so AI suggestions can show a category *name*, not
+    // just an opaque id — the whole point of "shows AI suggestions distinctly" is a human
+    // being able to read it at a glance.
+    val categoryNamesById: Map<String, String> = emptyMap(),
     val loading: Boolean = true,
     val error: String? = null,
 )
@@ -33,7 +37,12 @@ class ReviewQueueViewModel @Inject constructor(
             _state.value = _state.value.copy(loading = true, error = null)
             try {
                 val txns = api.listTransactions(reviewState = "needs_review")
-                _state.value = _state.value.copy(transactions = txns, loading = false)
+                val categories = api.listCategories().associate { it.id to it.name }
+                _state.value = _state.value.copy(
+                    transactions = txns,
+                    categoryNamesById = categories,
+                    loading = false,
+                )
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     loading = false,

@@ -43,6 +43,7 @@ fun ReviewQueueScreen(navController: NavController) {
         state = state,
         onBack = { navController.popBackStack() },
         onConfirm = { id -> viewModel.confirm(id) },
+        onAcceptAiSuggestion = { id, categoryId -> viewModel.confirm(id, categoryId) },
     )
 }
 
@@ -52,6 +53,7 @@ internal fun ReviewQueueContent(
     state: ReviewQueueUiState,
     onBack: () -> Unit,
     onConfirm: (transactionId: String) -> Unit,
+    onAcceptAiSuggestion: (transactionId: String, categoryId: String) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -82,7 +84,14 @@ internal fun ReviewQueueContent(
                 }
                 else -> LazyColumn(modifier = Modifier.padding(MagpieTheme.spacing.md)) {
                     items(state.transactions, key = { it.id }) { txn ->
-                        ReviewQueueRow(txn, onConfirm = { onConfirm(txn.id) })
+                        ReviewQueueRow(
+                            txn,
+                            categoryNamesById = state.categoryNamesById,
+                            onConfirm = { onConfirm(txn.id) },
+                            onAcceptAiSuggestion = { categoryId ->
+                                onAcceptAiSuggestion(txn.id, categoryId)
+                            },
+                        )
                     }
                 }
             }
@@ -91,7 +100,12 @@ internal fun ReviewQueueContent(
 }
 
 @Composable
-private fun ReviewQueueRow(txn: TransactionOut, onConfirm: () -> Unit) {
+private fun ReviewQueueRow(
+    txn: TransactionOut,
+    categoryNamesById: Map<String, String>,
+    onConfirm: () -> Unit,
+    onAcceptAiSuggestion: (categoryId: String) -> Unit,
+) {
     val channel = when (txn.kind) {
         "income" -> MagpieTheme.colors.underBudget.base
         "spend" -> MagpieTheme.colors.overBudget.base
@@ -106,6 +120,9 @@ private fun ReviewQueueRow(txn: TransactionOut, onConfirm: () -> Unit) {
             Column {
                 Text(txn.merchantRaw ?: txn.kind.replaceFirstChar { it.uppercase() })
                 Text(txn.date, style = MaterialTheme.typography.bodySmall)
+                // Distinct from a rule hit (`rule_note`, teal/needs-review text): an AI draft
+                // is never shown as fact, always labeled "AI suggests" with its own accept
+                // action — CLAUDE.md §6, nothing the model produces is confirmed for you.
                 txn.ruleNote?.let {
                     Text(
                         it,
@@ -113,10 +130,27 @@ private fun ReviewQueueRow(txn: TransactionOut, onConfirm: () -> Unit) {
                         color = MagpieTheme.colors.needsReview.base,
                     )
                 }
+                txn.aiSuggestedCategoryId?.let { categoryId ->
+                    val categoryName = categoryNamesById[categoryId] ?: "a category"
+                    Text(
+                        "AI suggests: $categoryName",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MagpieTheme.colors.money.base,
+                    )
+                }
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(formatCents(txn.amount), color = channel)
-                PulseButton(text = "Confirm", tonal = true, compact = true, onClick = onConfirm)
+                if (txn.aiSuggestedCategoryId != null) {
+                    PulseButton(
+                        text = "Accept AI suggestion",
+                        tonal = true,
+                        compact = true,
+                        onClick = { onAcceptAiSuggestion(txn.aiSuggestedCategoryId) },
+                    )
+                } else {
+                    PulseButton(text = "Confirm", tonal = true, compact = true, onClick = onConfirm)
+                }
             }
         }
     }

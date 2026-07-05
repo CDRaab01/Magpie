@@ -13,6 +13,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.imports.csv_parser import CsvParseError, ParsedCsvRow, parse_csv
 from app.models.account import Account
 from app.models.import_batch import ImportBatch
@@ -20,6 +21,7 @@ from app.models.statement_checkpoint import StatementCheckpoint
 from app.models.transaction import Transaction
 from app.rules.merchant_match import normalize_merchant
 from app.schemas.imports import ImportSummaryOut
+from app.services.ai.llm_client import LmStudioClient
 from app.services.rule_service import evaluate_transaction
 
 
@@ -76,6 +78,13 @@ async def import_csv(
     db.add(batch)
     await db.flush()  # need batch.id before attaching rows to it
 
+    # Only unmatched rows ever reach the AI stage (evaluate_transaction's stage 4), but a
+    # 12-month backfill with many never-before-seen merchants can still mean many synchronous
+    # LLM round-trips — a real latency tradeoff for bulk CSV import, not a correctness one.
+    llm_client = (
+        LmStudioClient(settings.llm_base_url, settings.llm_model) if settings.llm_base_url else None
+    )
+
     created = 0
     skipped = 0
     for row in rows:
@@ -93,6 +102,7 @@ async def import_csv(
             merchant_raw=row.description,
             default_kind=default_kind,
             now=now,
+            llm_client=llm_client,
         )
         db.add(
             Transaction(
@@ -108,6 +118,7 @@ async def import_csv(
                 category_id=evaluation.category_id,
                 matched_rule_id=evaluation.matched_rule_id,
                 rule_note=evaluation.rule_note,
+                ai_suggested_category_id=evaluation.ai_suggested_category_id,
                 transfer_group=evaluation.transfer_group,
                 source="csv",
                 import_batch_id=batch.id,

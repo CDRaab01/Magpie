@@ -15,12 +15,14 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.ingest.imap_client import ImapFetcher
 from app.ingest.parsers import UnparsedEmail, parse_email
 from app.models.account import Account
 from app.models.ingest_event import IngestEvent
 from app.models.transaction import Transaction
 from app.rules.merchant_match import normalize_merchant
+from app.services.ai.llm_client import LmStudioClient
 from app.services.rule_service import evaluate_transaction
 
 
@@ -53,6 +55,9 @@ async def run_ingest_poll(
     now = now or datetime.datetime.now(datetime.timezone.utc)
     fetched = fetcher.fetch_recent()
     created = duplicate = unparsed = 0
+    llm_client = (
+        LmStudioClient(settings.llm_base_url, settings.llm_model) if settings.llm_base_url else None
+    )
 
     for item in fetched:
         existing = await db.execute(
@@ -115,6 +120,7 @@ async def run_ingest_poll(
             merchant_raw=parsed.merchant,
             default_kind=parsed.kind,
             now=now,
+            llm_client=llm_client,
         )
         db.add(
             Transaction(
@@ -129,6 +135,7 @@ async def run_ingest_poll(
                 category_id=evaluation.category_id,
                 matched_rule_id=evaluation.matched_rule_id,
                 rule_note=evaluation.rule_note,
+                ai_suggested_category_id=evaluation.ai_suggested_category_id,
                 transfer_group=evaluation.transfer_group,
                 source="email",
                 ingest_event_id=event.id,

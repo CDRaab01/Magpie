@@ -3,9 +3,11 @@ import uuid
 
 from app.database import AsyncSessionLocal
 from app.models.account import Account
+from app.models.category import Category
 from app.models.rule import Rule
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.services.ai.llm_client import FakeLlmClient
 from app.services.rule_service import MIN_OBSERVATIONS_TO_AUTOFILE, evaluate_transaction
 
 NOW = datetime.datetime(2026, 7, 5, tzinfo=datetime.timezone.utc)
@@ -263,3 +265,54 @@ async def test_merchant_category_rule_autofiles_with_category():
 
     assert result.review_state == "auto"
     assert result.matched_rule_id == rule.id
+
+
+async def test_no_rule_match_with_llm_configured_drafts_never_confirms():
+    user_id = await _make_user()
+    account_id = await _make_account(user_id, "Amex", "card")
+
+    async with AsyncSessionLocal() as db:
+        category = Category(user_id=user_id, name="Dining")
+        db.add(category)
+        await db.commit()
+        await db.refresh(category)
+
+    client = FakeLlmClient('{"category_name": "Dining", "reasoning": "restaurant"}')
+    async with AsyncSessionLocal() as db:
+        result = await evaluate_transaction(
+            db,
+            user_id,
+            account_id=account_id,
+            amount_cents=-3200,
+            txn_date=datetime.date(2026, 7, 1),
+            merchant_raw="SAMPLE BISTRO",
+            default_kind="spend",
+            now=NOW,
+            llm_client=client,
+        )
+
+    # The draft lands in ai_suggested_category_id ONLY — category_id and review_state are
+    # untouched by the model (CLAUDE.md §6: nothing it produces is persisted as confirmed).
+    assert result.ai_suggested_category_id == category.id
+    assert result.category_id is None
+    assert result.review_state == "needs_review"
+
+
+async def test_no_llm_client_configured_never_calls_the_model():
+    user_id = await _make_user()
+    account_id = await _make_account(user_id, "Amex", "card")
+
+    async with AsyncSessionLocal() as db:
+        result = await evaluate_transaction(
+            db,
+            user_id,
+            account_id=account_id,
+            amount_cents=-3200,
+            txn_date=datetime.date(2026, 7, 1),
+            merchant_raw="SAMPLE BISTRO",
+            default_kind="spend",
+            now=NOW,
+        )
+
+    assert result.ai_suggested_category_id is None
+    assert result.review_state == "needs_review"

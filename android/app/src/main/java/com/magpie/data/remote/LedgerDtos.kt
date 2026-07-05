@@ -94,6 +94,7 @@ data class TransactionOut(
     val source: String,
     @SerialName("matched_rule_id") val matchedRuleId: String? = null,
     @SerialName("rule_note") val ruleNote: String? = null,
+    @SerialName("ai_suggested_category_id") val aiSuggestedCategoryId: String? = null,
     @SerialName("created_at") val createdAt: String,
 )
 

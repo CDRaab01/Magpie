@@ -1,0 +1,20 @@
+import datetime
+import uuid
+
+from pydantic import BaseModel
+
+
+class BudgetCreate(BaseModel):
+    category_id: uuid.UUID
+    month: datetime.date  # first-of-month marker, e.g. 2026-07-01
+    amount: int  # signed integer cents — a budget is a positive cap, stored as given
+
+
+class BudgetOut(BaseModel):
+    id: uuid.UUID
+    category_id: uuid.UUID
+    month: datetime.date
+    amount: int
+    # Computed at read time (mirrors AccountOut's balance fields, Phase 3) — the actual
+    # spend/refund total for this category+month, never stored.
+    actual_cents: int

@@ -64,5 +64,11 @@ class Settings(BaseSettings):
     ntfy_topic: str = "magpie-alerts"
     sweep_interval_minutes: int = 15
 
+    # AI category drafts (CLAUDE.md §6/Phase 7). Local LM Studio only — never a hosted model,
+    # this data never leaves the host. Unset ⇒ the AI stage never runs (rule evaluation just
+    # falls through to needs_review with no draft, same as before Phase 7).
+    llm_base_url: str | None = None
+    llm_model: str = "local-model"
+
 
 settings = Settings()

@@ -1,13 +1,15 @@
 # ARCHITECTURE.md — Magpie (software-level)
 
-> **Status: Phases 0–6 built and deployed (2026-07-05).** Server: SSO-only auth, the full data
-> model, `app/ledger/` (classify/rollups/balances, all pure and exhaustively tested),
-> accounts/categories/transactions CRUD, CSV reconciliation (`app/imports/`), email
-> ingestion (`app/ingest/`), the rules engine + review queue, and bill matching + the first
-> ntfy alert (`app/rules/`, `app/services/bill_service.py`/`sweep_service.py`) are live at
+> **Status: Phases 0–7 built and deployed (2026-07-05).** Server: SSO-only auth, the full data
+> model, `app/ledger/` (classify/rollups/balances/per-category, all pure and exhaustively
+> tested), accounts/categories/transactions CRUD, CSV reconciliation (`app/imports/`), email
+> ingestion (`app/ingest/`), the rules engine + review queue, bill matching + the first ntfy
+> alert, budgets, and the AI category-draft guardrail (`app/rules/`, `app/services/{bill,
+> sweep,budget}_service.py`, `app/services/ai/`) are live at
 > `https://dragonfly.tail2ce561.ts.net`. Android: Home/Transactions/CashEntry/Accounts/
 > Review-queue/Bills on Retrofit+Room+Hilt+navigation-compose, with Roborazzi baselines for
-> all six. **Known gaps, all deliberate, none silent:**
+> all six (the review queue now also renders AI drafts distinctly from rule hits). **Known
+> gaps, all deliberate, none silent:**
 > 1. The suite SSO client `magpie` is not yet registered on dragonfly-id, so on-device sign-in
 >    can't complete end-to-end — see "Open items" below.
 > 2. The CSV parser is generic/institution-agnostic (no real per-issuer sample exports were
@@ -41,10 +43,17 @@
 >    `BillStatement` rows automatically is a fast-follow once a sender is confirmed. Only
 >    one of the four named alert sweeps (unparsed-email backlog) is built; auth-hold expiry,
 >    per-account freshness, missing-bill, and paycheck-deviation alerts are not.
+> 7. **The AI category-draft guardrail is fully built and tested against a fake LLM — the
+>    real `LmStudioClient` has never been exercised against a live LM Studio instance**
+>    (`llm_base_url` is unset in production; the AI stage silently never fires until it's
+>    configured). **No Android Budgets screen exists yet** — `GET/POST /budgets` and
+>    per-category actuals are live server-side, but the screen wasn't built this pass to
+>    keep pace across phases; it's a small, well-understood gap, not an unknown one.
+>    "First insights" (plain-language summary text, CLAUDE.md's other Phase 7 scope item)
+>    is also not built — only category-suggestion drafts are.
 >
-> Budgets + AI (Phase 7+) are still target design — marked where it applies. Per the suite
-> docs rule, convert each section to as-built language in the same PR that lands it.
-> Suite-level context: `C:\Code\ARCHITECTURE.md`. Build spec + locked decisions:
+> Per the suite docs rule, convert each section to as-built language in the same PR that
+> lands it. Suite-level context: `C:\Code\ARCHITECTURE.md`. Build spec + locked decisions:
 > [CLAUDE.md](CLAUDE.md). Post-v1 direction: [ROADMAP.md](ROADMAP.md).
 
 Magpie is household cash-flow tracking with a review-not-enter product law: money events
@@ -195,11 +204,17 @@ a different account ⇒ both legs `kind="transfer"`, `review_state="auto"`, no r
 3. recurring income/bill rules (≥3 observations + within cadence window + within amount band
 ⇒ auto-filed with `rule_note` = `"Matched rule: X"`; below threshold or out of band ⇒
 `needs_review` with an explanation naming the rule and the reason) → 4. merchant→category
-rules (deterministic category assignment ⇒ auto) → 5. LLM category suggestion ⇒
-`needs_review` draft — **not built yet, Phase 7**; today, falling through all four rule
-stages just leaves a transaction `needs_review` with no draft category. **A rule only ever
-decides *category*, never *kind*** — the amount's sign is the single source of truth for
-spend/income/refund (`app/ledger/classify.py`), so a mismatched rule can never force an
+rules (deterministic category assignment ⇒ auto) → 5. **(built, Phase 7)** if `llm_client`
+is supplied and nothing above matched, the LLM proposes a category —
+`app/services/ai/categorize.py::suggest_category` writes the result to
+`ai_suggested_category_id` **only**, never `category_id`, and `review_state` stays
+`needs_review` regardless: accepting a draft is the review queue's "Accept AI suggestion"
+action (a human `PATCH`, CLAUDE.md §6's "nothing the model produces is persisted without
+explicit confirmation" made literal). Falling through with no `llm_client` configured (the
+production default today — see the status header) behaves exactly as before Phase 7: plain
+`needs_review`, no draft. **A rule only ever decides *category*, never *kind*** — the
+amount's sign is the single source of truth for spend/income/refund
+(`app/ledger/classify.py`), so a mismatched rule can never force an
 invalid sign combination onto a transaction.
 
 **Cold start:** no rule auto-files until ≥3 observations, counted from *every* matching
@@ -207,6 +222,19 @@ transaction on that account regardless of whether it predates the rule — Phase
 backfill history counts the same as live events, exactly as CLAUDE.md's cold-start bar
 intends. Below threshold, the review queue shows *why* ("Looks like XCEL ENERGY, 2/3
 observations"), not just that it needs a look.
+
+**The AI guardrail (built, Phase 7):** `app/services/ai/llm_client.py` is the fourth and
+final injected seam (clock, IMAP fetcher, ntfy publisher, now the LLM client) —
+`FakeLlmClient` for tests, `LmStudioClient` for a real local (never hosted) OpenAI-compatible
+endpoint. `app/services/ai/categorize.py::suggest_category` enforces the vocabulary
+guardrail directly: the prompt lists only the user's own category names, the response is
+Pydantic-validated, and a category the model invents outside that list is silently
+rejected — `None`, never a guessed fallback. The prompt sees only DB-derived transaction
+facts (merchant, amount, kind) and the category vocabulary, never a raw email. Guardrail
+tests (`test_ai_categorize.py`) pin all four failure modes (malformed JSON, missing field,
+out-of-vocabulary answer, zero categories available never even calling the model) plus a
+happy path — all against `FakeLlmClient`, exactly CLAUDE.md's "IMAP + LM Studio + ntfy
+always mocked in CI" rule.
 
 **Bill matching (built, Phase 6):** `app/rules/bill_matching.py` — pure — pairs a
 `BillStatement` to the closest-dated payment on its bound account (CLAUDE.md §2: each
@@ -234,7 +262,7 @@ design, not built.
 
 ### Domain map
 
-**Built (Phase 0–6):** `app/main.py` (`/health`, `/version`), `app/routers/suite_auth.py` +
+**Built (Phase 0–7):** `app/main.py` (`/health`, `/version`), `app/routers/suite_auth.py` +
 `app/services/suite_auth.py` (suite login), `app/routers/auth.py` (`POST /auth/refresh` — a
 Phase 1 gap: refresh tokens were minted but nothing could redeem them until this landed),
 `app/security.py` (local HS256 session tokens). Full CRUD for accounts, categories, and
@@ -267,17 +295,23 @@ review queue's read. `GET/POST /bills`, `POST /bills/{id}/rematch` (`app/routers
 required, so it scopes via the same join-to-`Account.user_id` pattern Phase 3's
 `StatementCheckpoint` already established, no nullable-join gap to close. `is_missing` is
 computed at read time (`_to_out()`, mirroring `AccountOut`'s balance fields from Phase 3),
-never stored.
+never stored. `GET/POST /budgets` (`app/routers/budgets.py` + `app/services/budget_service
+.py`) — no migration needed either: `Budget` carries no `user_id`/`account_id` of its own
+by deliberate design (its own model comment: "single-user in practice today... add a
+user_id column when that lands rather than before" — household-sharing is an explicit
+ROADMAP.md non-goal for now), so `actual_cents` is computed at read time via the new
+`app/ledger/rollups.py::rollup_by_category` across every one of the user's accounts for
+that category+month. Migration `0004` (Phase 7) added `transactions
+.ai_suggested_category_id` — a draft, never a confirmed fact, kept structurally separate
+from `category_id` so an AI suggestion can never be mistaken for a human/rule decision.
 
-**Planned (Phase 7+):**
-
-| Domain | Router | Service | Models |
-|---|---|---|---|
-| Budgets | `budgets.py` | `budget_service` (+ `ledger/`) | `Budget` (exists) |
-| AI | `ai.py` | `services/ai/` (guardrailed) | drafts only, no writes |
+**Planned (Phase 8):** suite membership + release + operational fit — see CLAUDE.md §10.
+No further domains are planned beyond that; Phase 7 was the last content phase.
 
 **Deferred fast-follow, not a full phase:** pending→posted matching between email-sourced and
-CSV-sourced rows for the same swipe (see the ingestion pipeline section above).
+CSV-sourced rows for the same swipe (see the ingestion pipeline section above); an Android
+Budgets screen (server-side is live, no UI yet); "first insights" plain-language summaries
+(CLAUDE.md's other Phase 7 scope item — only category-suggestion drafts were built).
 
 ## Android design (`android/`, package `com.magpie`)
 
@@ -308,19 +342,23 @@ Accounts, Review queue, and Bills) · `ui/transactions/TransactionsScreen` (list
 "Reconciled"/"Off by $X" delta line when a checkpoint exists; each row has an "Import CSV"
 action opening a dialog: institution field, `ActivityResultContracts.GetContent()` file
 picker, multipart upload via `ApiService.importCsv`) · `ui/reviewqueue/ReviewQueueScreen`
-(**Phase 5** — `GET /transactions?review_state=needs_review`; each row shows the amount,
-merchant, and `rule_note` when a rule fired but didn't clear the auto-file bar — CLAUDE.md's
-"the review queue shows why" made literal on-screen, not just a server-side concept; a
-"Confirm" action `PATCH`es `review_state="confirmed"`) · `ui/bills/BillsScreen` (**Phase 6**
-— `GET /bills`; each row shows the biller, due date, and a Paid/Missing/Awaiting-payment
-status derived from `matched_transaction_id`/`is_missing`, not a full "due before next
-paycheck" calendar view yet — that cross-reference against a paycheck rule's cadence isn't
-built). `ui/navigation/MagpieNavHost` gates the whole graph on
-`AuthGateViewModel.isSignedIn` (a `TokenStore` Flow) — no explicit post-sign-in navigation
-call is needed, since saving a session makes the Flow re-emit. Budgets · Settings are Phase
-7+ (budgets don't exist server-side yet either). **Not built this pass:** badge counts on
-Home for the review queue's size or the bills-missing count (CLAUDE.md's target design) —
-both screens exist, the Home-panel summary of either doesn't yet.
+(**Phase 5, extended Phase 7** — `GET /transactions?review_state=needs_review`; each row
+shows the amount, merchant, and `rule_note` when a rule fired but didn't clear the
+auto-file bar — CLAUDE.md's "the review queue shows why" made literal on-screen. **Phase
+7:** a row with `ai_suggested_category_id` instead renders "AI suggests: {category name}"
+in a visually distinct color/label with its own "Accept AI suggestion" action, never the
+plain "Confirm" button — the exact CLAUDE.md Phase 7 exit bar, "review queue shows AI
+suggestions distinctly from rule hits." Category names are resolved client-side from `GET
+/categories`, fetched alongside the queue.) · `ui/bills/BillsScreen` (**Phase 6** — `GET
+/bills`; each row shows the biller, due date, and a Paid/Missing/Awaiting-payment status
+derived from `matched_transaction_id`/`is_missing`, not a full "due before next paycheck"
+calendar view yet — that cross-reference against a paycheck rule's cadence isn't built).
+`ui/navigation/MagpieNavHost` gates the whole graph on `AuthGateViewModel.isSignedIn` (a
+`TokenStore` Flow) — no explicit post-sign-in navigation call is needed, since saving a
+session makes the Flow re-emit. **No Budgets screen yet** (server-side `GET/POST /budgets`
+is live — see the domain map) · Settings doesn't exist. **Not built this pass:** badge
+counts on Home for the review queue's size or the bills-missing count (CLAUDE.md's target
+design) — both screens exist, the Home-panel summary of either doesn't yet.
 
 Each screen splits into a thin ViewModel-wired composable and a pure `*Content` composable
 taking plain state + callbacks (`HomeScreen` → `HomeContent`, `AccountsScreen` →

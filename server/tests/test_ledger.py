@@ -1,7 +1,13 @@
 import pytest
 
 from app.ledger.classify import validate_kind_amount_sign, validate_transfer_pair
-from app.ledger.rollups import MonthlyRollup, TransactionForRollup, rollup_month
+from app.ledger.rollups import (
+    MonthlyRollup,
+    TransactionForCategoryRollup,
+    TransactionForRollup,
+    rollup_by_category,
+    rollup_month,
+)
 
 # --- validate_kind_amount_sign ------------------------------------------------------------
 
@@ -121,3 +127,40 @@ def test_rollup_month_mixed_realistic_month():
 def test_rollup_month_rejects_unknown_kind():
     with pytest.raises(ValueError):
         rollup_month([TransactionForRollup("bogus", 100)])
+
+
+# --- rollup_by_category --------------------------------------------------------------------
+
+
+def test_rollup_by_category_groups_spend_by_category():
+    txns = [
+        TransactionForCategoryRollup("groceries", "spend", -8500),
+        TransactionForCategoryRollup("groceries", "spend", -3200),
+        TransactionForCategoryRollup("dining", "spend", -4200),
+    ]
+    totals = rollup_by_category(txns)
+    assert totals == {"groceries": -8500 - 3200, "dining": -4200}
+
+
+def test_rollup_by_category_nets_refund_into_its_category_not_income():
+    txns = [
+        TransactionForCategoryRollup("groceries", "spend", -8500),
+        TransactionForCategoryRollup("groceries", "refund", 1500),
+    ]
+    totals = rollup_by_category(txns)
+    assert totals == {"groceries": -8500 + 1500}
+
+
+def test_rollup_by_category_excludes_transfers_and_income():
+    txns = [
+        TransactionForCategoryRollup("groceries", "spend", -8500),
+        TransactionForCategoryRollup(None, "transfer", -24000),
+        TransactionForCategoryRollup(None, "income", 450000),
+    ]
+    totals = rollup_by_category(txns)
+    assert totals == {"groceries": -8500}
+
+
+def test_rollup_by_category_rejects_unknown_kind():
+    with pytest.raises(ValueError):
+        rollup_by_category([TransactionForCategoryRollup("groceries", "bogus", 100)])

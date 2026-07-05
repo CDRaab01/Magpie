@@ -16,6 +16,7 @@ from app.routers import (
     accounts,
     auth,
     bills,
+    budgets,
     categories,
     imports,
     ingest,
@@ -121,6 +122,7 @@ app.include_router(imports.router)
 app.include_router(ingest.router)
 app.include_router(rules.router)
 app.include_router(bills.router)
+app.include_router(budgets.router)
 
 
 @app.get("/health", tags=["health"])
