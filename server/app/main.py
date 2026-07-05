@@ -7,6 +7,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.config import settings
 from app.limiter import limiter
+from app.routers import suite_auth
 
 # Single source for the human-facing version, reused by GET /version below.
 APP_VERSION = "0.1.0"
@@ -72,7 +73,7 @@ async def security_headers(request: Request, call_next) -> Response:
     return response
 
 
-# Routers land starting Phase 1 (SSO-only auth + data model) — Phase 0 is health/version only.
+app.include_router(suite_auth.router)
 
 
 @app.get("/health", tags=["health"])

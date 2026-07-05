@@ -25,5 +25,23 @@ class Settings(BaseSettings):
     git_sha: str = "unknown"
     built_at: str = "unknown"
 
+    # Local session tokens minted after a successful suite login (Phase 1). Magpie has no
+    # password auth of its own — this key only ever signs/verifies Magpie's own short-lived
+    # access/refresh tokens, never a suite token (those are RS256, verified via JWKS below).
+    secret_key: str
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
+
+    # Suite SSO (CLAUDE.md locked decision: SSO-only, no password auth ever). When
+    # suite_jwks_url + suite_issuer are set, POST /auth/suite accepts a suite access token
+    # (RS256, from the Dragonfly identity server), validates it against the published JWKS,
+    # and trades it for a Magpie session — linking by email. Unset ⇒ the endpoint 404s.
+    suite_jwks_url: str | None = None
+    suite_issuer: str | None = None
+    suite_audience: str = "suite"
+    # Timeout (seconds) for the outbound JWKS fetch.
+    external_timeout_seconds: float = 8.0
+
 
 settings = Settings()
