@@ -1,10 +1,12 @@
 # ARCHITECTURE.md — Magpie (software-level)
 
-> **Status: DESIGN — nothing is built yet (2026-07-04).** This is the target architecture the
-> CLAUDE.md build phases implement. Per the suite docs rule, convert each section to as-built
-> language in the same PR that lands it; anything still speculative should say so. Suite-level
-> context: `C:\Code\ARCHITECTURE.md`. Build spec + locked decisions: [CLAUDE.md](CLAUDE.md).
-> Post-v1 direction: [ROADMAP.md](ROADMAP.md).
+> **Status: Phases 0–1 built and deployed (2026-07-05).** Server skeleton, Android shell on
+> Pulse, CI/CD, and SSO-only auth + the full data model are live at
+> `https://dragonfly.tail2ce561.ts.net` on the real host. Everything from Phase 2 onward
+> (ledger/rules packages, ingestion, screens) below is still target design — marked where it
+> applies. Per the suite docs rule, convert each section to as-built language in the same PR
+> that lands it. Suite-level context: `C:\Code\ARCHITECTURE.md`. Build spec + locked
+> decisions: [CLAUDE.md](CLAUDE.md). Post-v1 direction: [ROADMAP.md](ROADMAP.md).
 
 Magpie is household cash-flow tracking with a review-not-enter product law: money events
 arrive automatically (alert emails, monthly CSV), deterministic rules file the regular ones,
@@ -67,6 +69,17 @@ freshness test is a time-travel test), the IMAP fetcher, the LLM client, and the
 publisher (alert tests assert **latching**: one publish per condition episode, not per
 sweep). Nothing in the pipeline reads a wall clock or opens a socket directly.
 
+**Built (Phase 1):** the suite-token test helper — `tests/conftest.py` generates one local RSA
+keypair per test session and stubs the JWKS fetch, so tests mint valid RS256 suite tokens
+without a real dragonfly-id (the only way to get an authenticated test client at all, since
+Magpie has no password login). **Gotcha discovered building it:** `tests/` has no
+`__init__.py`, so pytest's own conftest auto-discovery and a test file's
+`from tests.conftest import suite_token` load **two separate module instances**, each running
+the module-level keygen once — a token signed via one and verified via the other's JWKS fails
+100% of the time. Fixed by exposing the helper as a fixture (`make_suite_token`) rather than an
+importable function; fixtures always resolve through pytest's single cached module. Future test
+files should request the fixture, not import the function.
+
 Design rules: parsers are one module per issuer with **committed sanitized `.eml` fixtures**
 (public repo — nothing real in git); an email that parses to nothing becomes an `unparsed`
 ingest_event surfaced in an operator view + ntfy when the backlog grows, because a silently
@@ -89,20 +102,28 @@ auto-drop with audit note), per-account freshness (no events in N days → stale
 unparsed-backlog check. **Cash rule:** the ATM withdrawal *is* the spend (category `cash`);
 manual cash entries are optional detail drawing that bucket down — never parallel spend.
 
-### Domain map (planned)
+### Domain map
+
+**Built (Phase 0–1):** `app/main.py` (`/health`, `/version`), `app/routers/suite_auth.py` +
+`app/services/suite_auth.py` (the only auth surface — no password endpoints exist or ever
+will), `app/security.py` (local HS256 session tokens minted after a successful suite login).
+All ten §4 tables exist as SQLAlchemy models (migration `0001`) — `User`, `Account`,
+`Category`, `Transaction`, `Budget`, `Rule`, `BillStatement`, `StatementCheckpoint`,
+`IngestEvent`, `ImportBatch` — but **no CRUD routers/services beyond auth yet**; that's
+Phase 2+.
+
+**Planned (Phase 2+):**
 
 | Domain | Router | Service | Models |
 |---|---|---|---|
-| Auth (SSO only) | `suite_auth.py` | `suite_auth` | `User` |
-| Accounts/categories | `accounts.py`, `categories.py` | thin CRUD | `Account`, `Category` |
-| Transactions + review | `transactions.py` | `transaction_service` (+ `ledger/`) | `Transaction` |
-| Rules | `rules.py` | `rule_service` (+ `rules/`) | `Rule` |
-| Bills/calendar | `bills.py` | `bill_service` | `BillStatement` |
-| Balance anchors | (via `imports.py`) | `import_service` (+ `ledger/`) | `StatementCheckpoint` — stated balance per statement; ledger-vs-statement delta per account is the app's honesty meter and the statement-parity gate's input |
-| Budgets | `budgets.py` | `budget_service` (+ `ledger/`) | `Budget` |
-| Import | `imports.py` | `import_service` | `ImportBatch`, `IngestEvent` |
+| Accounts/categories | `accounts.py`, `categories.py` | thin CRUD | `Account`, `Category` (exist) |
+| Transactions + review | `transactions.py` | `transaction_service` (+ `ledger/`) | `Transaction` (exists) |
+| Rules | `rules.py` | `rule_service` (+ `rules/`) | `Rule` (exists) |
+| Bills/calendar | `bills.py` | `bill_service` | `BillStatement` (exists) |
+| Balance anchors | (via `imports.py`) | `import_service` (+ `ledger/`) | `StatementCheckpoint` (exists) — stated balance per statement; ledger-vs-statement delta per account is the app's honesty meter and the statement-parity gate's input |
+| Budgets | `budgets.py` | `budget_service` (+ `ledger/`) | `Budget` (exists) |
+| Import | `imports.py` | `import_service` | `ImportBatch`, `IngestEvent` (exist) |
 | AI | `ai.py` | `services/ai/` (guardrailed) | drafts only, no writes |
-| Ops | `export.py`, health/version | `export_service` | generic dump |
 
 ## Android design (`android/`, package `com.magpie`)
 
