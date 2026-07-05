@@ -1,6 +1,9 @@
 # ARCHITECTURE.md — Magpie (software-level)
 
-> **Status: Phases 0–7 built and deployed; Phase 8 partially built (2026-07-05).** Server: SSO-only auth, the full data
+> **Status: Phases 0–8 built and deployed (2026-07-05); remaining v1 work is tracked in
+> [V1.md](V1.md), which supersedes CLAUDE.md §10's phase list** — including the
+> severity-ranked findings (F1–F18) of the 2026-07-05 deep code review of the correctness
+> core. Server: SSO-only auth, the full data
 > model, `app/ledger/` (classify/rollups/balances/per-category, all pure and exhaustively
 > tested), accounts/categories/transactions CRUD, CSV reconciliation (`app/imports/`), email
 > ingestion (`app/ingest/`), the rules engine + review queue, bill matching + the first ntfy
@@ -8,8 +11,9 @@
 > sweep,budget}_service.py`, `app/services/ai/`) are live at
 > `https://dragonfly.tail2ce561.ts.net`. Android: Home/Transactions/CashEntry/Accounts/
 > Review-queue/Bills on Retrofit+Room+Hilt+navigation-compose, with Roborazzi baselines for
-> all six (the review queue now also renders AI drafts distinctly from rule hits). **Known
-> gaps, all deliberate, none silent:**
+> **four** of the six (Home ×2 states, Accounts, Review queue, Bills — Transactions and
+> CashEntry have none; V1.md Tier 4 closes that). **Known gaps, all deliberate, none
+> silent:**
 > 1. The suite SSO client `magpie` is not yet registered on dragonfly-id, so on-device sign-in
 >    can't complete end-to-end — see "Open items" below.
 > 2. The CSV parser is generic/institution-agnostic (no real per-issuer sample exports were
@@ -51,16 +55,16 @@
 >    keep pace across phases; it's a small, well-understood gap, not an unknown one.
 >    "First insights" (plain-language summary text, CLAUDE.md's other Phase 7 scope item)
 >    is also not built — only category-suggestion drafts are.
-> 8. **Phase 8 (suite membership) is code-complete but not yet running end-to-end.** The
->    dragonfly-id `magpie` client + smoke-token mechanism, `release.yml`/`deploy.yml`/
->    `redeploy.ps1`/the synthetic smoke, and Dragonfly's app-registry/status-dashboard/config-
->    broker onboarding are all built and verified (redeploy + smoke run live, green). **What's
->    missing is host-level and needs credentials this session didn't have**: the `magpie`
->    self-hosted runner service itself (no registration token available), the `MAGPIE_DIR`/
->    `MAGPIE_SMOKE_CLIENT_*` repo Actions variables/secrets (no `gh` CLI, no API token with
->    repo-admin scope), uptime-kuma monitor, `Test-SuiteInvariants.ps1`'s Magpie exception +
->    checks, and confirming the nightly backup glob picks up magpie-db. See "Operational fit"
->    below for the exact remaining steps.
+> 8. **Phase 8 (suite membership) is now running end-to-end** (verified 2026-07-05, later
+>    the same day as the "not yet" version of this note): the `magpie` runner service is
+>    installed and Running, the repo Actions variables/secrets are set (CI, Release, and
+>    Deploy all green on real pushes — the deployed `/version` reports the HEAD commit),
+>    `Test-SuiteInvariants.ps1` carries the Magpie tunnel exemption + `tailscale serve`
+>    check, and `Backup-DragonflyDatabases.ps1` includes magpie-db. **Still open:** the
+>    uptime-kuma monitor (unverified), and — load-bearing — **the NAS dumps are not
+>    encrypted yet** (host ROADMAP2 Tier 1 #10), which is V1.md's Tier 0 gate: magpie-db now
+>    rides the nightly unencrypted backup, so real financial data must not enter the DB
+>    until that lands.
 >
 > Per the suite docs rule, convert each section to as-built language in the same PR that
 > lands it. Suite-level context: `C:\Code\ARCHITECTURE.md`. Build spec + locked decisions:
@@ -464,17 +468,19 @@ forward once someone wants to actually test the sign-in flow on a phone.
   generic over `AppRegistry.apps`, so the registry entry alone is what makes
   `content://com.dragonfly.suiteconfig/config/magpie` resolve.
 
-**Not yet done — needs either a self-hosted runner registration token or interactive host access
-neither of which this session had the credentials for:**
-- The `magpie` self-hosted GitHub Actions runner service itself (`C:\actions-runner-magpie`) —
-  registering a runner requires a short-lived token from the GitHub UI/API that wasn't available
-  this session. `deploy.yml` is written and tested manually; it just has no runner to listen for
-  it yet.
-- The `MAGPIE_DIR` repository Actions variable and `MAGPIE_SMOKE_CLIENT_ID`/
-  `MAGPIE_SMOKE_CLIENT_SECRET` repository secrets — same blocker (no `gh` CLI on this host, no
-  API token with repo-admin scope available to this session). Exact values and setup steps are
-  in `deploy/README.md`.
-- **uptime-kuma** monitor on `http://host.docker.internal:8005/health`, **`Test-SuiteInvariants
-  .ps1`**'s per-app tunnel-exception + Magpie-specific checks (runner service, `.env` ACL,
-  `tailscale serve status` still carries the mapping), and confirming magpie-db rides the nightly
-  `*-db-1` backup glob — all host-level changes outside any single repo, not started this pass.
+**Completed after the paragraph above was first written (verified live 2026-07-05):**
+- The `magpie` self-hosted runner service (`C:\actions-runner-magpie`,
+  `actions.runner.CDRaab01-Magpie.DRAGONFLY`, Running) and the `MAGPIE_DIR` /
+  `MAGPIE_SMOKE_CLIENT_*` / `KEYSTORE_*` repo variables/secrets — proven by real green CI →
+  Release → Deploy runs on `main` (the release-signing env-var read in `build.gradle.kts`
+  needed a fix, commit `6ee45a8`, deployed and reporting via `/version`).
+- `Test-SuiteInvariants.ps1`'s Magpie handling (tunnel exemption, SUITE_JWKS pin check, the
+  Magpie-only `tailscale serve status` mapping assertion) and magpie-db in
+  `Backup-DragonflyDatabases.ps1`'s dump list.
+
+**Still open (V1.md Tier 0 / Tier 5):**
+- **Encrypting the NAS dumps** (host ROADMAP2 Tier 1 #10) — the Tier 0 gate: magpie-db now
+  rides the nightly backup *unencrypted*; no real financial data before this lands.
+- The **uptime-kuma** monitor on `http://host.docker.internal:8005/health` (unverified).
+- Pinning the smoke-token subject email on dragonfly-id to the designated throwaway address
+  (V1.md F2 — least-privilege hardening of the smoke mechanism, per §9's original design).
