@@ -85,6 +85,88 @@ Android (Kotlin/Compose) ⇄ Tailscale Serve (HTTPS, MagicDNS) ⇄ FastAPI :8005
                                      └→ dragonfly-id JWKS (SSO verification, outbound HTTPS)
 ```
 
+## Diagrams (added post-review 2026-07-05 — the two invariants the code review found broken, F1/F4, were exactly the un-diagrammed ones)
+
+### Transaction lifecycle — status × review_state (the F4 trap made visible)
+
+```mermaid
+stateDiagram-v2
+    state "email → pending / needs_review·auto" as E
+    state "csv → posted / needs_review·auto" as C
+    state "manual (cash) → posted / confirmed" as M
+    state "needs_review" as NR
+    state "auto (rule/transfer filed)" as AUTO
+    state "confirmed (human)" as CONF
+    [*] --> E : IMAP poll
+    [*] --> C : CSV import
+    [*] --> M : cash entry
+    E --> NR
+    E --> AUTO : rule ≥3 obs, in cadence+band / transfer pair
+    C --> NR
+    C --> AUTO : same evaluator
+    M --> CONF : trusted immediately
+    NR --> CONF : review queue PATCH (confirm / accept AI draft)
+    note right of E
+        PLANNED, not built (V1 Tier 1 #12):
+        email 'pending' MERGES into the CSV 'posted'
+        row for the same swipe. Until then the two
+        rows coexist and rollups double-count (F4).
+        Auth-hold expiry (pending >7d unmatched
+        drops with audit note) is also unbuilt.
+    end note
+```
+
+### Rule evaluation — the order every new row goes through (built, Phase 5/7)
+
+```mermaid
+flowchart TD
+    A[new row - already deduped upstream] --> B{exact-cancelling partner\non a DIFFERENT account\nwithin 3 days?}
+    B -- yes --> T[both legs kind=transfer\nshared transfer_group · auto\nF3: needs payment-shape guards]
+    B -- no --> D{merchant present?}
+    D -- no --> NR1[needs_review, no note]
+    D -- yes --> R{recurring rule matches merchant?}
+    R -- "yes, <3 observations" --> NR2[needs_review\n'Looks like X, 2/3 observations']
+    R -- "yes, ≥3 + cadence + band OK" --> AF[auto · rule_note 'Matched rule: X'\nF6: last_matched must also advance on human confirm]
+    R -- "yes, out of band/cadence" --> NR3[needs_review, names rule + reason]
+    R -- no --> MC{merchant→category rule?}
+    MC -- yes --> AF2[auto · category assigned]
+    MC --- no --> AI{llm_client configured?}
+    AI -- yes --> DR[needs_review + ai_suggested_category_id\ndraft only — never category_id]
+    AI -- no --> NR4[needs_review]
+```
+
+### Balance anchoring — the F1-correct semantics (target; current code wrongly sums all history)
+
+```mermaid
+flowchart LR
+    subgraph timeline [account timeline]
+        direction LR
+        O[unknown prior history\nnever in the ledger] -.-> C1[checkpoint C1\nstated_balance anchors here]
+        C1 --> T1[txn] --> T2[txn] --> C2[checkpoint C2\nstated_balance]
+    end
+    C1 -- "derived(C2) = C1.stated + Σ txns in (C1, C2]" --> DELTA{delta = derived − C2.stated\n0 ⇒ 'Reconciled'\nelse 'Off by $X'}
+```
+
+### Data model — the ten tables (built, migrations 0001–0004)
+
+```mermaid
+erDiagram
+    users ||--o{ accounts : owns
+    users ||--o{ rules : owns
+    users ||--o{ ingest_events : scoped
+    users |o--o{ categories : "user_id NULL = shared/seeded"
+    accounts ||--o{ transactions : ""
+    accounts ||--o{ bill_statements : "payment rail"
+    accounts ||--o{ statement_checkpoints : anchors
+    categories |o--o{ transactions : "category_id / ai_suggested_category_id"
+    categories ||--o{ budgets : "no user_id — F10"
+    rules |o--o{ transactions : matched_rule_id
+    ingest_events |o--o| transactions : provenance
+    import_batches |o--o{ transactions : provenance
+    import_batches |o--o{ statement_checkpoints : ""
+    bill_statements |o--o| transactions : matched_transaction_id
+```
+
 ## Deviations from the suite app pattern (all deliberate, all locked)
 
 | Suite norm | Magpie | Why |
