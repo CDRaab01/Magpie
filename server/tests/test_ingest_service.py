@@ -142,3 +142,46 @@ async def test_no_matching_account_also_surfaces_as_unparsed():
 
     assert summary.created == 0
     assert summary.unparsed == 1
+
+
+async def _make_user_with_two_accounts_sharing_last4(last4: str) -> uuid.UUID:
+    async with AsyncSessionLocal() as db:
+        user = User(name="Ingest Test", email=_unique_email())
+        db.add(user)
+        await db.flush()
+        db.add_all(
+            [
+                Account(user_id=user.id, name="Card", institution="Amex", type="card", last4=last4),
+                Account(
+                    user_id=user.id,
+                    name="Checking",
+                    institution="US Bank",
+                    type="depository",
+                    last4=last4,
+                ),
+            ]
+        )
+        await db.commit()
+        return user.id
+
+
+async def test_f16_last4_collision_degrades_to_unparsed_not_a_crash():
+    # Two accounts legitimately share last4 "0000". The amex fixture's hint matches both — the
+    # poll must not crash (scalar_one_or_none would raise MultipleResultsFound); it degrades to
+    # unparsed and keeps going.
+    user_id = await _make_user_with_two_accounts_sharing_last4("0000")
+    fetcher = FakeImapFetcher([_load_eml("amex_large_purchase.eml")])
+
+    async with AsyncSessionLocal() as db:
+        summary = await run_ingest_poll(db, user_id, fetcher)
+
+    assert summary.created == 0
+    assert summary.unparsed == 1
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            IngestEvent.__table__.select().where(IngestEvent.user_id == user_id)
+        )
+        rows = result.mappings().all()
+    assert len(rows) == 1
+    assert rows[0]["outcome"] == "unparsed"

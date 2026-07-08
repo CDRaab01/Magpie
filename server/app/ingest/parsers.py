@@ -157,10 +157,21 @@ _ZELLE_FROM_RE = re.compile(
     r"(?:payment of \$[\d,]+\.\d{2}\s+)?from ([A-Za-z][A-Za-z .'\-]+?) was deposited",
     re.IGNORECASE,
 )
+# The outbound counterparty on a "You sent..." alert ("...to Alex Sample.").
+_ZELLE_TO_RE = re.compile(r"\bto ([A-Za-z][A-Za-z .'\-]+?)(?:\.|\s+on\b|\s+was\b|$)", re.IGNORECASE)
+
+# Direction signals. F7: the old parser booked ANY Zelle "payment" subject as positive income,
+# so an outbound "You sent a Zelle payment" would record money leaving as money arriving. The
+# direction must be read explicitly from the body; an alert that matches neither shape (or, from
+# an over-eager subject match, both) is unparsed rather than guessed.
+_ZELLE_RECEIVED_SIGNALS = ("was deposited", "deposited in", "deposited into", "you received")
+_ZELLE_SENT_SIGNALS = ("you sent", "was sent", "payment sent", "sent to")
 
 
 def parse_usbank(subject: str, body: str) -> ParsedEmailEvent:
-    """One known real template family: a Zelle payment-received alert (income/deposit)."""
+    """US Bank Zelle alerts, in both directions (F7). A received/deposited alert is income; a
+    "you sent" alert is spend. Anything whose direction can't be read unambiguously is unparsed
+    — never assumed to be income."""
     subject_norm = subject.strip().lower()
     if "zelle" not in subject_norm or "payment" not in subject_norm:
         raise UnparsedEmail(f"Unrecognized US Bank subject: {subject!r}")
@@ -169,14 +180,26 @@ def parse_usbank(subject: str, body: str) -> ParsedEmailEvent:
     if amount is None:
         raise UnparsedEmail("US Bank Zelle email matched subject but no dollar amount found")
 
-    counterparty_match = _ZELLE_FROM_RE.search(body)
-    merchant = counterparty_match.group(1).strip() if counterparty_match else None
+    text = f"{subject}\n{body}".lower()
+    received = any(sig in text for sig in _ZELLE_RECEIVED_SIGNALS)
+    sent = any(sig in text for sig in _ZELLE_SENT_SIGNALS)
+    if received and not sent:
+        kind, signed = "income", amount
+        match = _ZELLE_FROM_RE.search(body)
+    elif sent and not received:
+        kind, signed = "spend", -amount
+        match = _ZELLE_TO_RE.search(body)
+    else:
+        raise UnparsedEmail("US Bank Zelle email: could not determine payment direction")
 
+    merchant = match.group(1).strip() if match else None
     return ParsedEmailEvent(
         parser="usbank",
-        parse_version="1",
-        kind="income",
-        amount_cents=amount,
+        # v2: F7 added the sent-vs-received direction guard — a bump so a replay can tell a
+        # direction-corrected row from a v1 row that may have booked outbound money as income.
+        parse_version="2",
+        kind=kind,
+        amount_cents=signed,
         merchant=merchant,
         event_date=_event_date(body),
         last4_hint=_last4(body),

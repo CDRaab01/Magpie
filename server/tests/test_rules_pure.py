@@ -81,15 +81,32 @@ def test_within_band_compares_magnitude_not_sign():
 
 def test_normalize_strips_card_network_noise():
     assert normalize_merchant("SQ *COFFEE SHOP #4021") == "COFFEE SHOP"
+    assert normalize_merchant("PAYPAL *SOME STORE") == "SOME STORE"
+    assert normalize_merchant("POS DELI MART") == "DELI MART"
 
 
 def test_normalize_strips_trailing_transaction_id():
     assert normalize_merchant("XCEL ENERGY 88213091") == "XCEL ENERGY"
 
 
-def test_matches_substring_either_direction():
+def test_f8_noise_prefix_does_not_fire_mid_word():
+    # The old all-optional-separator regex chewed the front off real merchant names.
+    assert normalize_merchant("SPOTIFY") == "SPOTIFY"  # not "OTIFY" (SP)
+    assert normalize_merchant("POSTAL SERVICE") == "POSTAL SERVICE"  # not "TAL SERVICE" (POS)
+    assert normalize_merchant("POSTMATES") == "POSTMATES"  # not "TMATES" (POS)
+    assert normalize_merchant("SQUARESPACE") == "SQUARESPACE"  # not "UARESPACE" (SQ)
+
+
+def test_matches_one_way_pattern_within_observed():
+    # A broad rule pattern matches a specific observed merchant...
     assert matches("XCEL", "XCEL ENERGY")
-    assert matches("XCEL ENERGY", "XCEL")
+
+
+def test_f8_specific_rule_does_not_match_broader_observed():
+    # ...but a specific rule must NOT fire on a broader/shorter observed merchant (the AMAZON
+    # PRIME subscription rule must not swallow every plain AMAZON purchase).
+    assert not matches("AMAZON PRIME", "AMAZON")
+    assert matches("AMAZON", "AMAZON PRIME")  # the reverse is the intended broad match
 
 
 def test_matches_false_for_unrelated_merchant():

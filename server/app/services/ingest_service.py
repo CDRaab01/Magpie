@@ -42,7 +42,12 @@ async def _match_account(
     result = await db.execute(
         select(Account).where(Account.user_id == user_id, Account.last4 == last4_hint)
     )
-    return result.scalar_one_or_none()
+    accounts = result.scalars().all()
+    # F16: two accounts can legitimately share a last4 (a card and a checking account, or two
+    # cards). An ambiguous match is not a crash — `scalar_one_or_none()` would raise and abort
+    # the whole poll batch. Degrade to "no match" so the event lands in the unparsed operator
+    # view instead, and the rest of the batch still processes.
+    return accounts[0] if len(accounts) == 1 else None
 
 
 async def run_ingest_poll(

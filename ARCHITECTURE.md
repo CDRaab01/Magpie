@@ -209,8 +209,12 @@ Pulse composite build, suite signing/release/deploy conventions.
   + `recurrence.py` (cadence windows — weekly/biweekly/monthly ± `slack_days`, monthly
   clamps to the last valid day so Jan 31 → Feb 28 doesn't crash) + `bands.py` (rolling
   median ± pct tolerance, compared on magnitude so a $45 bill and a refund-shaped -$45 read
-  the same) + `merchant_match.py` (normalization strips card-network noise like `SQ *` /
-  trailing transaction IDs, then substring match either direction) + `transfer_matching.py`
+  the same) + `merchant_match.py` (**F8 fixed 2026-07-08** — normalization strips card-network
+  noise like `SQ *` / trailing transaction IDs, but the prefix now requires a real separator so
+  it no longer chews mid-word — SPOTIFY/POSTAL/POSTMATES survive; and matching is now *one-way*
+  containment: the rule pattern must appear within the observed merchant, so a broad rule
+  ("AMAZON") matches a specific merchant ("AMAZON PRIME") but the specific "AMAZON PRIME" rule
+  no longer mis-fires on a plain "AMAZON" purchase) + `transfer_matching.py`
   (**F3 fixed 2026-07-08** — pairs only a *payment-shaped* pair: the `card` leg is the
   positive inflow, the `depository` leg the negative outflow, net zero, different account,
   within a day window. Requiring the card-payment shape — not merely two ±equal amounts —
@@ -253,11 +257,18 @@ files should request the fixture, not import the function.
 
 **Built (Phase 4):** `app/ingest/parsers.py` — pure, no I/O — recognizes exactly two real
 sender templates: Amex's "Large Purchase Approved" (spend) / "Merchant credit/refund was
-issued" (refund), and US Bank's "A new Zelle payment..." / "You received a Zelle payment"
-(income). Each extracts amount, merchant, date, and a last4 hint via regex against the real
-Phase −1 corpus's structure; anything else — an unrecognized subject, a recognized subject
-with no dollar figure, or a resolved parse with no matching account — raises `UnparsedEmail`
-and becomes an `outcome="unparsed"` `ingest_event`, never a crash and never silent data loss.
+issued" (refund), and US Bank's Zelle alert. **F7 (fixed 2026-07-08):** the US Bank parser now
+reads Zelle *direction* from the body — a received/deposited alert is income, a "you sent"
+alert is spend, and an alert whose direction can't be read unambiguously is `UnparsedEmail`
+rather than assumed income (the old parser booked any Zelle "payment" as positive income, so
+an outbound send would have recorded money leaving as money arriving). `parse_version` bumped
+to `2` so a replay can tell corrected rows from v1. Each extracts amount, merchant, date, and a
+last4 hint via regex against the real Phase −1 corpus's structure; anything else — an
+unrecognized subject, a recognized subject with no dollar figure, or a resolved parse with no
+matching account — raises `UnparsedEmail` and becomes an `outcome="unparsed"` `ingest_event`,
+never a crash and never silent data loss. **F16 (fixed 2026-07-08):** account resolution by
+last4 now degrades to unparsed when two accounts share a last4 (a card and a checking account,
+say) instead of raising `MultipleResultsFound` and aborting the whole poll batch.
 **Two real bugs the tests caught before deploy:** the amount regex originally matched the
 *first* dollar figure in an Amex body, which is the alert-threshold sentence ("...was more
 than $1.00"), not the real charge that appears later — fixed to anchor on the *last* match.
