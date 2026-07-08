@@ -38,19 +38,28 @@ async def _owned_account(db: AsyncSession, user_id: uuid.UUID, account_id: uuid.
     return account
 
 
-async def _is_duplicate(db: AsyncSession, account_id: uuid.UUID, row: ParsedCsvRow) -> bool:
-    """Dedup fingerprint for CSV rows (no message-id to key on, unlike email ingestion):
-    an exact (account, date, amount, description) match is treated as the same transaction —
-    re-importing the same file, or an overlapping date range, creates zero duplicates."""
+def _fingerprint(row: ParsedCsvRow) -> tuple:
+    """The CSV dedup key (no message-id to lean on, unlike email): (date, amount, description)
+    identifies "the same transaction". Multiplicity matters — see `_existing_fingerprint_counts`."""
+    return (row.date, row.amount_cents, row.description)
+
+
+async def _existing_fingerprint_counts(db: AsyncSession, account_id: uuid.UUID) -> dict[tuple, int]:
+    """How many transactions already exist per fingerprint on this account (F9), computed once
+    per import. Counting — rather than a boolean "does any match" — is what lets a re-import stay
+    idempotent AND two genuinely distinct same-day duplicates (two $5.00 coffees) both survive.
+    The old boolean check skipped the second coffee, and worse, `scalar_one_or_none` *raised* on
+    re-import once two identical rows already existed."""
     result = await db.execute(
-        select(Transaction.id).where(
-            Transaction.account_id == account_id,
-            Transaction.date == row.date,
-            Transaction.amount == row.amount_cents,
-            Transaction.merchant_raw == row.description,
+        select(Transaction.date, Transaction.amount, Transaction.merchant_raw).where(
+            Transaction.account_id == account_id
         )
     )
-    return result.scalar_one_or_none() is not None
+    counts: dict[tuple, int] = {}
+    for date_, amount, merchant in result.all():
+        key = (date_, amount, merchant)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 async def _find_pending_email_match(
@@ -137,6 +146,13 @@ async def import_csv(
         LmStudioClient(settings.llm_base_url, settings.llm_model) if settings.llm_base_url else None
     )
 
+    # F9: dedup by multiplicity, not existence. Snapshot how many of each fingerprint already
+    # exist, then let each file row consume one — so re-importing is idempotent while two truly
+    # distinct same-day duplicates both survive. `consumed` counts how many existing rows this
+    # file's rows have already matched.
+    existing_counts = await _existing_fingerprint_counts(db, account_id)
+    consumed: dict[tuple, int] = {}
+
     created = 0
     skipped = 0
     matched = 0
@@ -152,7 +168,9 @@ async def import_csv(
             matched += 1
             continue
 
-        if await _is_duplicate(db, account_id, row):
+        fp = _fingerprint(row)
+        if consumed.get(fp, 0) < existing_counts.get(fp, 0):
+            consumed[fp] = consumed.get(fp, 0) + 1
             skipped += 1
             continue
 

@@ -419,7 +419,10 @@ is the Home month-panel read, backed by `app/ledger/rollups.py`; `AccountOut` no
 computed `balance_cents`/`balance_delta_cents` (`app/ledger/balances.py`). `POST /imports/csv`
 (`app/routers/imports.py` + `app/services/import_service.py`) parses via `csv_parser.py`,
 dedupes against existing transactions by an (account, date, amount, description) fingerprint
-(no message-id to key on, unlike email ingestion), creates `needs_review` transactions
+**by multiplicity, not existence (F9)** — it counts how many of each fingerprint already exist and
+lets each file row consume one, so two genuinely distinct same-day duplicates both survive and
+re-import stays idempotent (the old boolean check skipped the second, and crashed on re-import once
+two identical rows existed) — creates `needs_review` transactions
 (kind guessed from sign only — a CSV row is never a manual confirmation), and optionally a
 `StatementCheckpoint` when a Balance column is present. `POST /ingest/poll` + `GET
 /ingest/events` (`app/routers/ingest.py` + `app/services/ingest_service.py`) are the email

@@ -88,6 +88,49 @@ async def test_reimporting_the_same_file_creates_zero_duplicates(auth_client):
     assert len(r.json()) == 1  # still just one real transaction
 
 
+async def test_two_identical_same_day_rows_both_survive(auth_client):
+    # F9: two genuinely distinct same-day charges (two $5.00 coffees) must NOT collapse into one.
+    account_id = await _make_account(auth_client)
+    csv_text = "Date,Description,Amount\n2026-07-01,Coffee,-5.00\n2026-07-01,Coffee,-5.00\n"
+    r = await auth_client.post(
+        "/imports/csv",
+        data={"account_id": account_id, "institution": "US Bank"},
+        files=_csv_file(csv_text),
+    )
+    assert r.json()["created_count"] == 2  # both survive, not deduped to one
+    assert len((await auth_client.get("/transactions")).json()) == 2
+
+    # Re-importing is still idempotent AND must not crash now that two identical rows exist
+    # (the old scalar_one_or_none raised MultipleResultsFound on exactly this).
+    r2 = await auth_client.post(
+        "/imports/csv",
+        data={"account_id": account_id, "institution": "US Bank"},
+        files=_csv_file(csv_text),
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["created_count"] == 0 and r2.json()["skipped_count"] == 2
+    assert len((await auth_client.get("/transactions")).json()) == 2
+
+
+async def test_partial_duplicate_import_creates_only_the_new_occurrence(auth_client):
+    # F9 multiplicity: DB has one coffee; a file with two coffees adds exactly one more.
+    account_id = await _make_account(auth_client)
+    one = "Date,Description,Amount\n2026-07-01,Coffee,-5.00\n"
+    await auth_client.post(
+        "/imports/csv",
+        data={"account_id": account_id, "institution": "US Bank"},
+        files=_csv_file(one),
+    )
+    two = "Date,Description,Amount\n2026-07-01,Coffee,-5.00\n2026-07-01,Coffee,-5.00\n"
+    r = await auth_client.post(
+        "/imports/csv",
+        data={"account_id": account_id, "institution": "US Bank"},
+        files=_csv_file(two),
+    )
+    assert r.json()["created_count"] == 1 and r.json()["skipped_count"] == 1
+    assert len((await auth_client.get("/transactions")).json()) == 2
+
+
 async def test_overlapping_date_range_only_creates_new_rows(auth_client):
     account_id = await _make_account(auth_client)
     first = "Date,Description,Amount\n2026-07-01,Coffee,-4.50\n2026-07-02,Lunch,-12.00\n"
