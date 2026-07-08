@@ -112,11 +112,14 @@ async def _find_transfer_partner(
     db: AsyncSession,
     user_id: uuid.UUID,
     account_id: uuid.UUID,
+    account_type: str,
     amount_cents: int,
     txn_date: datetime.date,
 ) -> Transaction | None:
+    """The best card-payment partner for a new leg, or None. Payment-shape (F3) needs each
+    leg's account *type*, so the pool is fetched joined to Account and typed accordingly."""
     result = await db.execute(
-        select(Transaction)
+        select(Transaction, Account.type)
         .join(Account, Transaction.account_id == Account.id)
         .where(
             Account.user_id == user_id,
@@ -125,11 +128,14 @@ async def _find_transfer_partner(
             Transaction.amount == -amount_cents,
         )
     )
+    rows = result.all()
     pool = [
-        TransferCandidate(str(t.id), str(t.account_id), t.amount, t.date)
-        for t in result.scalars().all()
+        TransferCandidate(str(t.id), str(t.account_id), acct_type, t.amount, t.date, t.review_state)
+        for t, acct_type in rows
     ]
-    candidate = TransferCandidate("candidate", str(account_id), amount_cents, txn_date)
+    candidate = TransferCandidate(
+        "candidate", str(account_id), account_type, amount_cents, txn_date
+    )
     match = find_transfer_match(candidate, pool)
     if match is None:
         return None
@@ -208,9 +214,26 @@ async def evaluate_transaction(
 ) -> EvaluationResult:
     merchant_norm = normalize_merchant(merchant_raw) if merchant_raw else None
 
-    # 1. Transfer matching — deterministic, no review needed, wins outright.
-    partner = await _find_transfer_partner(db, user_id, account_id, amount_cents, txn_date)
+    # 1. Transfer matching — deterministic, no review needed, wins outright. Payment-shape (F3)
+    #    depends on the account's type, so fetch it before searching for a partner.
+    account_type = await db.scalar(
+        select(Account.type).where(Account.id == account_id, Account.user_id == user_id)
+    )
+    partner = await _find_transfer_partner(
+        db, user_id, account_id, account_type, amount_cents, txn_date
+    )
     if partner is not None:
+        # F3: never silently rewrite a human-confirmed row into a transfer leg. A confirmed
+        # partner routes the NEW row to review (with the pairing named) and is left untouched;
+        # the human can un-pair/repair deliberately. Only unconfirmed partners auto-pair.
+        if partner.review_state == "confirmed":
+            return EvaluationResult(
+                kind=default_kind,
+                review_state="needs_review",
+                category_id=None,
+                matched_rule_id=None,
+                rule_note="Looks like a transfer to a confirmed transaction — pair manually",
+            )
         group = str(uuid.uuid4())
         partner.kind = "transfer"
         partner.transfer_group = group

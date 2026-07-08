@@ -99,6 +99,90 @@ async def test_transfer_pair_auto_files_both_sides():
         assert refreshed.transfer_group == result.transfer_group
 
 
+async def test_f3_confirmed_partner_is_not_silently_rewritten_into_a_transfer():
+    # A human-confirmed card payment already sits in the ledger. A new checking outflow that
+    # would otherwise pair with it must NOT flip the confirmed row to "auto"/"transfer" — the
+    # new row routes to review instead, and the confirmed partner is left exactly as it was.
+    user_id = await _make_user()
+    checking_id = await _make_account(user_id, "Checking", "depository")
+    card_id = await _make_account(user_id, "Amex", "card")
+
+    async with AsyncSessionLocal() as db:
+        partner = Transaction(
+            account_id=card_id,
+            amount=5000,
+            date=datetime.date(2026, 7, 4),
+            status="posted",
+            kind="income",
+            review_state="confirmed",  # the human already reviewed this one
+            source="csv",
+        )
+        db.add(partner)
+        await db.commit()
+        await db.refresh(partner)
+
+    async with AsyncSessionLocal() as db:
+        result = await evaluate_transaction(
+            db,
+            user_id,
+            account_id=checking_id,
+            amount_cents=-5000,
+            txn_date=datetime.date(2026, 7, 5),
+            merchant_raw=None,
+            default_kind="spend",
+            now=NOW,
+        )
+        await db.commit()
+
+    assert result.kind == "spend"
+    assert result.review_state == "needs_review"
+    assert result.transfer_group is None
+
+    async with AsyncSessionLocal() as db:
+        refreshed = await db.get(Transaction, partner.id)
+        assert refreshed.kind == "income"  # untouched
+        assert refreshed.review_state == "confirmed"
+        assert refreshed.transfer_group is None
+
+
+async def test_f3_card_spend_and_coincidental_deposit_do_not_pair_end_to_end():
+    # The F3 false positive through the real evaluator: a card spend and a same-amount checking
+    # deposit must not fuse. The candidate (a card spend, negative on the card) finds no
+    # payment-shaped partner in the deposit.
+    user_id = await _make_user()
+    checking_id = await _make_account(user_id, "Checking", "depository")
+    card_id = await _make_account(user_id, "Amex", "card")
+
+    async with AsyncSessionLocal() as db:
+        deposit = Transaction(
+            account_id=checking_id,
+            amount=5000,
+            date=datetime.date(2026, 7, 4),
+            status="posted",
+            kind="income",
+            review_state="needs_review",
+            source="csv",
+        )
+        db.add(deposit)
+        await db.commit()
+
+    async with AsyncSessionLocal() as db:
+        result = await evaluate_transaction(
+            db,
+            user_id,
+            account_id=card_id,
+            amount_cents=-5000,  # a card spend, not a payment
+            txn_date=datetime.date(2026, 7, 5),
+            merchant_raw="Coffee Shop",
+            default_kind="spend",
+            now=NOW,
+        )
+        await db.commit()
+
+    assert result.kind == "spend"
+    assert result.transfer_group is None
+
+
 async def test_recurring_rule_below_observation_threshold_stays_needs_review():
     user_id = await _make_user()
     account_id = await _make_account(user_id, "Checking", "depository")

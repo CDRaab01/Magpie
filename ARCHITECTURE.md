@@ -120,8 +120,9 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TD
-    A[new row - already deduped upstream] --> B{exact-cancelling partner\non a DIFFERENT account\nwithin 3 days?}
-    B -- yes --> T[both legs kind=transfer\nshared transfer_group · auto\nF3: needs payment-shape guards]
+    A[new row - already deduped upstream] --> B{payment-shaped partner?\ncard inflow + depository outflow\nnet zero · different account · 3 days}
+    B -- "yes, partner unconfirmed" --> T[both legs kind=transfer\nshared transfer_group · auto\nF3 fixed 2026-07-08]
+    B -- "yes, partner confirmed" --> NRT[new row needs_review\nconfirmed leg left untouched\nF3: no silent rewrite]
     B -- no --> D{merchant present?}
     D -- no --> NR1[needs_review, no note]
     D -- yes --> R{recurring rule matches merchant?}
@@ -210,9 +211,12 @@ Pulse composite build, suite signing/release/deploy conventions.
   median ± pct tolerance, compared on magnitude so a $45 bill and a refund-shaped -$45 read
   the same) + `merchant_match.py` (normalization strips card-network noise like `SQ *` /
   trailing transaction IDs, then substring match either direction) + `transfer_matching.py`
-  (pairs an outflow on one account with an exactly-cancelling inflow on a *different*
-  account within a day window — never same-account, never a partial match). All pure, 21
-  table-driven tests. Deviation detection (missing bill / out-of-band / short-paycheck) is
+  (**F3 fixed 2026-07-08** — pairs only a *payment-shaped* pair: the `card` leg is the
+  positive inflow, the `depository` leg the negative outflow, net zero, different account,
+  within a day window. Requiring the card-payment shape — not merely two ±equal amounts —
+  stops a card spend and a coincidental same-amount deposit from fusing into a bogus transfer;
+  non-card internal moves fall through to review. The confirmed-partner guard and the un-pair
+  path live in the transaction service). All pure, 23 table-driven tests. Deviation detection (missing bill / out-of-band / short-paycheck) is
   Phase 6, not built yet — the clock/band primitives exist, the alert sweeps that use them
   don't.
 
@@ -299,8 +303,10 @@ goes stale); the ingest code never mutates the mailbox (read-only by behavior, e
 **Built (Phase 5), wired into both `import_service.py` and `ingest_service.py` so every
 CSV row and every ingested email goes through the same evaluator — `app/services
 /rule_service.py::evaluate_transaction`:** 1. dedupe (already done upstream by each caller
-before a row ever reaches the evaluator) → 2. transfer matching (an exact-cancelling pair on
-a different account ⇒ both legs `kind="transfer"`, `review_state="auto"`, no review) →
+before a row ever reaches the evaluator) → 2. transfer matching (a payment-shaped pair —
+card inflow + depository outflow netting to zero on different accounts, F3 — ⇒ both legs
+`kind="transfer"`, `review_state="auto"`, no review; a *confirmed* would-be partner is left
+untouched and the new row routes to review instead) →
 3. recurring income/bill rules (≥3 observations + within cadence window + within amount band
 ⇒ auto-filed with `rule_note` = `"Matched rule: X"`; below threshold or out of band ⇒
 `needs_review` with an explanation naming the rule and the reason) → 4. merchant→category
@@ -389,8 +395,11 @@ time rather than re-derived later from whatever the rule looks like now. `GET/PO
 `GET/PATCH/DELETE /rules/{id}` (`app/routers/rules.py` + `app/services/rule_service.py`) are
 plain CurrentUser-scoped CRUD; `PATCH /transactions/{id}` gained `review_state` and `kind`
 (the review queue's confirm/correct action — `kind` only re-validates the sign invariant
-when supplied, never blindly trusted); `GET /transactions?review_state=needs_review` is the
-review queue's read. `GET/POST /bills`, `POST /bills/{id}/rematch` (`app/routers/bills.py` +
+when supplied, never blindly trusted; and changing a transfer leg's kind away from
+`"transfer"` now dissolves the whole `transfer_group` so no dangling half-group is left, F12);
+`POST /transactions/{id}/unpair` dissolves a transfer pair explicitly (both legs revert to
+their sign-based kind and return to review, F12); `GET /transactions?review_state=needs_review`
+is the review queue's read. `GET/POST /bills`, `POST /bills/{id}/rematch` (`app/routers/bills.py` +
 `app/services/bill_service.py`) — no migration needed: `BillStatement.account_id` is
 required, so it scopes via the same join-to-`Account.user_id` pattern Phase 3's
 `StatementCheckpoint` already established, no nullable-join gap to close. `is_missing` is

@@ -19,6 +19,7 @@ from app.services.transaction_service import (
     get_transaction,
     list_transactions,
     monthly_summary,
+    unpair_transaction,
     update_transaction,
 )
 
@@ -74,6 +75,13 @@ async def patch_transaction(
     transaction_id: uuid.UUID, req: TransactionUpdate, current_user: CurrentUser, db: DbSession
 ):
     return await update_transaction(db, current_user.id, transaction_id, req)
+
+
+@router.post("/{transaction_id}/unpair", response_model=list[TransactionOut])
+async def unpair(transaction_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+    """Dissolve the transfer pair this transaction belongs to (F12) — both legs revert to their
+    sign-based kind and return to the review queue."""
+    return await unpair_transaction(db, current_user.id, transaction_id)
 
 
 @router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
