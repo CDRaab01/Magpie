@@ -223,3 +223,27 @@ async def test_patch_kind_away_from_transfer_dissolves_the_whole_group(auth_clie
     assert partner["transfer_group"] is None
     assert partner["kind"] == "spend"  # sign-based revert of the negative checking leg
     assert partner["review_state"] == "needs_review"
+
+
+async def test_transactions_pagination(auth_client):
+    # F14: opt-in limit/offset paging for the Transactions screen (order is date desc).
+    account_id = await _make_account(auth_client)
+    for day in range(1, 6):  # five spends on distinct dates
+        r = await auth_client.post(
+            "/transactions",
+            json={
+                "account_id": account_id,
+                "amount": -100 * day,
+                "date": f"2026-07-0{day}",
+                "kind": "spend",
+            },
+        )
+        assert r.status_code == 201, r.text
+
+    assert len((await auth_client.get("/transactions")).json()) == 5  # default: all
+
+    page1 = (await auth_client.get("/transactions?limit=2")).json()
+    assert len(page1) == 2 and page1[0]["date"] == "2026-07-05"  # newest first
+    page2 = (await auth_client.get("/transactions?limit=2&offset=2")).json()
+    assert len(page2) == 2 and page2[0]["date"] == "2026-07-03"
+    assert (await auth_client.get("/transactions?limit=2&offset=10")).json() == []  # past the end

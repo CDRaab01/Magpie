@@ -61,6 +61,8 @@ async def list_transactions(
     start: datetime.date | None = None,
     end: datetime.date | None = None,
     review_state: str | None = None,
+    limit: int | None = None,
+    offset: int = 0,
 ) -> list[Transaction]:
     query = (
         select(Transaction)
@@ -74,6 +76,15 @@ async def list_transactions(
         query = query.where(Transaction.date <= end)
     if review_state is not None:
         query = query.where(Transaction.review_state == review_state)
+    # F14: optional pagination for the Transactions screen once a 12-month backfill makes an
+    # unbounded list heavy. Default (limit=None) is unchanged — return everything — so existing
+    # callers (e.g. the review queue) and tests keep their current behavior. A stable ORDER BY
+    # (date desc, created_at desc) makes offset paging deterministic. The Android infinite-scroll
+    # that consumes this is Tier 4 (#32).
+    if offset:
+        query = query.offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
     result = await db.execute(query)
     return list(result.scalars().all())
 

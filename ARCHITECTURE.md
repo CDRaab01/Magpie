@@ -360,7 +360,11 @@ invalid sign combination onto a transaction.
 transaction on that account regardless of whether it predates the rule — Phase 3's CSV
 backfill history counts the same as live events, exactly as CLAUDE.md's cold-start bar
 intends. Below threshold, the review queue shows *why* ("Looks like XCEL ENERGY, 2/3
-observations"), not just that it needs a look.
+observations"), not just that it needs a look. **F14:** that observation lookup prefilters the
+merchant substring in SQL (`merchant_norm ILIKE %matcher%`, both stored already-normalized)
+instead of loading + Python-normalizing the whole account table per evaluated row; the exact
+one-way `matches()` stays the Python authority. `GET /transactions` also gains opt-in `limit`
+(≤500)/`offset` (default unbounded — review queue unchanged); the Android infinite-scroll is Tier 4.
 
 **The AI guardrail (built, Phase 7):** `app/services/ai/llm_client.py` is the fourth and
 final injected seam (clock, IMAP fetcher, ntfy publisher, now the LLM client) —

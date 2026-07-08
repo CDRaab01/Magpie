@@ -212,11 +212,23 @@ async def _observation_history(
 ) -> list[Transaction]:
     """Every past transaction on this account whose merchant matches — includes Phase 3's
     CSV backfill history, not just transactions created after the rule existed (CLAUDE.md's
-    cold-start bar counts "backfill history or live events" the same way)."""
-    result = await db.execute(select(Transaction).where(Transaction.account_id == account_id))
-    return [
-        t for t in result.scalars().all() if t.merchant_norm and matches(matcher, t.merchant_norm)
-    ]
+    cold-start bar counts "backfill history or live events" the same way).
+
+    F14: the merchant substring is prefiltered in SQL (the rule's `matcher` is stored
+    already-normalized, as is `merchant_norm`), so a rule evaluated against a 12-month backfill no
+    longer loads + Python-normalizes the *entire* account table per row (the old O(N²)). The exact
+    one-way containment check still runs in Python as the authority — the SQL `ilike` is a superset
+    prefilter (a stray LIKE wildcard could only broaden it), so it can never drop a real match."""
+    if not matcher:
+        return []
+    result = await db.execute(
+        select(Transaction).where(
+            Transaction.account_id == account_id,
+            Transaction.merchant_norm.isnot(None),
+            Transaction.merchant_norm.ilike(f"%{matcher}%"),
+        )
+    )
+    return [t for t in result.scalars().all() if matches(matcher, t.merchant_norm)]
 
 
 async def _available_categories(db: AsyncSession, user_id: uuid.UUID) -> dict[str, uuid.UUID]:
