@@ -2,7 +2,13 @@ from datetime import date
 
 import pytest
 
-from app.ingest.parsers import UnparsedEmail, parse_amex, parse_email, parse_usbank
+from app.ingest.parsers import (
+    UnparsedEmail,
+    parse_amex,
+    parse_discover,
+    parse_email,
+    parse_usbank,
+)
 
 AMEX_PURCHASE_BODY = """
 Dear SENTINEL USER,
@@ -37,6 +43,36 @@ Log in
 
 You sent a payment of $30.00 to Alex Sample.
 Debited from account ending in: 0000
+"""
+
+# US Bank's account-wide "Your transaction is complete." alert — one subject, direction in the
+# body ("transaction of" = debit/spend, "deposit of" = money in/income). No merchant is carried.
+USBANK_TRANSACTION_BODY = """
+Log in
+
+Your transaction of $42.00 is complete.
+To review this transaction, log in and view your account ending in 0000.
+"""
+
+USBANK_DEPOSIT_BODY = """
+Log in
+
+Your deposit of $1,000.00 is complete.
+To review this transaction, log in and view your account ending in 0000.
+"""
+
+DISCOVER_ALERT_BODY = """
+Account Center - Last 4 #: 0000
+
+A transaction above the limit you set has been initiated.
+
+No action is needed.
+
+Merchant: TEST MERCHANT CO
+Date: July 06, 2026
+Amount: $25.00
+
+The amount shown might be a pending pre-authorization amount.
 """
 
 
@@ -96,6 +132,47 @@ def test_usbank_non_zelle_subject_is_unparsed():
         parse_usbank("Your mailing address has changed", "irrelevant body")
 
 
+def test_usbank_transaction_complete_is_negative_spend():
+    event = parse_usbank("Your transaction is complete.", USBANK_TRANSACTION_BODY)
+    assert event.kind == "spend"
+    assert event.amount_cents == -4200
+    assert event.merchant is None  # US Bank's transaction alert carries no merchant
+    assert event.last4_hint == "0000"
+
+
+def test_usbank_deposit_complete_is_positive_income():
+    # Same subject as a debit — direction ("deposit of") is read from the body. This is the
+    # paycheck path (#17): US Bank does email deposits.
+    event = parse_usbank("Your transaction is complete.", USBANK_DEPOSIT_BODY)
+    assert event.kind == "income"
+    assert event.amount_cents == 100000
+    assert event.last4_hint == "0000"
+
+
+def test_usbank_transaction_without_direction_is_unparsed():
+    with pytest.raises(UnparsedEmail):
+        parse_usbank("Your transaction is complete.", "Something happened. $5.00. account 0000")
+
+
+def test_discover_transaction_alert_is_negative_spend():
+    event = parse_discover("Transaction Alert", DISCOVER_ALERT_BODY)
+    assert event.kind == "spend"
+    assert event.amount_cents == -2500  # from "Amount: $25.00", not the boilerplate
+    assert event.merchant == "TEST MERCHANT CO"
+    assert event.event_date == date(2026, 7, 6)
+    assert event.last4_hint == "0000"
+
+
+def test_discover_unrecognized_subject_is_unparsed():
+    with pytest.raises(UnparsedEmail):
+        parse_discover("You have a new statement", DISCOVER_ALERT_BODY)
+
+
+def test_discover_alert_without_amount_line_is_unparsed():
+    with pytest.raises(UnparsedEmail):
+        parse_discover("Transaction Alert", "A transaction was initiated. No action is needed.")
+
+
 def test_parse_email_dispatches_by_exact_sender():
     event = parse_email(
         "AmericanExpress@welcome.americanexpress.com",
@@ -103,6 +180,15 @@ def test_parse_email_dispatches_by_exact_sender():
         AMEX_PURCHASE_BODY,
     )
     assert event.parser == "amex"
+
+
+def test_parse_email_dispatches_discover_by_sender():
+    event = parse_email(
+        "discover@services.discover.com",
+        "Transaction Alert",
+        DISCOVER_ALERT_BODY,
+    )
+    assert event.parser == "discover"
 
 
 def test_parse_email_unknown_sender_is_unparsed():

@@ -1,10 +1,11 @@
-"""Per-issuer email parsers (CLAUDE.md Phase 4), built from the real Phase -1 corpus —
-Amex `AmericanExpress@welcome.americanexpress.com` and US Bank
-`usbank@notifications.usbank.com` are the only two issuers with confirmed real per-transaction
-alert coverage (see ARCHITECTURE.md's status header). Discover's alerts are, per the account's
-own preferences, pushed rather than emailed — no Discover parser exists here because there is
-no real sample to build one against; guessing at a format would violate the entire point of
-Phase -1.
+"""Per-issuer email parsers (CLAUDE.md Phase 4), built from the real corpus. Three issuers with
+confirmed per-transaction email coverage (see ARCHITECTURE.md's status header):
+  - Amex `AmericanExpress@welcome.americanexpress.com` — "Large Purchase Approved" (spend),
+    "Merchant credit/refund" (refund).
+  - US Bank `usbank@notifications.usbank.com` — "Your transaction is complete." (the account-wide
+    debit/deposit alert, incl. paychecks) + Zelle payment alerts.
+  - Discover `discover@services.discover.com` — "Transaction Alert" (spend). Confirmed emailing as
+    of 2026-07-08; Phase -1 had found it push-only, so this coverage is new.
 
 Pure — no I/O, no DB. Each parser takes a subject + plaintext body and returns a
 `ParsedEmailEvent`, or raises `UnparsedEmail` if the template isn't recognized. An unparsed
@@ -46,6 +47,16 @@ _LONG_DATE_RE = re.compile(
 )
 # "Received date: 07/02/2026" — US Bank's alert date line.
 _SLASH_DATE_RE = re.compile(r"Received date:\s*(\d{1,2})/(\d{1,2})/(\d{4})", re.IGNORECASE)
+# "Date: July 06, 2026" — Discover's labeled date line (full month name, no weekday).
+_LABELED_DATE_RE = re.compile(
+    r"Date:\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s+(\d{1,2}),?\s+(\d{4})",
+    re.IGNORECASE,
+)
+# Discover's other labeled fields — clean key/value lines, so extract them precisely rather than
+# by position ("Amount: $59.11" coexists with boilerplate like "a $1 authorization charge").
+_LABELED_AMOUNT_RE = re.compile(r"Amount:\s*\$\s?([\d,]+\.\d{2})", re.IGNORECASE)
+_LABELED_MERCHANT_RE = re.compile(r"Merchant:\s*(.+)")
+_LABELED_LAST4_RE = re.compile(r"Last\s*4\s*#?:?\s*(\d{4})", re.IGNORECASE)
 
 _MONTHS = {
     "Jan": 1,
@@ -92,6 +103,10 @@ def _event_date(text: str) -> date | None:
     m = _LONG_DATE_RE.search(text)
     if m:
         month = _MONTHS[m.group(1)[:3]]
+        return date(int(m.group(3)), month, int(m.group(2)))
+    m = _LABELED_DATE_RE.search(text)
+    if m:
+        month = _MONTHS[m.group(1).title()[:3]]
         return date(int(m.group(3)), month, int(m.group(2)))
     return None
 
@@ -169,13 +184,46 @@ _ZELLE_SENT_SIGNALS = ("you sent", "was sent", "payment sent", "sent to")
 
 
 def parse_usbank(subject: str, body: str) -> ParsedEmailEvent:
-    """US Bank Zelle alerts, in both directions (F7). A received/deposited alert is income; a
-    "you sent" alert is spend. Anything whose direction can't be read unambiguously is unparsed
-    — never assumed to be income."""
+    """US Bank alerts, two real templates: the account-wide "Your transaction is complete." alert
+    (ordinary debits + deposits/paychecks — the main coverage) and Zelle payment alerts in both
+    directions (F7). Anything else, or an alert whose direction can't be read, is unparsed —
+    never guessed, never assumed to be income."""
     subject_norm = subject.strip().lower()
-    if "zelle" not in subject_norm or "payment" not in subject_norm:
-        raise UnparsedEmail(f"Unrecognized US Bank subject: {subject!r}")
+    if "transaction is complete" in subject_norm:
+        return _parse_usbank_transaction(body)
+    if "zelle" in subject_norm and "payment" in subject_norm:
+        return _parse_usbank_zelle(subject, body)
+    raise UnparsedEmail(f"Unrecognized US Bank subject: {subject!r}")
 
+
+def _parse_usbank_transaction(body: str) -> ParsedEmailEvent:
+    """The "Your transaction is complete." alert. Direction is read from the wording: "Your
+    transaction of $X" is a debit → spend; "Your deposit of $X" is money in → income (this is the
+    paycheck path). No merchant is carried in this alert — CSV reconciliation fills that in."""
+    amount = _amount_cents(body)
+    if amount is None:
+        raise UnparsedEmail("US Bank transaction alert matched subject but no dollar amount found")
+    text = body.lower()
+    if "deposit of" in text:
+        kind, signed = "income", amount
+    elif "transaction of" in text:
+        kind, signed = "spend", -amount
+    else:
+        raise UnparsedEmail("US Bank transaction alert: could not tell a debit from a deposit")
+    return ParsedEmailEvent(
+        parser="usbank",
+        parse_version="3",
+        kind=kind,
+        amount_cents=signed,
+        merchant=None,
+        event_date=_event_date(body),
+        last4_hint=_last4(body),
+    )
+
+
+def _parse_usbank_zelle(subject: str, body: str) -> ParsedEmailEvent:
+    """A received/deposited Zelle alert is income; a "you sent" alert is spend. Anything whose
+    direction can't be read unambiguously is unparsed — never assumed to be income (F7)."""
     amount = _amount_cents(body)
     if amount is None:
         raise UnparsedEmail("US Bank Zelle email matched subject but no dollar amount found")
@@ -195,9 +243,9 @@ def parse_usbank(subject: str, body: str) -> ParsedEmailEvent:
     merchant = match.group(1).strip() if match else None
     return ParsedEmailEvent(
         parser="usbank",
-        # v2: F7 added the sent-vs-received direction guard — a bump so a replay can tell a
-        # direction-corrected row from a v1 row that may have booked outbound money as income.
-        parse_version="2",
+        # v3: bumped alongside the "Your transaction is complete." template addition (v2 was the
+        # F7 sent-vs-received direction guard); a replay can still distinguish by kind/version.
+        parse_version="3",
         kind=kind,
         amount_cents=signed,
         merchant=merchant,
@@ -206,11 +254,36 @@ def parse_usbank(subject: str, body: str) -> ParsedEmailEvent:
     )
 
 
+def parse_discover(subject: str, body: str) -> ParsedEmailEvent:
+    """Discover's "Transaction Alert" — a per-transaction charge alert with clean labeled fields
+    (Merchant:/Date:/Amount:/Last 4 #:). Discover is a credit card, so a transaction alert is a
+    charge → spend. The amount is often a pending pre-authorization (the alert body says so); the
+    posted amount is reconciled from CSV later, so this is captured as a pending spend."""
+    if "transaction alert" not in subject.strip().lower():
+        raise UnparsedEmail(f"Unrecognized Discover subject: {subject!r}")
+    amount_match = _LABELED_AMOUNT_RE.search(body)
+    if amount_match is None:
+        raise UnparsedEmail("Discover transaction alert matched subject but no 'Amount:' line")
+    amount = round(float(amount_match.group(1).replace(",", "")) * 100)
+    merchant_match = _LABELED_MERCHANT_RE.search(body)
+    last4_match = _LABELED_LAST4_RE.search(body)
+    return ParsedEmailEvent(
+        parser="discover",
+        parse_version="1",
+        kind="spend",
+        amount_cents=-amount,
+        merchant=merchant_match.group(1).strip() if merchant_match else None,
+        event_date=_event_date(body),
+        last4_hint=last4_match.group(1) if last4_match else None,
+    )
+
+
 # Keyed by the exact sender address a filter/poller sees — the same addresses the Phase -1
 # Gmail filters already match on.
 PARSERS_BY_SENDER = {
     "AmericanExpress@welcome.americanexpress.com": parse_amex,
     "usbank@notifications.usbank.com": parse_usbank,
+    "discover@services.discover.com": parse_discover,
 }
 
 

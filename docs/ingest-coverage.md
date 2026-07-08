@@ -8,51 +8,53 @@
 > Fill the tables as labeled mail arrives. **Exit:** ≥2 weeks of labeled mail across all four
 > accounts + this note complete.
 
-Status: **Phase 4 built against Amex + US Bank (2026-07-05).** Real per-transaction alert
-coverage confirmed and filtered on the *primary* Gmail (account details in
-`C:\Users\Sonic\.dragonfly-suite\`) — not yet
-routed through the dedicated mailbox described below. Real sender addresses and subject
-templates are now captured directly in `server/app/ingest/parsers.py` and its sanitized
-`.eml` fixtures, superseding the placeholder guesses originally in this doc.
+Status: **Parsers built for Amex + US Bank + Discover (updated 2026-07-08).** Real
+per-transaction alert coverage confirmed and filtered on the *main* Gmail; Magpie reads that
+account's `magpie-ingest` label directly over IMAP (see the routing decision below — the
+dedicated forwarding mailbox was dropped). Real sender addresses and subject templates are
+captured in `server/app/ingest/parsers.py` and its sanitized `.eml` fixtures. **Only remaining
+step to go live: the main-account app password (`[H]`).**
 
 - **Amex** — `AmericanExpress@welcome.americanexpress.com`. Two real per-transaction
   templates confirmed: "Large Purchase Approved" (spend, $1 threshold) and "Merchant
   credit/refund was issued to your account" (refund). A Gmail filter on this sender +
   those two subjects applies label `magpie-ingest`, retroactively applied to existing mail.
-- **US Bank** — `usbank@notifications.usbank.com`. One real template confirmed: "A new
-  Zelle payment is in your account" / "You received a Zelle payment" (income/deposit, no
-  confirmed threshold). Filtered the same way. **Gap:** this only covers Zelle P2P deposits
-  — no confirmed coverage yet for paycheck ACH deposits or ACH/check debits on this account;
-  CSV reconciliation is the fallback for those until real examples surface.
-- **Discover** — alert *preferences* were confirmed enabled in the account UI (2026-07-05),
-  but **zero real per-transaction alert emails have arrived** despite that — an AI-assisted
-  inbox summary suggested Discover may route these to push notifications rather than email.
-  No Discover parser exists; guessing at one would defeat Phase −1's purpose. Check Discover's
-  actual notification-channel setting directly before building anything here.
-- **Visa** — still not identified/enabled. Untouched this pass.
+- **US Bank** — `usbank@notifications.usbank.com`. **Two templates (updated 2026-07-08):**
+  the account-wide **"Your transaction is complete."** (body says "Your transaction of $X" for a
+  debit→spend, "Your deposit of $X" for money in→income — this *is* the paycheck path, confirmed
+  by a real $4,061.55 deposit) **and** the Zelle alert ("A new Zelle payment…"/"You received a
+  Zelle payment"). The earlier Zelle-only gap is closed. No merchant in the transaction alert —
+  CSV fills it.
+- **Discover** — `discover@services.discover.com`. **Now emailing (updated 2026-07-08):** a
+  **"Transaction Alert"** per charge with clean labeled fields (`Merchant:`/`Date:`/`Amount:`/
+  `Last 4 #:`). Phase −1 had found it push-only; the owner's alert setup changed that. Parser
+  built (`parse_discover`, spend; the amount is a pending pre-auth reconciled from CSV). Discover
+  also sends "You have a new statement" (bill-issued, not yet parsed — Phase 6).
+- **Visa** — **out of v1** (owner enabled alerts on US Bank/Amex/Discover only, 2026-07-08).
 - **Combined corpus so far:** 58 real historical conversations retroactively labeled
   (Amex + US Bank combined, spanning back to 2024) — used as the basis for the sanitized
   fixtures Phase 4 ships with, in place of a strict "2 weeks live" wait.
 
+**Routing decision (2026-07-08): main-account IMAP, not forwarding.** The dedicated-mailbox +
+forwarding plan was **abandoned** — Gmail's forwarding-address verification repeatedly hit
+Google's anti-automation wall and the confirmation email never arrived. Instead, a single Gmail
+filter on the main account (`from:(the 3 senders) subject:(the transaction subjects)`) applies
+`magpie-ingest`, and Magpie's poller connects to the **main account** and selects the
+**`magpie-ingest` label** (`IMAP_USER` + `IMAP_LABEL=magpie-ingest`). The dedicated mailbox
+(address on file in `~\.dragonfly-suite\`) and its app password are no longer used. Tradeoff accepted: the
+main-account app password can technically read the whole inbox, mitigated by read-only poller
+behavior (`BODY.PEEK`, label-scoped).
+
 **Not yet done / open:**
-1. **Primary → dedicated forwarding** (to the dedicated ingest mailbox, address on file in
-   `C:\Users\Sonic\.dragonfly-suite\`) is configured but
-   **not verified** — Gmail's own anti-automation check ("secure Google verification...
-   try again later") interrupted setup mid-flow. A real, unhurried manual click is more
-   likely to succeed than another scripted attempt. An app password for the dedicated
-   mailbox already exists (`C:\Users\Sonic\.dragonfly-suite\magpie-ingest-mailbox.txt`),
-   but is not yet wired into `server/.env` since the mail flow it would authenticate isn't
-   live yet.
-2. **Whether the dedicated mailbox needs its own `magpie-ingest` label at all is now an
-   open question, not a fixed step** — once forwarding is scoped to *only* the Amex/US Bank
-   filters (never a blanket forward), every message landing in the dedicated account's
-   INBOX is by definition Magpie-relevant; the IMAP poller could simply select `INBOX`
-   there instead of requiring a second, redundant label filter. Decide this before wiring
-   `IMAP_LABEL` in production config.
-3. **Visa** — identify the issuer, enable its per-transaction alert if one exists.
-4. **The live end-to-end proof** (a real swipe becomes a pending transaction within one
-   poll interval) is blocked on steps 1–2 above; everything upstream is built and tested
-   against sanitized fixtures (see `server/tests/test_ingest_service.py`).
+1. **`[H]` Generate the main-account Google app password** (`magpie-imap-main`) → save to
+   `C:\Users\Sonic\.dragonfly-suite\magpie-main-imap.txt` → it becomes `IMAP_PASSWORD` in
+   `server/.env`, with `MAGPIE_IMAP_HOST=imap.gmail.com` + `MAGPIE_IMAP_USER` in the host root
+   `.env`. Until then the compose IMAP vars default empty ⇒ the poller stays off.
+2. **The live end-to-end proof** (a real swipe becomes a pending transaction within one poll
+   interval) is blocked only on #1; everything upstream is built + tested against sanitized
+   fixtures (`server/tests/test_ingest_parsers.py`, `test_ingest_service.py`).
+3. **Bill-issued email parser** (Phase 6) — Discover "You have a new statement" carries a real
+   statement date + balance; parse it when Phase 6's bill pipeline needs it.
 
 ## Accounts in scope
 

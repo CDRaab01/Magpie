@@ -18,20 +18,25 @@
 >    can't complete end-to-end — see "Open items" below.
 > 2. The CSV parser is generic/institution-agnostic (no real per-issuer sample exports were
 >    available when it was built) — importing real 12-month history is a human step.
-> 3. **Email ingestion has real parsers for exactly two issuers — Amex and US Bank — built
->    from the real Phase −1 corpus.** Discover has no email parser because it has no confirmed
->    real per-transaction alert email at all (its account-level preferences appear to route
->    alerts to push notifications instead); the Visa account named in CLAUDE.md's Phase −1
->    scope hasn't been checked this pass. Guessing at either would violate the entire point
->    of Phase −1 — coverage gaps are written down, not papered over with an untested parser.
-> 4. **The live end-to-end proof of the ingestion pipeline is still pending a human step**:
->    Phase 4's IMAP poller needs real credentials for the dedicated ingestion mailbox
->    (account details in `C:\Users\Sonic\.dragonfly-suite\`), which requires finishing
->    Gmail's forwarding-address verification (blocked mid-setup by Google's own
->    anti-automation check) and then generating an app password. Everything upstream of
->    that credential is built and proven against real (sanitized) fixtures via a
->    mock-the-seam test — only the final "does a live
->    swipe really show up" proof is outstanding.
+> 3. **Email ingestion has real parsers for three issuers — Amex, US Bank, and Discover —
+>    built from the real corpus (updated 2026-07-08).** US Bank's coverage grew from Zelle-only
+>    to the account-wide "Your transaction is complete." alert (ordinary debits **and**
+>    deposits/paychecks). Discover — which Phase −1 had found push-only — now emails a
+>    "Transaction Alert" with clean labeled fields (Merchant/Date/Amount/Last-4), so it has a
+>    real parser. The Visa account in CLAUDE.md's Phase −1 scope is **out of v1** (owner set up
+>    alerts on US Bank/Amex/Discover only). Exact senders: `AmericanExpress@welcome.americanexpress.com`,
+>    `usbank@notifications.usbank.com`, `discover@services.discover.com`.
+> 4. **The ingestion routing changed from a forwarding mailbox to main-account IMAP scoped by
+>    label (2026-07-08).** The original design forwarded the `magpie-ingest`-labelled alerts to a
+>    dedicated mailbox so Magpie's credential saw only alerts (least privilege). Gmail forwarding
+>    proved too fragile (its verification hit Google's anti-automation wall repeatedly), so the
+>    approach is now: the poller connects to the **main account** (`IMAP_USER`) and selects the
+>    **`magpie-ingest` label** (`IMAP_LABEL`). Tradeoff, deliberately accepted: the app password
+>    can technically read the whole main inbox, but the poller is read-only by behavior
+>    (`BODY.PEEK`, never marks/moves/deletes) and only ever selects the label. **The live
+>    end-to-end proof is still pending** the human step of generating a main-account Google app
+>    password (`~\.dragonfly-suite\magpie-main-imap.txt` → `IMAP_PASSWORD` in `server/.env`);
+>    everything upstream is built and proven against real (sanitized) fixtures via mock-the-seam.
 > 5. **Phase 5's rules engine auto-files transfers, recurring income/bills, and
 >    merchant→category matches. Pending→posted matching is now built too (F4, 2026-07-08):** a
 >    CSV-truth reconciliation pass merges an email-sourced pending row into the posted row for
@@ -230,8 +235,8 @@ Pulse composite build, suite signing/release/deploy conventions.
 ### The ingestion pipeline (`app/ingest/`)
 
 ```
-Gmail filters → label "magpie-ingest" → IMAP poll (lifespan task, every N min)
-  → per-issuer parser (amex.py / usbank.py — Discover/Visa: no real sample, no parser)
+Gmail filter (main account) → label "magpie-ingest" → IMAP poll of that label (lifespan task)
+  → per-issuer parser (Amex / US Bank / Discover, by exact sender — Visa out of v1)
   → dedupe (message-id + payload hash → ingest_events)
   → account resolved by last4 hint → transaction row (status=pending, needs_review)
   → no matching account, or no recognized template → outcome="unparsed"
@@ -258,15 +263,19 @@ the module-level keygen once — a token signed via one and verified via the oth
 importable function; fixtures always resolve through pytest's single cached module. Future test
 files should request the fixture, not import the function.
 
-**Built (Phase 4):** `app/ingest/parsers.py` — pure, no I/O — recognizes exactly two real
-sender templates: Amex's "Large Purchase Approved" (spend) / "Merchant credit/refund was
-issued" (refund), and US Bank's Zelle alert. **F7 (fixed 2026-07-08):** the US Bank parser now
-reads Zelle *direction* from the body — a received/deposited alert is income, a "you sent"
-alert is spend, and an alert whose direction can't be read unambiguously is `UnparsedEmail`
-rather than assumed income (the old parser booked any Zelle "payment" as positive income, so
-an outbound send would have recorded money leaving as money arriving). `parse_version` bumped
-to `2` so a replay can tell corrected rows from v1. Each extracts amount, merchant, date, and a
-last4 hint via regex against the real Phase −1 corpus's structure; anything else — an
+**Built (Phase 4, extended 2026-07-08):** `app/ingest/parsers.py` — pure, no I/O — dispatches by
+exact sender to three issuer parsers:
+- **Amex** — "Large Purchase Approved" (spend) / "Merchant credit/refund was issued" (refund).
+- **US Bank** — the account-wide "Your transaction is complete." alert (**"transaction of"** = debit→spend,
+  **"deposit of"** = money in→income, i.e. the paycheck path; no merchant, filled by CSV) **plus** the
+  Zelle alert. **F7:** Zelle *direction* is read from the body — received→income, "you sent"→spend,
+  ambiguous→`UnparsedEmail` rather than assumed income. `parse_version` `3` (was `2` for F7).
+- **Discover** — "Transaction Alert" (a card charge → spend; pending pre-auth, reconciled to the
+  posted amount by CSV). Clean labeled fields (`Amount:`/`Merchant:`/`Date:`/`Last 4 #:`) parsed
+  precisely so the `$1 authorization` boilerplate can't be mistaken for the amount.
+
+Each extracts amount, merchant, date, and a last4 hint via regex against the real corpus's
+structure; anything else — an
 unrecognized subject, a recognized subject with no dollar figure, or a resolved parse with no
 matching account — raises `UnparsedEmail` and becomes an `outcome="unparsed"` `ingest_event`,
 never a crash and never silent data loss. **F16 (fixed 2026-07-08):** account resolution by
