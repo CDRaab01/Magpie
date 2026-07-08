@@ -490,7 +490,7 @@ reconnect (Cookbook's `NetworkSyncObserver` precedent).
 Screens: `ui/signin/SignInScreen` ("Sign in with Dragonfly," the only auth path) ·
 `ui/home/HomeScreen` (month in/out/net panel via `HomeContent`, gates on having ≥1 account —
 shows an inline create-account form instead of the summary when none exist, and now links to
-Accounts, Review queue, and Bills) · `ui/transactions/TransactionsScreen` (list) ·
+Accounts, Review queue, Bills, and Settings) · `ui/transactions/TransactionsScreen` (list) ·
 `ui/cashentry/CashEntryScreen` (the offline-capable manual entry form) ·
 `ui/accounts/AccountsScreen` (**Phase 3** — lists accounts with computed balance + a
 "Reconciled"/"Off by $X" delta line when a checkpoint exists; each row has an "Import CSV"
@@ -503,16 +503,27 @@ auto-file bar — CLAUDE.md's "the review queue shows why" made literal on-scree
 in a visually distinct color/label with its own "Accept AI suggestion" action, never the
 plain "Confirm" button — the exact CLAUDE.md Phase 7 exit bar, "review queue shows AI
 suggestions distinctly from rule hits." Category names are resolved client-side from `GET
-/categories`, fetched alongside the queue.) · `ui/bills/BillsScreen` (**Phase 6** — `GET
+/categories`, fetched alongside the queue. **V1 Tier 1 #9 — the "correct" half of
+approve/correct:** every row also carries a tonal "Correct" action opening a `ModalBottomSheet`
+(the full category list + a kind selector for the rare sign-ambiguous case); tapping a category
+confirms immediately, so the happy path stays one tap and a correction is at most two. All three
+paths — accept-as-is, accept/pick a category, correct the kind — go through one
+`ReviewQueueViewModel.confirm(id, categoryId?, kind?)` → `PATCH /transactions/{id}`
+(`review_state=confirmed`, null = leave untouched); a bad kind change surfaces the server's sign
+re-validation error and leaves the row in the queue.) · `ui/bills/BillsScreen` (**Phase 6** — `GET
 /bills`; each row shows the biller, due date, and a Paid/Missing/Awaiting-payment status
 derived from `matched_transaction_id`/`is_missing`, not a full "due before next paycheck"
 calendar view yet — that cross-reference against a paycheck rule's cadence isn't built).
 `ui/navigation/MagpieNavHost` gates the whole graph on `AuthGateViewModel.isSignedIn` (a
 `TokenStore` Flow) — no explicit post-sign-in navigation call is needed, since saving a
 session makes the Flow re-emit. **No Budgets screen yet** (server-side `GET/POST /budgets`
-is live — see the domain map) · Settings doesn't exist. **Not built this pass:** badge
-counts on Home for the review queue's size or the bills-missing count (CLAUDE.md's target
-design) — both screens exist, the Home-panel summary of either doesn't yet.
+is live — see the domain map). `ui/settings/SettingsScreen` (**V1 Tier 1 #10** — the category
+editor: lists categories, the user's own (`shared=false`) get rename/delete affordances while
+seeded/shared ones show a read-only "Shared" label (the server 404s a rename/delete of a shared
+category), plus an "Add" action and an About block with the server `/version`. `SettingsViewModel`
+wraps the existing `POST`/`PATCH`/`DELETE /categories` CRUD; the rules editor is deferred to Tier
+3.) **Not built this pass:** badge counts on Home for the review queue's size or the bills-missing
+count (CLAUDE.md's target design) — the screens exist, the Home-panel summary of either doesn't yet.
 
 Each screen splits into a thin ViewModel-wired composable and a pure `*Content` composable
 taking plain state + callbacks (`HomeScreen` → `HomeContent`, `AccountsScreen` →

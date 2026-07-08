@@ -13,6 +13,7 @@ import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.magpie.data.remote.AccountOut
+import com.magpie.data.remote.CategoryOut
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.data.remote.TransactionOut
 import com.magpie.data.remote.BillOut
@@ -24,6 +25,8 @@ import com.magpie.ui.home.HomeContent
 import com.magpie.ui.home.HomeUiState
 import com.magpie.ui.reviewqueue.ReviewQueueContent
 import com.magpie.ui.reviewqueue.ReviewQueueUiState
+import com.magpie.ui.settings.SettingsContent
+import com.magpie.ui.settings.SettingsUiState
 import com.magpie.ui.theme.MagpieTheme
 import org.junit.Rule
 import org.junit.Test
@@ -93,6 +96,12 @@ class ScreenshotTest {
 
     @Test
     fun bills_dark() = capture("bills_dark", dark = true) { BillsScene() }
+
+    @Test
+    fun settings_light() = capture("settings_light", dark = false) { SettingsScene() }
+
+    @Test
+    fun settings_dark() = capture("settings_dark", dark = true) { SettingsScene() }
 }
 
 @Composable
@@ -113,6 +122,7 @@ private fun HomeReadyScene() {
         onViewAccounts = {},
         onViewReviewQueue = {},
         onViewBills = {},
+        onViewSettings = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
 }
@@ -126,6 +136,7 @@ private fun HomeNeedsAccountScene() {
         onViewAccounts = {},
         onViewReviewQueue = {},
         onViewBills = {},
+        onViewSettings = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
 }
@@ -225,12 +236,37 @@ private fun ReviewQueueScene() {
                     createdAt = "2026-07-13T00:00:00Z",
                 ),
             ),
+            categories = listOf(
+                CategoryOut(id = "cat-dining", name = "Dining", shared = true),
+                CategoryOut(id = "cat-groceries", name = "Groceries", shared = true),
+                CategoryOut(id = "cat-utilities", name = "Utilities", shared = true),
+            ),
             categoryNamesById = mapOf("cat-dining" to "Dining"),
             loading = false,
         ),
         onBack = {},
-        onConfirm = {},
-        onAcceptAiSuggestion = { _, _ -> },
+        onConfirm = { _, _, _ -> },
+    )
+}
+
+@Composable
+private fun SettingsScene() {
+    SettingsContent(
+        state = SettingsUiState(
+            categories = listOf(
+                CategoryOut(id = "1", name = "Coffee runs", shared = false),
+                CategoryOut(id = "2", name = "Dining", shared = true),
+                CategoryOut(id = "3", name = "Groceries", shared = true),
+                CategoryOut(id = "4", name = "Utilities", shared = true),
+            ),
+            serverVersion = "0.1.0",
+            serverCommit = "2ebb651",
+            loading = false,
+        ),
+        onBack = {},
+        onAddCategory = {},
+        onRenameCategory = { _, _ -> },
+        onDeleteCategory = {},
     )
 }
 

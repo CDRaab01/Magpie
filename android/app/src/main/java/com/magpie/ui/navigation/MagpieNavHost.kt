@@ -12,6 +12,7 @@ import com.magpie.ui.bills.BillsScreen
 import com.magpie.ui.cashentry.CashEntryScreen
 import com.magpie.ui.home.HomeScreen
 import com.magpie.ui.reviewqueue.ReviewQueueScreen
+import com.magpie.ui.settings.SettingsScreen
 import com.magpie.ui.signin.SignInScreen
 import com.magpie.ui.transactions.TransactionsScreen
 
@@ -37,6 +38,7 @@ fun MagpieNavHost() {
                 composable(Routes.ACCOUNTS) { AccountsScreen(navController) }
                 composable(Routes.REVIEW_QUEUE) { ReviewQueueScreen(navController) }
                 composable(Routes.BILLS) { BillsScreen(navController) }
+                composable(Routes.SETTINGS) { SettingsScreen(navController) }
             }
         }
     }
