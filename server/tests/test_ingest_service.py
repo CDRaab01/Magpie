@@ -202,7 +202,9 @@ async def test_f4_csv_reconciles_an_email_pending_swipe_into_one_row():
     assert summary.created == 1  # one pending email swipe, amount -4200 on 2026-07-05
 
     # The reconciliation CSV: same swipe, settled $3.00 higher (a tip) — still the same swipe.
-    csv_text = "Date,Description,Amount\n2026-07-05,TST* TEST MERCHANT,-45.00\n"
+    # Real Amex convention (F5): a charge is a POSITIVE amount; the per-institution sign flip
+    # turns +45.00 into the -4500 spend that matches the pending email swipe.
+    csv_text = "Date,Description,Amount\n2026-07-05,TST* TEST MERCHANT,45.00\n"
     async with AsyncSessionLocal() as db:
         result = await import_csv(db, user_id, account_id, "Amex", csv_text.encode())
     assert result.matched_count == 1
@@ -233,7 +235,8 @@ async def test_f4_reimporting_the_reconciled_csv_creates_no_duplicate():
     async with AsyncSessionLocal() as db:
         await run_ingest_poll(db, user_id, FakeImapFetcher([_load_eml("amex_large_purchase.eml")]))
 
-    csv_text = "Date,Description,Amount\n2026-07-05,TST* TEST MERCHANT,-45.00\n"
+    # Real Amex convention (F5): a charge is positive; the sign flip yields the -4500 spend.
+    csv_text = "Date,Description,Amount\n2026-07-05,TST* TEST MERCHANT,45.00\n"
     async with AsyncSessionLocal() as db:
         first = await import_csv(db, user_id, account_id, "Amex", csv_text.encode())
     assert first.matched_count == 1

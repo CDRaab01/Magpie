@@ -21,7 +21,10 @@ async def _make_transfer_pair(auth_client):
     await auth_client.post(
         "/imports/csv",
         data={"account_id": card_id, "institution": "Amex"},
-        files=_csv("Date,Description,Amount\n2026-07-04,PAYMENT THANK YOU,50.00\n", "card.csv"),
+        # Real Amex convention (F5): a payment/credit is a NEGATIVE amount in the export; the
+        # per-institution sign flip turns it into the +inflow on the card that pairs with the
+        # checking outflow below.
+        files=_csv("Date,Description,Amount\n2026-07-04,PAYMENT THANK YOU,-50.00\n", "card.csv"),
     )
     await auth_client.post(
         "/imports/csv",
