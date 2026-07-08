@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     # driving it.
     ingest_user_email: str | None = None
 
+    # F18: Magpie's "months" are the OWNER's local months, not UTC. A transaction date derived
+    # from a timestamp (an email whose body has no date line) is converted to this zone before
+    # the calendar date is taken, so an 11pm-local swipe on the last of the month doesn't roll
+    # into the next month because the server clock is UTC. IANA name; single-household.
+    owner_timezone: str = "America/Chicago"
+
     # Deviation alerts (CLAUDE.md Phase 6). Unset ntfy_base_url ⇒ the sweep never publishes —
     # same "absence disables the feature" pattern as imap_host above.
     ntfy_base_url: str | None = None

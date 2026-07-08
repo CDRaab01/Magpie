@@ -243,6 +243,7 @@ Gmail filter (main account) → label "magpie-ingest" → IMAP poll of that labe
   → per-issuer parser (Amex / US Bank / Discover, by exact sender — Visa out of v1)
   → dedupe (message-id + payload hash → ingest_events)
   → account resolved by last4 hint → transaction row (status=pending, needs_review)
+      (date = parser's date, else the receipt timestamp in owner-local tz — F18, `app/time_util.py`)
   → no matching account, or no recognized template → outcome="unparsed"
 CSV/OFX import (monthly) → institution mapping → reconciles against email-sourced pending
   rows first (F4: promote the pending swipe to posted in place), else creates a new posted row

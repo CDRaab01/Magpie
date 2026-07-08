@@ -24,6 +24,7 @@ from app.models.transaction import Transaction
 from app.rules.merchant_match import normalize_merchant
 from app.services.ai.llm_client import LmStudioClient
 from app.services.rule_service import evaluate_transaction
+from app.time_util import owner_local_date
 
 
 @dataclass(frozen=True)
@@ -115,7 +116,10 @@ async def run_ingest_poll(
             unparsed += 1
             continue
 
-        txn_date = parsed.event_date or item.received_at.date()
+        # F18: when the parser has no explicit date, the email's receipt timestamp stands in —
+        # taken in the OWNER's timezone so a late-evening month-end swipe files under the right
+        # month rather than UTC's next day.
+        txn_date = parsed.event_date or owner_local_date(item.received_at, settings.owner_timezone)
         evaluation = await evaluate_transaction(
             db,
             user_id,
