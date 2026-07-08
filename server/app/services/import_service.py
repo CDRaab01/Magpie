@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.imports.csv_parser import CsvParseError, ParsedCsvRow, parse_csv
+from app.imports.pending_match import PendingCandidate, find_pending_match
 from app.models.account import Account
 from app.models.import_batch import ImportBatch
 from app.models.statement_checkpoint import StatementCheckpoint
@@ -48,6 +49,46 @@ async def _is_duplicate(db: AsyncSession, account_id: uuid.UUID, row: ParsedCsvR
         )
     )
     return result.scalar_one_or_none() is not None
+
+
+async def _find_pending_email_match(
+    db: AsyncSession, account_id: uuid.UUID, row: ParsedCsvRow
+) -> Transaction | None:
+    """The pending email-sourced transaction this CSV row reconciles (F4), or None. Transfers
+    are excluded — a transfer leg's amount is half of a zero-sum pair and must not be rewritten
+    to a CSV magnitude."""
+    result = await db.execute(
+        select(Transaction).where(
+            Transaction.account_id == account_id,
+            Transaction.status == "pending",
+            Transaction.source == "email",
+            Transaction.transfer_group.is_(None),
+        )
+    )
+    candidates = [PendingCandidate(str(t.id), t.amount, t.date) for t in result.scalars().all()]
+    match = find_pending_match(row.amount_cents, row.date, candidates)
+    if match is None:
+        return None
+    found = await db.execute(select(Transaction).where(Transaction.id == uuid.UUID(match.id)))
+    return found.scalar_one()
+
+
+def _reconcile_pending_to_posted(
+    txn: Transaction, row: ParsedCsvRow, batch_id: uuid.UUID, now: datetime.datetime
+) -> None:
+    """Promote a pending email swipe to the CSV's posted truth (F4). The CSV is authoritative for
+    amount (tip/settlement), date, and merchant; the human/rule decision already on the row
+    (kind, category, review_state, matched_rule_id) is preserved, and the email provenance
+    (ingest_event_id) stays. Overwriting amount/date/merchant to the CSV values also keeps
+    re-import idempotent: a second import of the same file now matches this row's dedup
+    fingerprint and skips instead of creating a duplicate."""
+    txn.status = "posted"
+    txn.posted_at = now
+    txn.amount = row.amount_cents
+    txn.date = row.date
+    txn.merchant_raw = row.description
+    txn.merchant_norm = normalize_merchant(row.description) if row.description else None
+    txn.import_batch_id = batch_id
 
 
 async def import_csv(
@@ -87,7 +128,19 @@ async def import_csv(
 
     created = 0
     skipped = 0
+    matched = 0
     for row in rows:
+        # F4: if this posted CSV row is the same swipe as an email-sourced pending row already in
+        # the ledger, merge into that one row rather than creating a second that would
+        # double-count once reconciled. Checked before the exact-dup guard so the pending email
+        # row is promoted, not the CSV row skipped.
+        pending = await _find_pending_email_match(db, account_id, row)
+        if pending is not None:
+            _reconcile_pending_to_posted(pending, row, batch.id, now)
+            await db.flush()
+            matched += 1
+            continue
+
         if await _is_duplicate(db, account_id, row):
             skipped += 1
             continue
@@ -131,8 +184,7 @@ async def import_csv(
         created += 1
 
     batch.created_count = created
-    batch.matched_count = 0  # reserved: matching a pending email-sourced row to a posted CSV
-    # row is Phase 4 territory (pending/posted reconciliation), not this phase.
+    batch.matched_count = matched  # F4: pending email rows promoted to posted by this batch
     batch.skipped_count = skipped
 
     checkpoint_created = False
@@ -154,7 +206,7 @@ async def import_csv(
     return ImportSummaryOut(
         row_count=len(rows),
         created_count=created,
-        matched_count=0,
+        matched_count=matched,
         skipped_count=skipped,
         checkpoint_created=checkpoint_created,
     )

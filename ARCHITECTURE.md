@@ -33,9 +33,9 @@
 >    mock-the-seam test — only the final "does a live
 >    swipe really show up" proof is outstanding.
 > 5. **Phase 5's rules engine auto-files transfers, recurring income/bills, and
->    merchant→category matches — but pending→posted matching (item 4's fast-follow) still
->    isn't built**, so a CSV-truth reconciliation pass won't yet merge with an email-sourced
->    pending row for the same swipe; they land as two rows until that lands.
+>    merchant→category matches. Pending→posted matching is now built too (F4, 2026-07-08):** a
+>    CSV-truth reconciliation pass merges an email-sourced pending row into the posted row for
+>    the same swipe rather than creating a second — closing the rollup double-count.
 > 6. **Phase 6's bill matching and "missing bill" detection are fully built and tested, but
 >    there is still no `bill_issued` *email* parser for any issuer.** Real "statement ready"
 >    emails with genuine structured data (statement date, balance) were confirmed for
@@ -106,13 +106,16 @@ stateDiagram-v2
     C --> AUTO : same evaluator
     M --> CONF : trusted immediately
     NR --> CONF : review queue PATCH (confirm / accept AI draft)
+    E --> C : CSV import reconciles the same swipe (F4)
     note right of E
-        PLANNED, not built (V1 Tier 1 #12):
-        email 'pending' MERGES into the CSV 'posted'
-        row for the same swipe. Until then the two
-        rows coexist and rollups double-count (F4).
-        Auth-hold expiry (pending >7d unmatched
-        drops with audit note) is also unbuilt.
+        F4 FIXED 2026-07-08 (V1 Tier 1 #12): on CSV import an
+        email 'pending' row is promoted in place to the CSV
+        'posted' row for the same swipe (same account, same
+        direction, ±3 days, exact or tip-settled amount) — one
+        row, counted once. app/imports/pending_match.py is the
+        pure matcher; import_service does the promotion.
+        Still unbuilt: auth-hold expiry (pending >7d unmatched
+        drops with an audit note).
     end note
 ```
 
@@ -120,13 +123,14 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TD
-    A[new row - already deduped upstream] --> B{exact-cancelling partner\non a DIFFERENT account\nwithin 3 days?}
-    B -- yes --> T[both legs kind=transfer\nshared transfer_group · auto\nF3: needs payment-shape guards]
+    A[new row - already deduped upstream] --> B{payment-shaped partner?\ncard inflow + depository outflow\nnet zero · different account · 3 days}
+    B -- "yes, partner unconfirmed" --> T[both legs kind=transfer\nshared transfer_group · auto\nF3 fixed 2026-07-08]
+    B -- "yes, partner confirmed" --> NRT[new row needs_review\nconfirmed leg left untouched\nF3: no silent rewrite]
     B -- no --> D{merchant present?}
     D -- no --> NR1[needs_review, no note]
     D -- yes --> R{recurring rule matches merchant?}
     R -- "yes, <3 observations" --> NR2[needs_review\n'Looks like X, 2/3 observations']
-    R -- "yes, ≥3 + cadence + band OK" --> AF[auto · rule_note 'Matched rule: X'\nF6: last_matched must also advance on human confirm]
+    R -- "yes, ≥3 + cadence + band OK" --> AF[auto · rule_note 'Matched rule: X'\nlast_matched=txn date · advances on human confirm too · F6 fixed 2026-07-08]
     R -- "yes, out of band/cadence" --> NR3[needs_review, names rule + reason]
     R -- no --> MC{merchant→category rule?}
     MC -- yes --> AF2[auto · category assigned]
@@ -135,7 +139,7 @@ flowchart TD
     AI -- no --> NR4[needs_review]
 ```
 
-### Balance anchoring — the F1-correct semantics (target; current code wrongly sums all history)
+### Balance anchoring — the F1-correct semantics (as-built 2026-07-08; `derived_balance`/`reconciliation_delta`)
 
 ```mermaid
 flowchart LR
@@ -147,7 +151,7 @@ flowchart LR
     C1 -- "derived(C2) = C1.stated + Σ txns in (C1, C2]" --> DELTA{delta = derived − C2.stated\n0 ⇒ 'Reconciled'\nelse 'Off by $X'}
 ```
 
-### Data model — the ten tables (built, migrations 0001–0004)
+### Data model — the ten tables (built, migrations 0001–0004; migration 0005 seeds the shared category vocabulary — V1.md Tier 1 #8)
 
 ```mermaid
 erDiagram
@@ -187,11 +191,15 @@ Pulse composite build, suite signing/release/deploy conventions.
 
 - **`app/ledger/`** (built, Phase 2–3) — `classify.py` (sign-convention enforcement: spend < 0,
   income/refund > 0, transfer-pair zero-sum invariant) + `rollups.py` (monthly income/spend/net,
-  transfers excluded, refunds netted into spend not income) + `balances.py` (**Phase 3** — an
-  account's OWN balance, deliberately distinct from the household rollup: it sums every
-  transaction including transfer legs, since money genuinely moved through that specific
-  account; `balance_delta` is the ledger-vs-statement honesty meter). 34 table-driven tests
-  total. Per-category and vs-budget rollups are not built yet (Budgets CRUD is Phase 7 per
+  transfers excluded, refunds netted into spend not income) + `balances.py` (**Phase 3, F1
+  fix 2026-07-08** — an account's OWN balance, deliberately distinct from the household rollup:
+  it includes every transfer leg, since money genuinely moved through that specific account.
+  `derived_balance` anchors at the earliest `statement_checkpoint`'s stated balance and adds
+  only transactions dated after it — prior history the ledger never saw is already inside that
+  stated balance, so it can't be summed twice; `reconciliation_delta` is the ledger-vs-statement
+  honesty meter, checking whether the ledger accounts for all movement between the earliest and
+  latest checkpoints. Anchoring is what makes the statement-parity gate reachable after a
+  backfill). 34 table-driven tests total. Per-category and vs-budget rollups are not built yet (Budgets CRUD is Phase 7 per
   CLAUDE.md's own phase list). If a number on the phone is wrong, the bug is here or in what
   feeds it — the `nutrition/` / `lists/merge.py` precedent.
 - **`app/imports/csv_parser.py`** (built, Phase 3) — pure, no DB: auto-detects Date/
@@ -204,11 +212,18 @@ Pulse composite build, suite signing/release/deploy conventions.
   + `recurrence.py` (cadence windows — weekly/biweekly/monthly ± `slack_days`, monthly
   clamps to the last valid day so Jan 31 → Feb 28 doesn't crash) + `bands.py` (rolling
   median ± pct tolerance, compared on magnitude so a $45 bill and a refund-shaped -$45 read
-  the same) + `merchant_match.py` (normalization strips card-network noise like `SQ *` /
-  trailing transaction IDs, then substring match either direction) + `transfer_matching.py`
-  (pairs an outflow on one account with an exactly-cancelling inflow on a *different*
-  account within a day window — never same-account, never a partial match). All pure, 21
-  table-driven tests. Deviation detection (missing bill / out-of-band / short-paycheck) is
+  the same) + `merchant_match.py` (**F8 fixed 2026-07-08** — normalization strips card-network
+  noise like `SQ *` / trailing transaction IDs, but the prefix now requires a real separator so
+  it no longer chews mid-word — SPOTIFY/POSTAL/POSTMATES survive; and matching is now *one-way*
+  containment: the rule pattern must appear within the observed merchant, so a broad rule
+  ("AMAZON") matches a specific merchant ("AMAZON PRIME") but the specific "AMAZON PRIME" rule
+  no longer mis-fires on a plain "AMAZON" purchase) + `transfer_matching.py`
+  (**F3 fixed 2026-07-08** — pairs only a *payment-shaped* pair: the `card` leg is the
+  positive inflow, the `depository` leg the negative outflow, net zero, different account,
+  within a day window. Requiring the card-payment shape — not merely two ±equal amounts —
+  stops a card spend and a coincidental same-amount deposit from fusing into a bogus transfer;
+  non-card internal moves fall through to review. The confirmed-partner guard and the un-pair
+  path live in the transaction service). All pure, 23 table-driven tests. Deviation detection (missing bill / out-of-band / short-paycheck) is
   Phase 6, not built yet — the clock/band primitives exist, the alert sweeps that use them
   don't.
 
@@ -220,8 +235,8 @@ Gmail filters → label "magpie-ingest" → IMAP poll (lifespan task, every N mi
   → dedupe (message-id + payload hash → ingest_events)
   → account resolved by last4 hint → transaction row (status=pending, needs_review)
   → no matching account, or no recognized template → outcome="unparsed"
-CSV/OFX import (monthly) → institution mapping → creates its own rows independently
-  (pending↔posted matching against email-sourced rows is NOT built yet — see below)
+CSV/OFX import (monthly) → institution mapping → reconciles against email-sourced pending
+  rows first (F4: promote the pending swipe to posted in place), else creates a new posted row
 Manual entry (cash only) → same pipeline tail
 ```
 
@@ -245,11 +260,18 @@ files should request the fixture, not import the function.
 
 **Built (Phase 4):** `app/ingest/parsers.py` — pure, no I/O — recognizes exactly two real
 sender templates: Amex's "Large Purchase Approved" (spend) / "Merchant credit/refund was
-issued" (refund), and US Bank's "A new Zelle payment..." / "You received a Zelle payment"
-(income). Each extracts amount, merchant, date, and a last4 hint via regex against the real
-Phase −1 corpus's structure; anything else — an unrecognized subject, a recognized subject
-with no dollar figure, or a resolved parse with no matching account — raises `UnparsedEmail`
-and becomes an `outcome="unparsed"` `ingest_event`, never a crash and never silent data loss.
+issued" (refund), and US Bank's Zelle alert. **F7 (fixed 2026-07-08):** the US Bank parser now
+reads Zelle *direction* from the body — a received/deposited alert is income, a "you sent"
+alert is spend, and an alert whose direction can't be read unambiguously is `UnparsedEmail`
+rather than assumed income (the old parser booked any Zelle "payment" as positive income, so
+an outbound send would have recorded money leaving as money arriving). `parse_version` bumped
+to `2` so a replay can tell corrected rows from v1. Each extracts amount, merchant, date, and a
+last4 hint via regex against the real Phase −1 corpus's structure; anything else — an
+unrecognized subject, a recognized subject with no dollar figure, or a resolved parse with no
+matching account — raises `UnparsedEmail` and becomes an `outcome="unparsed"` `ingest_event`,
+never a crash and never silent data loss. **F16 (fixed 2026-07-08):** account resolution by
+last4 now degrades to unparsed when two accounts share a last4 (a card and a checking account,
+say) instead of raising `MultipleResultsFound` and aborting the whole poll batch.
 **Two real bugs the tests caught before deploy:** the amount regex originally matched the
 *first* dollar figure in an Amex body, which is the alert-threshold sentence ("...was more
 than $1.00"), not the real charge that appears later — fixed to anchor on the *last* match.
@@ -270,12 +292,13 @@ same "absence disables the feature" pattern as `suite_jwks_url`. `GET /ingest/ev
 unparsed-backlog operator view; `POST /ingest/poll` triggers an out-of-band poll for
 verification without waiting out the interval.
 
-**Not built yet, called out rather than silently skipped:** pending→posted matching against
-CSV truth (an email-sourced pending transaction and a later CSV-imported posted row for the
-same swipe currently become two separate rows, not one reconciled row — a real fast-follow,
-not folded into Phase 4 since it also touches Phase 3's `import_service.py` matching logic);
-the rules engine (Phase 5) that would auto-file recurring matches instead of leaving
-everything `needs_review`; the clock-driven sweeps (auth-hold expiry, freshness alerts); and
+**Pending→posted matching against CSV truth is built (F4, 2026-07-08):** on CSV import an
+email-sourced pending row and the CSV-imported posted row for the same swipe merge into one
+reconciled row (`app/imports/pending_match.py` is the pure matcher — same account, same
+direction, ±3 days, exact or tip-settled amount; `import_service.py` promotes the pending row
+in place, keeping its email provenance and any human/rule decision). This closes the F4
+double-count. **Not built yet, called out rather than silently skipped:**
+the clock-driven sweeps (auth-hold expiry, freshness alerts); and
 the ntfy unparsed-backlog alert. **The live proof of the whole pipeline — a real swipe
 appearing as a pending transaction within one poll interval — has not happened yet**: it
 needs IMAP credentials for the dedicated ingestion mailbox, which is blocked on finishing
@@ -295,11 +318,17 @@ goes stale); the ingest code never mutates the mailbox (read-only by behavior, e
 **Built (Phase 5), wired into both `import_service.py` and `ingest_service.py` so every
 CSV row and every ingested email goes through the same evaluator — `app/services
 /rule_service.py::evaluate_transaction`:** 1. dedupe (already done upstream by each caller
-before a row ever reaches the evaluator) → 2. transfer matching (an exact-cancelling pair on
-a different account ⇒ both legs `kind="transfer"`, `review_state="auto"`, no review) →
+before a row ever reaches the evaluator) → 2. transfer matching (a payment-shaped pair —
+card inflow + depository outflow netting to zero on different accounts, F3 — ⇒ both legs
+`kind="transfer"`, `review_state="auto"`, no review; a *confirmed* would-be partner is left
+untouched and the new row routes to review instead) →
 3. recurring income/bill rules (≥3 observations + within cadence window + within amount band
 ⇒ auto-filed with `rule_note` = `"Matched rule: X"`; below threshold or out of band ⇒
-`needs_review` with an explanation naming the rule and the reason) → 4. merchant→category
+`needs_review` with an explanation naming the rule and the reason). **F6 (fixed 2026-07-08):**
+the rule's `last_matched_at` is anchored to the matched transaction's *date* (not wall-clock
+`now`), and confirming a rule-flagged row in the review queue advances the rule's window too —
+so a single missed/out-of-band occurrence the human corrects no longer derails the rule
+forever. → 4. merchant→category
 rules (deterministic category assignment ⇒ auto) → 5. **(built, Phase 7)** if `llm_client`
 is supplied and nothing above matched, the LLM proposes a category —
 `app/services/ai/categorize.py::suggest_category` writes the result to
@@ -365,7 +394,14 @@ Phase 1 gap: refresh tokens were minted but nothing could redeem them until this
 transactions (`app/routers/{accounts,categories,transactions}.py` +
 `app/services/{account,category,transaction}_service.py`), all scoped to `CurrentUser` by
 filtering on `user_id` in the query itself (never a separate ownership check — a cross-user
-`test_*_not_visible_to_a_different_user` test pins this per domain). `GET /transactions/summary`
+`test_*_not_visible_to_a_different_user` test pins this per domain). The **shared category
+vocabulary** (Groceries/Dining/Transport/Utilities/Housing/Subscriptions/Entertainment/
+Health/Shopping/Travel/Cash/Income/Other) is seeded with `user_id NULL` by migration
+`c4e17a9b2d38` (V1.md Tier 1 #8) so a fresh user — and the AI stage — has a vocabulary from
+first boot; `list_categories` returns the shared set plus the user's own. Category CRUD is
+full — `POST` (create), `PATCH /categories/{id}` (rename, 2026-07-08), `DELETE` — with seeded
+rows read-only: both the rename and delete routes scope by `user_id`, so a shared category
+404s either way (the ownership filter is the read-only guard). `GET /transactions/summary`
 is the Home month-panel read, backed by `app/ledger/rollups.py`; `AccountOut` now carries
 computed `balance_cents`/`balance_delta_cents` (`app/ledger/balances.py`). `POST /imports/csv`
 (`app/routers/imports.py` + `app/services/import_service.py`) parses via `csv_parser.py`,
@@ -385,8 +421,11 @@ time rather than re-derived later from whatever the rule looks like now. `GET/PO
 `GET/PATCH/DELETE /rules/{id}` (`app/routers/rules.py` + `app/services/rule_service.py`) are
 plain CurrentUser-scoped CRUD; `PATCH /transactions/{id}` gained `review_state` and `kind`
 (the review queue's confirm/correct action — `kind` only re-validates the sign invariant
-when supplied, never blindly trusted); `GET /transactions?review_state=needs_review` is the
-review queue's read. `GET/POST /bills`, `POST /bills/{id}/rematch` (`app/routers/bills.py` +
+when supplied, never blindly trusted; and changing a transfer leg's kind away from
+`"transfer"` now dissolves the whole `transfer_group` so no dangling half-group is left, F12);
+`POST /transactions/{id}/unpair` dissolves a transfer pair explicitly (both legs revert to
+their sign-based kind and return to review, F12); `GET /transactions?review_state=needs_review`
+is the review queue's read. `GET/POST /bills`, `POST /bills/{id}/rematch` (`app/routers/bills.py` +
 `app/services/bill_service.py`) — no migration needed: `BillStatement.account_id` is
 required, so it scopes via the same join-to-`Account.user_id` pattern Phase 3's
 `StatementCheckpoint` already established, no nullable-join gap to close. `is_missing` is

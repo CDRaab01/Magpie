@@ -11,6 +11,7 @@ from app.ledger.rollups import MonthlyRollup, TransactionForRollup, rollup_month
 from app.models.account import Account
 from app.models.transaction import Transaction
 from app.schemas.transaction import TransactionCreate, TransactionUpdate
+from app.services.rule_service import advance_matched_rule_on_confirm
 
 
 async def _owned_account(db: AsyncSession, user_id: uuid.UUID, account_id: uuid.UUID) -> Account:
@@ -91,6 +92,32 @@ async def get_transaction(
     return txn
 
 
+def _sign_based_kind(amount: int) -> str:
+    """The neutral kind a former transfer leg reverts to when a pair is dissolved — sign is the
+    only signal left once "transfer" is taken away (income if it came in, spend if it went out).
+    The human re-categorizes it in the review queue."""
+    return "income" if amount > 0 else "spend"
+
+
+async def _dissolve_transfer_group(
+    db: AsyncSession, user_id: uuid.UUID, group: str
+) -> list[Transaction]:
+    """Break a transfer_group cleanly (F12): clear the group on every leg, revert each to its
+    sign-based kind, and route it back to review. Leaving one leg a "transfer" while its partner
+    is corrected is exactly the dangling half-group that violates the zero-sum invariant."""
+    result = await db.execute(
+        select(Transaction)
+        .join(Account, Transaction.account_id == Account.id)
+        .where(Account.user_id == user_id, Transaction.transfer_group == group)
+    )
+    legs = list(result.scalars().all())
+    for leg in legs:
+        leg.transfer_group = None
+        leg.kind = _sign_based_kind(leg.amount)
+        leg.review_state = "needs_review"
+    return legs
+
+
 async def update_transaction(
     db: AsyncSession, user_id: uuid.UUID, transaction_id: uuid.UUID, req: TransactionUpdate
 ) -> Transaction:
@@ -108,12 +135,37 @@ async def update_transaction(
             validate_kind_amount_sign(req.kind, txn.amount)
         except ValueError as e:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
+        # F12: changing a transfer leg's kind away from "transfer" must dissolve the whole
+        # group, not just this row — otherwise the partner is left a dangling half-group.
+        if txn.transfer_group is not None and req.kind != "transfer":
+            await _dissolve_transfer_group(db, user_id, txn.transfer_group)
         txn.kind = req.kind
     if req.review_state is not None:
         txn.review_state = req.review_state
+        # F6: confirming a rule-flagged row advances its recurring rule's window, so a single
+        # miss the human corrects doesn't derail the rule for good.
+        if req.review_state == "confirmed":
+            await advance_matched_rule_on_confirm(db, user_id, txn.matched_rule_id, txn.date)
     await db.commit()
     await db.refresh(txn)
     return txn
+
+
+async def unpair_transaction(
+    db: AsyncSession, user_id: uuid.UUID, transaction_id: uuid.UUID
+) -> list[Transaction]:
+    """The review-queue's un-pair affordance (F12): dissolve the transfer group this
+    transaction belongs to, returning every affected leg so the client can refresh them."""
+    txn = await get_transaction(db, user_id, transaction_id)
+    if txn.transfer_group is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Transaction is not part of a transfer pair"
+        )
+    legs = await _dissolve_transfer_group(db, user_id, txn.transfer_group)
+    await db.commit()
+    for leg in legs:
+        await db.refresh(leg)
+    return legs
 
 
 async def delete_transaction(

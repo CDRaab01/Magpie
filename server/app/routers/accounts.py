@@ -25,7 +25,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 async def _to_out(db: AsyncSession, account: Account) -> AccountOut:
     balance = await compute_account_balance(db, account.id)
-    delta = await compute_balance_delta(db, account.id, balance)
+    delta = await compute_balance_delta(db, account.id)
     return AccountOut(
         id=account.id,
         name=account.name,

@@ -1,10 +1,10 @@
 """Orchestrates one ingestion poll (CLAUDE.md Phase 4): fetch -> dedupe -> parse -> resolve
 account -> create a pending transaction, or fall back to an "unparsed" ingest_event.
 
-Deliberately does NOT yet implement pending->posted matching against CSV truth (the CSV
-importer, Phase 3, still creates its own rows independent of what email ingestion filed) —
-that's a distinct, separately-scoped increment touching `import_service.py`'s matching logic,
-not something to fold in silently here. Documented as a fast-follow in ARCHITECTURE.md.
+Pending->posted reconciliation (F4) lives on the *import* side, not here: when the monthly CSV
+imports a swipe that this poll already captured as pending, `import_service.py` promotes the
+pending row to posted rather than creating a second row (see `app/imports/pending_match.py`).
+This module's only job is to file the fresh pending swipe.
 """
 
 import datetime
@@ -42,7 +42,12 @@ async def _match_account(
     result = await db.execute(
         select(Account).where(Account.user_id == user_id, Account.last4 == last4_hint)
     )
-    return result.scalar_one_or_none()
+    accounts = result.scalars().all()
+    # F16: two accounts can legitimately share a last4 (a card and a checking account, or two
+    # cards). An ambiguous match is not a crash — `scalar_one_or_none()` would raise and abort
+    # the whole poll batch. Degrade to "no match" so the event lands in the unparsed operator
+    # view instead, and the rest of the batch still processes.
+    return accounts[0] if len(accounts) == 1 else None
 
 
 async def run_ingest_poll(

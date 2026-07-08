@@ -28,6 +28,34 @@ from app.services.ai.llm_client import LlmClient
 
 MIN_OBSERVATIONS_TO_AUTOFILE = 3
 
+# Rule types whose cadence window is driven by `last_matched_at` (F6).
+_RECURRING_RULE_TYPES = ("recurring_income", "recurring_bill")
+
+
+def rule_matched_datetime(txn_date: datetime.date) -> datetime.datetime:
+    """A transaction date as the UTC datetime stored in `rule.last_matched_at` (F6). The rule's
+    cadence math only ever reads `.date()` back off it, so midnight UTC is the natural anchor —
+    what matters is that the stored instant reflects the transaction's date, not a wall clock."""
+    return datetime.datetime.combine(txn_date, datetime.time.min, tzinfo=datetime.timezone.utc)
+
+
+async def advance_matched_rule_on_confirm(
+    db: AsyncSession, user_id: uuid.UUID, matched_rule_id: uuid.UUID | None, txn_date: datetime.date
+) -> None:
+    """F6: confirming a rule-flagged transaction advances its recurring rule's window to that
+    transaction's date. Without this, a single out-of-band/missed occurrence routes to review,
+    the human confirms it, but the rule's `last_matched_at` never moves — so every subsequent
+    occurrence reads "outside expected cadence window" forever. Advances only forward (a
+    later-confirmed older row must not drag the window backward)."""
+    if matched_rule_id is None:
+        return
+    rule = await db.get(Rule, matched_rule_id)
+    if rule is None or rule.user_id != user_id or rule.type not in _RECURRING_RULE_TYPES:
+        return
+    matched_at = rule_matched_datetime(txn_date)
+    if rule.last_matched_at is None or matched_at > rule.last_matched_at:
+        rule.last_matched_at = matched_at
+
 
 # --- CRUD -------------------------------------------------------------------------------
 
@@ -112,11 +140,14 @@ async def _find_transfer_partner(
     db: AsyncSession,
     user_id: uuid.UUID,
     account_id: uuid.UUID,
+    account_type: str,
     amount_cents: int,
     txn_date: datetime.date,
 ) -> Transaction | None:
+    """The best card-payment partner for a new leg, or None. Payment-shape (F3) needs each
+    leg's account *type*, so the pool is fetched joined to Account and typed accordingly."""
     result = await db.execute(
-        select(Transaction)
+        select(Transaction, Account.type)
         .join(Account, Transaction.account_id == Account.id)
         .where(
             Account.user_id == user_id,
@@ -125,11 +156,14 @@ async def _find_transfer_partner(
             Transaction.amount == -amount_cents,
         )
     )
+    rows = result.all()
     pool = [
-        TransferCandidate(str(t.id), str(t.account_id), t.amount, t.date)
-        for t in result.scalars().all()
+        TransferCandidate(str(t.id), str(t.account_id), acct_type, t.amount, t.date, t.review_state)
+        for t, acct_type in rows
     ]
-    candidate = TransferCandidate("candidate", str(account_id), amount_cents, txn_date)
+    candidate = TransferCandidate(
+        "candidate", str(account_id), account_type, amount_cents, txn_date
+    )
     match = find_transfer_match(candidate, pool)
     if match is None:
         return None
@@ -208,9 +242,26 @@ async def evaluate_transaction(
 ) -> EvaluationResult:
     merchant_norm = normalize_merchant(merchant_raw) if merchant_raw else None
 
-    # 1. Transfer matching — deterministic, no review needed, wins outright.
-    partner = await _find_transfer_partner(db, user_id, account_id, amount_cents, txn_date)
+    # 1. Transfer matching — deterministic, no review needed, wins outright. Payment-shape (F3)
+    #    depends on the account's type, so fetch it before searching for a partner.
+    account_type = await db.scalar(
+        select(Account.type).where(Account.id == account_id, Account.user_id == user_id)
+    )
+    partner = await _find_transfer_partner(
+        db, user_id, account_id, account_type, amount_cents, txn_date
+    )
     if partner is not None:
+        # F3: never silently rewrite a human-confirmed row into a transfer leg. A confirmed
+        # partner routes the NEW row to review (with the pairing named) and is left untouched;
+        # the human can un-pair/repair deliberately. Only unconfirmed partners auto-pair.
+        if partner.review_state == "confirmed":
+            return EvaluationResult(
+                kind=default_kind,
+                review_state="needs_review",
+                category_id=None,
+                matched_rule_id=None,
+                rule_note="Looks like a transfer to a confirmed transaction — pair manually",
+            )
         group = str(uuid.uuid4())
         partner.kind = "transfer"
         partner.transfer_group = group
@@ -266,7 +317,10 @@ async def evaluate_transaction(
             )
 
         if cadence_ok and band_ok:
-            recurring.last_matched_at = now
+            # F6: anchor the rule's window to the matched transaction's DATE, not wall-clock
+            # `now` — a delayed import (a backfill row dated weeks ago) must not push the
+            # cadence window to today and desync every future occurrence.
+            recurring.last_matched_at = rule_matched_datetime(txn_date)
             return EvaluationResult(
                 kind=kind,
                 review_state="auto",

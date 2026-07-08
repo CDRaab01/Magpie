@@ -35,6 +35,15 @@ interface ApiService {
     @POST("categories")
     suspend fun createCategory(@Body req: CategoryCreate): CategoryOut
 
+    @PATCH("categories/{id}")
+    suspend fun updateCategory(
+        @Path("id") id: String,
+        @Body req: CategoryUpdate,
+    ): CategoryOut
+
+    @DELETE("categories/{id}")
+    suspend fun deleteCategory(@Path("id") id: String)
+
     // --- Transactions ---
     @GET("transactions")
     suspend fun listTransactions(

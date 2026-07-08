@@ -51,6 +51,11 @@ data class CategoryCreate(
 )
 
 @Serializable
+data class CategoryUpdate(
+    val name: String,
+)
+
+@Serializable
 data class CategoryOut(
     val id: String,
     val name: String,

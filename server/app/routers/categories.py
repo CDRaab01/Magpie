@@ -5,9 +5,14 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.schemas.category import CategoryCreate, CategoryOut
+from app.schemas.category import CategoryCreate, CategoryOut, CategoryUpdate
 from app.security import CurrentUser
-from app.services.category_service import create_category, delete_category, list_categories
+from app.services.category_service import (
+    create_category,
+    delete_category,
+    list_categories,
+    update_category,
+)
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -23,6 +28,15 @@ async def all_categories(current_user: CurrentUser, db: DbSession):
 @router.post("", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
 async def create_new_category(req: CategoryCreate, current_user: CurrentUser, db: DbSession):
     c = await create_category(db, current_user.id, req)
+    return CategoryOut(id=c.id, name=c.name, shared=False)
+
+
+@router.patch("/{category_id}", response_model=CategoryOut)
+async def rename_category(
+    category_id: uuid.UUID, req: CategoryUpdate, current_user: CurrentUser, db: DbSession
+):
+    """Rename one of the user's own categories (shared/seeded ones are read-only → 404)."""
+    c = await update_category(db, current_user.id, category_id, req)
     return CategoryOut(id=c.id, name=c.name, shared=False)
 
 

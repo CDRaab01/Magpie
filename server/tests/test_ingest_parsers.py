@@ -30,6 +30,15 @@ Credited to account ending in: 0000
 Received date: 07/02/2026
 """
 
+# Constructed for the F7 direction test (no real "sent" sample exists in the Phase -1 corpus;
+# sentinel values only, per the public-repo fixture rule).
+USBANK_ZELLE_SENT_BODY = """
+Log in
+
+You sent a payment of $30.00 to Alex Sample.
+Debited from account ending in: 0000
+"""
+
 
 def test_amex_large_purchase_is_negative_spend():
     event = parse_amex("Large Purchase Approved", AMEX_PURCHASE_BODY)
@@ -58,13 +67,28 @@ def test_amex_recognized_subject_without_amount_is_unparsed():
         parse_amex("Large Purchase Approved", "no dollar figure in this body at all")
 
 
-def test_usbank_zelle_payment_is_positive_income():
+def test_usbank_zelle_received_is_positive_income():
     event = parse_usbank("A new Zelle payment is in your account.", USBANK_ZELLE_BODY)
     assert event.kind == "income"
     assert event.amount_cents == 7500
     assert event.merchant == "Jordan Q Sample"
     assert event.event_date == date(2026, 7, 2)
     assert event.last4_hint == "0000"
+
+
+def test_f7_usbank_zelle_sent_is_negative_spend_not_income():
+    # The F7 bug: an outbound "You sent a Zelle payment" alert used to book as positive income.
+    event = parse_usbank("You sent a Zelle payment", USBANK_ZELLE_SENT_BODY)
+    assert event.kind == "spend"
+    assert event.amount_cents == -3000
+    assert event.merchant == "Alex Sample"
+
+
+def test_f7_usbank_zelle_ambiguous_direction_is_unparsed():
+    # Subject matches "zelle payment" but the body reveals neither direction — never assume
+    # income; surface it for the operator instead.
+    with pytest.raises(UnparsedEmail):
+        parse_usbank("A Zelle payment notification", "A payment of $10.00 was processed.")
 
 
 def test_usbank_non_zelle_subject_is_unparsed():
