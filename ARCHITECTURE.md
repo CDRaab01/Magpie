@@ -135,7 +135,7 @@ flowchart TD
     AI -- no --> NR4[needs_review]
 ```
 
-### Balance anchoring — the F1-correct semantics (target; current code wrongly sums all history)
+### Balance anchoring — the F1-correct semantics (as-built 2026-07-08; `derived_balance`/`reconciliation_delta`)
 
 ```mermaid
 flowchart LR
@@ -187,11 +187,15 @@ Pulse composite build, suite signing/release/deploy conventions.
 
 - **`app/ledger/`** (built, Phase 2–3) — `classify.py` (sign-convention enforcement: spend < 0,
   income/refund > 0, transfer-pair zero-sum invariant) + `rollups.py` (monthly income/spend/net,
-  transfers excluded, refunds netted into spend not income) + `balances.py` (**Phase 3** — an
-  account's OWN balance, deliberately distinct from the household rollup: it sums every
-  transaction including transfer legs, since money genuinely moved through that specific
-  account; `balance_delta` is the ledger-vs-statement honesty meter). 34 table-driven tests
-  total. Per-category and vs-budget rollups are not built yet (Budgets CRUD is Phase 7 per
+  transfers excluded, refunds netted into spend not income) + `balances.py` (**Phase 3, F1
+  fix 2026-07-08** — an account's OWN balance, deliberately distinct from the household rollup:
+  it includes every transfer leg, since money genuinely moved through that specific account.
+  `derived_balance` anchors at the earliest `statement_checkpoint`'s stated balance and adds
+  only transactions dated after it — prior history the ledger never saw is already inside that
+  stated balance, so it can't be summed twice; `reconciliation_delta` is the ledger-vs-statement
+  honesty meter, checking whether the ledger accounts for all movement between the earliest and
+  latest checkpoints. Anchoring is what makes the statement-parity gate reachable after a
+  backfill). 34 table-driven tests total. Per-category and vs-budget rollups are not built yet (Budgets CRUD is Phase 7 per
   CLAUDE.md's own phase list). If a number on the phone is wrong, the bug is here or in what
   feeds it — the `nutrition/` / `lists/merge.py` precedent.
 - **`app/imports/csv_parser.py`** (built, Phase 3) — pure, no DB: auto-detects Date/

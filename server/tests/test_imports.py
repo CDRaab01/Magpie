@@ -103,10 +103,50 @@ async def test_balance_column_creates_a_statement_checkpoint(auth_client):
 
     accounts = await auth_client.get("/accounts")
     account = next(a for a in accounts.json() if a["id"] == account_id)
-    # Balance from transactions: -4.50 - 12.00 = -16.50 = -1650 cents.
-    assert account["balance_cents"] == -1650
-    # Statement said 983.50 (98350) after both rows — delta = computed - stated.
-    assert account["balance_delta_cents"] == -1650 - 98350
+    # F1: the import's checkpoint (983.50 as of 2026-07-02) anchors the account. Both rows are
+    # dated on/before the checkpoint, so they're already inside the stated balance — the derived
+    # balance IS the stated balance, and a single checkpoint reconciles to zero.
+    assert account["balance_cents"] == 98350
+    assert account["balance_delta_cents"] == 0
+
+
+async def test_two_month_backfill_reconciles_to_zero_despite_unknown_prior_history(auth_client):
+    # The F1 acceptance case through the real import path: import two consecutive months of an
+    # account whose balance before month one is unknown to the ledger. The first checkpoint is
+    # the only truth about the starting balance; the second must still reconcile to zero, and
+    # the derived balance must equal the latest stated balance — not the net of the rows.
+    account_id = await _make_account(auth_client)
+
+    may = (
+        "Date,Description,Amount,Balance\n"
+        "2026-05-15,Groceries,-50.00,950.00\n"
+        "2026-05-31,Paycheck,50.00,1000.00\n"  # checkpoint: 1000.00 as of 2026-05-31
+    )
+    r1 = await auth_client.post(
+        "/imports/csv",
+        data={"account_id": account_id, "institution": "US Bank"},
+        files=_csv_file(may, name="may.csv"),
+    )
+    assert r1.json()["checkpoint_created"] is True
+
+    june = (
+        "Date,Description,Amount,Balance\n"
+        "2026-06-05,Rent,-300.00,700.00\n"
+        "2026-06-20,Paycheck,500.00,1200.00\n"  # checkpoint: 1200.00 as of 2026-06-20
+    )
+    r2 = await auth_client.post(
+        "/imports/csv",
+        data={"account_id": account_id, "institution": "US Bank"},
+        files=_csv_file(june, name="june.csv"),
+    )
+    assert r2.json()["checkpoint_created"] is True
+
+    accounts = await auth_client.get("/accounts")
+    account = next(a for a in accounts.json() if a["id"] == account_id)
+    # Anchored at May's 1000.00, plus June's net (+200.00) ⇒ 1200.00, matching June's statement.
+    assert account["balance_cents"] == 120000
+    # Ledger fully accounts for the movement between the two checkpoints ⇒ the honesty meter is 0.
+    assert account["balance_delta_cents"] == 0
 
 
 async def test_no_balance_column_leaves_delta_none(auth_client):

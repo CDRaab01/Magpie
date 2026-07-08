@@ -5,10 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ledger.balances import (
-    BalanceCheckpoint,
-    TransactionForBalance,
-    account_balance,
-    balance_delta,
+    CheckpointAnchor,
+    DatedAmount,
+    derived_balance,
+    reconciliation_delta,
 )
 from app.models.account import Account
 from app.models.statement_checkpoint import StatementCheckpoint
@@ -66,28 +66,44 @@ async def delete_account(db: AsyncSession, user_id: uuid.UUID, account_id: uuid.
     await db.commit()
 
 
-async def compute_account_balance(db: AsyncSession, account_id: uuid.UUID) -> int:
-    """The account's derived balance (CLAUDE.md §9) — sums every transaction, transfers
-    included (unlike the household rollup; see app/ledger/balances.py)."""
-    result = await db.execute(
-        select(Transaction.amount).where(Transaction.account_id == account_id)
-    )
-    return account_balance(TransactionForBalance(a) for a in result.scalars().all())
-
-
-async def compute_balance_delta(
-    db: AsyncSession, account_id: uuid.UUID, computed_cents: int
-) -> int | None:
-    """Ledger-vs-statement delta against the most recent import checkpoint, or None if this
-    account has never been reconciled against a statement."""
+async def _checkpoint_anchors(
+    db: AsyncSession, account_id: uuid.UUID
+) -> tuple[CheckpointAnchor | None, CheckpointAnchor | None]:
+    """The account's earliest and latest statement checkpoints as balance anchors, or
+    (None, None) if it has never been reconciled. F1: the earliest is what the derived balance
+    is anchored to; the pair bounds the reconciliation window (app/ledger/balances.py)."""
     result = await db.execute(
         select(StatementCheckpoint)
         .where(StatementCheckpoint.account_id == account_id)
-        .order_by(StatementCheckpoint.statement_date.desc())
-        .limit(1)
+        .order_by(StatementCheckpoint.statement_date, StatementCheckpoint.id)
     )
-    checkpoint = result.scalar_one_or_none()
-    stated_cents = checkpoint.stated_balance if checkpoint else None
-    return balance_delta(
-        BalanceCheckpoint(computed_cents=computed_cents, stated_cents=stated_cents)
+    checkpoints = list(result.scalars().all())
+    if not checkpoints:
+        return None, None
+    to_anchor = lambda cp: CheckpointAnchor(cp.statement_date, cp.stated_balance)  # noqa: E731
+    return to_anchor(checkpoints[0]), to_anchor(checkpoints[-1])
+
+
+async def _dated_amounts(db: AsyncSession, account_id: uuid.UUID) -> list[DatedAmount]:
+    result = await db.execute(
+        select(Transaction.date, Transaction.amount).where(Transaction.account_id == account_id)
     )
+    return [DatedAmount(date=d, amount=a) for d, a in result.all()]
+
+
+async def compute_account_balance(db: AsyncSession, account_id: uuid.UUID) -> int:
+    """The account's derived balance (CLAUDE.md §9), anchored at the earliest checkpoint (F1)
+    — sums every transaction after the anchor, transfers included (unlike the household rollup;
+    see app/ledger/balances.py)."""
+    earliest, _ = await _checkpoint_anchors(db, account_id)
+    return derived_balance(await _dated_amounts(db, account_id), anchor=earliest)
+
+
+async def compute_balance_delta(db: AsyncSession, account_id: uuid.UUID) -> int | None:
+    """Ledger-vs-statement delta (the honesty meter, F1): does the ledger fully account for the
+    money that moved between the earliest and latest checkpoints? None if this account has never
+    been reconciled against a statement; zero when a single checkpoint anchors it."""
+    earliest, latest = await _checkpoint_anchors(db, account_id)
+    if earliest is None:
+        return None
+    return reconciliation_delta(await _dated_amounts(db, account_id), earliest, latest)
