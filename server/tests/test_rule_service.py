@@ -7,8 +7,10 @@ from app.models.category import Category
 from app.models.rule import Rule
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.schemas.transaction import TransactionUpdate
 from app.services.ai.llm_client import FakeLlmClient
 from app.services.rule_service import MIN_OBSERVATIONS_TO_AUTOFILE, evaluate_transaction
+from app.services.transaction_service import update_transaction
 
 NOW = datetime.datetime(2026, 7, 5, tzinfo=datetime.timezone.utc)
 
@@ -400,3 +402,152 @@ async def test_no_llm_client_configured_never_calls_the_model():
 
     assert result.ai_suggested_category_id is None
     assert result.review_state == "needs_review"
+
+
+# --- F6: rules survive a miss --------------------------------------------------------------
+
+
+async def _seed_observations(account_id: uuid.UUID, merchant_norm: str, dates):
+    async with AsyncSessionLocal() as db:
+        for d in dates:
+            db.add(
+                Transaction(
+                    account_id=account_id,
+                    amount=-8000,
+                    date=d,
+                    status="posted",
+                    kind="spend",
+                    review_state="confirmed",
+                    source="csv",
+                    merchant_raw=merchant_norm,
+                    merchant_norm=merchant_norm,
+                )
+            )
+        await db.commit()
+
+
+async def test_f6_autofile_anchors_rule_window_to_transaction_date_not_now():
+    # A delayed/backfill row (dated in May) auto-files in July's run — the rule's window must
+    # anchor to the transaction's date, not wall-clock `now`, or every future occurrence desyncs.
+    user_id = await _make_user()
+    account_id = await _make_account(user_id, "Checking", "depository")
+    await _seed_observations(
+        account_id,
+        "XCEL",
+        [datetime.date(2026, 2, 15), datetime.date(2026, 3, 15), datetime.date(2026, 4, 15)],
+    )
+    async with AsyncSessionLocal() as db:
+        rule = Rule(
+            user_id=user_id,
+            type="recurring_bill",
+            account_id=account_id,
+            matcher="XCEL",
+            cadence={"kind": "monthly", "slack_days": 5},
+        )
+        db.add(rule)
+        await db.commit()
+        await db.refresh(rule)
+        rule_id = rule.id
+
+    async with AsyncSessionLocal() as db:
+        result = await evaluate_transaction(
+            db,
+            user_id,
+            account_id=account_id,
+            amount_cents=-8000,
+            txn_date=datetime.date(2026, 5, 15),
+            merchant_raw="XCEL ENERGY",
+            default_kind="spend",
+            now=NOW,  # 2026-07-05 — deliberately far from the transaction date
+        )
+        await db.commit()
+
+    assert result.review_state == "auto"
+    async with AsyncSessionLocal() as db:
+        refreshed = await db.get(Rule, rule_id)
+        assert refreshed.last_matched_at.date() == datetime.date(2026, 5, 15)
+
+
+async def test_f6_confirming_a_flagged_transaction_advances_its_rule():
+    # The core F6 bug: a miss routes to review, the human confirms, but the rule never advances
+    # so it reads "outside cadence window" forever. Confirming must move the window forward.
+    user_id = await _make_user()
+    account_id = await _make_account(user_id, "Checking", "depository")
+    async with AsyncSessionLocal() as db:
+        rule = Rule(
+            user_id=user_id,
+            type="recurring_bill",
+            account_id=account_id,
+            matcher="XCEL",
+            cadence={"kind": "monthly", "slack_days": 5},
+            last_matched_at=datetime.datetime(2026, 5, 15, tzinfo=datetime.timezone.utc),
+        )
+        db.add(rule)
+        await db.commit()
+        await db.refresh(rule)
+        rule_id = rule.id
+        txn = Transaction(
+            account_id=account_id,
+            amount=-8000,
+            date=datetime.date(2026, 7, 25),  # out of the monthly window ⇒ was flagged for review
+            status="posted",
+            kind="spend",
+            review_state="needs_review",
+            source="csv",
+            merchant_raw="XCEL ENERGY",
+            merchant_norm="XCEL",
+            matched_rule_id=rule_id,
+        )
+        db.add(txn)
+        await db.commit()
+        await db.refresh(txn)
+        txn_id = txn.id
+
+    async with AsyncSessionLocal() as db:
+        await update_transaction(db, user_id, txn_id, TransactionUpdate(review_state="confirmed"))
+
+    async with AsyncSessionLocal() as db:
+        refreshed = await db.get(Rule, rule_id)
+        assert refreshed.last_matched_at.date() == datetime.date(2026, 7, 25)
+
+
+async def test_f6_confirm_never_moves_the_rule_window_backward():
+    # A late-confirmed OLDER row must not drag the window back and re-open the desync.
+    user_id = await _make_user()
+    account_id = await _make_account(user_id, "Checking", "depository")
+    async with AsyncSessionLocal() as db:
+        rule = Rule(
+            user_id=user_id,
+            type="recurring_bill",
+            account_id=account_id,
+            matcher="XCEL",
+            cadence={"kind": "monthly", "slack_days": 5},
+            last_matched_at=datetime.datetime(2026, 7, 25, tzinfo=datetime.timezone.utc),
+        )
+        db.add(rule)
+        await db.commit()
+        await db.refresh(rule)
+        rule_id = rule.id
+        txn = Transaction(
+            account_id=account_id,
+            amount=-8000,
+            date=datetime.date(2026, 6, 1),  # older than the current window anchor
+            status="posted",
+            kind="spend",
+            review_state="needs_review",
+            source="csv",
+            merchant_raw="XCEL ENERGY",
+            merchant_norm="XCEL",
+            matched_rule_id=rule_id,
+        )
+        db.add(txn)
+        await db.commit()
+        await db.refresh(txn)
+        txn_id = txn.id
+
+    async with AsyncSessionLocal() as db:
+        await update_transaction(db, user_id, txn_id, TransactionUpdate(review_state="confirmed"))
+
+    async with AsyncSessionLocal() as db:
+        refreshed = await db.get(Rule, rule_id)
+        assert refreshed.last_matched_at.date() == datetime.date(2026, 7, 25)

@@ -127,7 +127,7 @@ flowchart TD
     D -- no --> NR1[needs_review, no note]
     D -- yes --> R{recurring rule matches merchant?}
     R -- "yes, <3 observations" --> NR2[needs_review\n'Looks like X, 2/3 observations']
-    R -- "yes, ≥3 + cadence + band OK" --> AF[auto · rule_note 'Matched rule: X'\nF6: last_matched must also advance on human confirm]
+    R -- "yes, ≥3 + cadence + band OK" --> AF[auto · rule_note 'Matched rule: X'\nlast_matched=txn date · advances on human confirm too · F6 fixed 2026-07-08]
     R -- "yes, out of band/cadence" --> NR3[needs_review, names rule + reason]
     R -- no --> MC{merchant→category rule?}
     MC -- yes --> AF2[auto · category assigned]
@@ -309,7 +309,11 @@ card inflow + depository outflow netting to zero on different accounts, F3 — �
 untouched and the new row routes to review instead) →
 3. recurring income/bill rules (≥3 observations + within cadence window + within amount band
 ⇒ auto-filed with `rule_note` = `"Matched rule: X"`; below threshold or out of band ⇒
-`needs_review` with an explanation naming the rule and the reason) → 4. merchant→category
+`needs_review` with an explanation naming the rule and the reason). **F6 (fixed 2026-07-08):**
+the rule's `last_matched_at` is anchored to the matched transaction's *date* (not wall-clock
+`now`), and confirming a rule-flagged row in the review queue advances the rule's window too —
+so a single missed/out-of-band occurrence the human corrects no longer derails the rule
+forever. → 4. merchant→category
 rules (deterministic category assignment ⇒ auto) → 5. **(built, Phase 7)** if `llm_client`
 is supplied and nothing above matched, the LLM proposes a category —
 `app/services/ai/categorize.py::suggest_category` writes the result to

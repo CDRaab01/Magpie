@@ -11,6 +11,7 @@ from app.ledger.rollups import MonthlyRollup, TransactionForRollup, rollup_month
 from app.models.account import Account
 from app.models.transaction import Transaction
 from app.schemas.transaction import TransactionCreate, TransactionUpdate
+from app.services.rule_service import advance_matched_rule_on_confirm
 
 
 async def _owned_account(db: AsyncSession, user_id: uuid.UUID, account_id: uuid.UUID) -> Account:
@@ -141,6 +142,10 @@ async def update_transaction(
         txn.kind = req.kind
     if req.review_state is not None:
         txn.review_state = req.review_state
+        # F6: confirming a rule-flagged row advances its recurring rule's window, so a single
+        # miss the human corrects doesn't derail the rule for good.
+        if req.review_state == "confirmed":
+            await advance_matched_rule_on_confirm(db, user_id, txn.matched_rule_id, txn.date)
     await db.commit()
     await db.refresh(txn)
     return txn
