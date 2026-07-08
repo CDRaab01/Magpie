@@ -33,9 +33,9 @@
 >    mock-the-seam test — only the final "does a live
 >    swipe really show up" proof is outstanding.
 > 5. **Phase 5's rules engine auto-files transfers, recurring income/bills, and
->    merchant→category matches — but pending→posted matching (item 4's fast-follow) still
->    isn't built**, so a CSV-truth reconciliation pass won't yet merge with an email-sourced
->    pending row for the same swipe; they land as two rows until that lands.
+>    merchant→category matches. Pending→posted matching is now built too (F4, 2026-07-08):** a
+>    CSV-truth reconciliation pass merges an email-sourced pending row into the posted row for
+>    the same swipe rather than creating a second — closing the rollup double-count.
 > 6. **Phase 6's bill matching and "missing bill" detection are fully built and tested, but
 >    there is still no `bill_issued` *email* parser for any issuer.** Real "statement ready"
 >    emails with genuine structured data (statement date, balance) were confirmed for
@@ -106,13 +106,16 @@ stateDiagram-v2
     C --> AUTO : same evaluator
     M --> CONF : trusted immediately
     NR --> CONF : review queue PATCH (confirm / accept AI draft)
+    E --> C : CSV import reconciles the same swipe (F4)
     note right of E
-        PLANNED, not built (V1 Tier 1 #12):
-        email 'pending' MERGES into the CSV 'posted'
-        row for the same swipe. Until then the two
-        rows coexist and rollups double-count (F4).
-        Auth-hold expiry (pending >7d unmatched
-        drops with audit note) is also unbuilt.
+        F4 FIXED 2026-07-08 (V1 Tier 1 #12): on CSV import an
+        email 'pending' row is promoted in place to the CSV
+        'posted' row for the same swipe (same account, same
+        direction, ±3 days, exact or tip-settled amount) — one
+        row, counted once. app/imports/pending_match.py is the
+        pure matcher; import_service does the promotion.
+        Still unbuilt: auth-hold expiry (pending >7d unmatched
+        drops with an audit note).
     end note
 ```
 
@@ -232,8 +235,8 @@ Gmail filters → label "magpie-ingest" → IMAP poll (lifespan task, every N mi
   → dedupe (message-id + payload hash → ingest_events)
   → account resolved by last4 hint → transaction row (status=pending, needs_review)
   → no matching account, or no recognized template → outcome="unparsed"
-CSV/OFX import (monthly) → institution mapping → creates its own rows independently
-  (pending↔posted matching against email-sourced rows is NOT built yet — see below)
+CSV/OFX import (monthly) → institution mapping → reconciles against email-sourced pending
+  rows first (F4: promote the pending swipe to posted in place), else creates a new posted row
 Manual entry (cash only) → same pipeline tail
 ```
 
@@ -289,12 +292,13 @@ same "absence disables the feature" pattern as `suite_jwks_url`. `GET /ingest/ev
 unparsed-backlog operator view; `POST /ingest/poll` triggers an out-of-band poll for
 verification without waiting out the interval.
 
-**Not built yet, called out rather than silently skipped:** pending→posted matching against
-CSV truth (an email-sourced pending transaction and a later CSV-imported posted row for the
-same swipe currently become two separate rows, not one reconciled row — a real fast-follow,
-not folded into Phase 4 since it also touches Phase 3's `import_service.py` matching logic);
-the rules engine (Phase 5) that would auto-file recurring matches instead of leaving
-everything `needs_review`; the clock-driven sweeps (auth-hold expiry, freshness alerts); and
+**Pending→posted matching against CSV truth is built (F4, 2026-07-08):** on CSV import an
+email-sourced pending row and the CSV-imported posted row for the same swipe merge into one
+reconciled row (`app/imports/pending_match.py` is the pure matcher — same account, same
+direction, ±3 days, exact or tip-settled amount; `import_service.py` promotes the pending row
+in place, keeping its email provenance and any human/rule decision). This closes the F4
+double-count. **Not built yet, called out rather than silently skipped:**
+the clock-driven sweeps (auth-hold expiry, freshness alerts); and
 the ntfy unparsed-backlog alert. **The live proof of the whole pipeline — a real swipe
 appearing as a pending transaction within one poll interval — has not happened yet**: it
 needs IMAP credentials for the dedicated ingestion mailbox, which is blocked on finishing

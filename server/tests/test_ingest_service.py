@@ -185,3 +185,74 @@ async def test_f16_last4_collision_degrades_to_unparsed_not_a_crash():
         rows = result.mappings().all()
     assert len(rows) == 1
     assert rows[0]["outcome"] == "unparsed"
+
+
+async def test_f4_csv_reconciles_an_email_pending_swipe_into_one_row():
+    # The F4 double-count scenario: an email alert files a pending swipe; the monthly CSV then
+    # imports the same swipe as posted. They must merge into ONE row (promoted to posted with the
+    # CSV's tip-settled amount), never two that both count in the Home rollup.
+    from app.services.import_service import import_csv
+
+    user_id, account_id = await _make_user_with_account("0000")
+
+    async with AsyncSessionLocal() as db:
+        summary = await run_ingest_poll(
+            db, user_id, FakeImapFetcher([_load_eml("amex_large_purchase.eml")])
+        )
+    assert summary.created == 1  # one pending email swipe, amount -4200 on 2026-07-05
+
+    # The reconciliation CSV: same swipe, settled $3.00 higher (a tip) — still the same swipe.
+    csv_text = "Date,Description,Amount\n2026-07-05,TST* TEST MERCHANT,-45.00\n"
+    async with AsyncSessionLocal() as db:
+        result = await import_csv(db, user_id, account_id, "Amex", csv_text.encode())
+    assert result.matched_count == 1
+    assert result.created_count == 0
+
+    async with AsyncSessionLocal() as db:
+        rows = (
+            (
+                await db.execute(
+                    Transaction.__table__.select().where(Transaction.account_id == account_id)
+                )
+            )
+            .mappings()
+            .all()
+        )
+    assert len(rows) == 1  # merged, not doubled
+    row = rows[0]
+    assert row["status"] == "posted"
+    assert row["amount"] == -4500  # CSV's tip-settled amount is authoritative
+    assert row["source"] == "email"  # email provenance preserved
+    assert row["import_batch_id"] is not None  # and the CSV batch is now recorded on it
+
+
+async def test_f4_reimporting_the_reconciled_csv_creates_no_duplicate():
+    from app.services.import_service import import_csv
+
+    user_id, account_id = await _make_user_with_account("0000")
+    async with AsyncSessionLocal() as db:
+        await run_ingest_poll(db, user_id, FakeImapFetcher([_load_eml("amex_large_purchase.eml")]))
+
+    csv_text = "Date,Description,Amount\n2026-07-05,TST* TEST MERCHANT,-45.00\n"
+    async with AsyncSessionLocal() as db:
+        first = await import_csv(db, user_id, account_id, "Amex", csv_text.encode())
+    assert first.matched_count == 1
+
+    async with AsyncSessionLocal() as db:
+        second = await import_csv(db, user_id, account_id, "Amex", csv_text.encode())
+    # The swipe is now posted, so nothing matches; the row's fingerprint dedups it instead.
+    assert second.matched_count == 0
+    assert second.created_count == 0
+    assert second.skipped_count == 1
+
+    async with AsyncSessionLocal() as db:
+        rows = (
+            (
+                await db.execute(
+                    Transaction.__table__.select().where(Transaction.account_id == account_id)
+                )
+            )
+            .mappings()
+            .all()
+        )
+    assert len(rows) == 1
