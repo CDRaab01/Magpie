@@ -33,10 +33,13 @@
 >    approach is now: the poller connects to the **main account** (`IMAP_USER`) and selects the
 >    **`magpie-ingest` label** (`IMAP_LABEL`). Tradeoff, deliberately accepted: the app password
 >    can technically read the whole main inbox, but the poller is read-only by behavior
->    (`BODY.PEEK`, never marks/moves/deletes) and only ever selects the label. **The live
->    end-to-end proof is still pending** the human step of generating a main-account Google app
->    password (`~\.dragonfly-suite\magpie-main-imap.txt` → `IMAP_PASSWORD` in `server/.env`);
->    everything upstream is built and proven against real (sanitized) fixtures via mock-the-seam.
+>    (`BODY.PEEK`, never marks/moves/deletes) and only ever selects the label. **LIVE as of
+>    2026-07-08:** the app password is wired (`IMAP_PASSWORD`/`INGEST_USER_EMAIL` in `server/.env`,
+>    `MAGPIE_IMAP_HOST`/`MAGPIE_IMAP_USER` in the host root `.env`), and the first poll connected to
+>    Gmail and parsed 22 real Amex alerts. They sit `outcome=unparsed` only because the owner's real
+>    accounts (with last4s) don't exist yet — a "Test" account is all there is; once the real
+>    accounts exist, new alerts auto-file (the 22 already-seen won't retro-file — no replay tool,
+>    F15). Tier 1 #11 complete.
 > 5. **Phase 5's rules engine auto-files transfers, recurring income/bills, and
 >    merchant→category matches. Pending→posted matching is now built too (F4, 2026-07-08):** a
 >    CSV-truth reconciliation pass merges an email-sourced pending row into the posted row for

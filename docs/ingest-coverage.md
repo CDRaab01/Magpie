@@ -22,7 +22,7 @@ step to go live: the main-account app password (`[H]`).**
 - **US Bank** — `usbank@notifications.usbank.com`. **Two templates (updated 2026-07-08):**
   the account-wide **"Your transaction is complete."** (body says "Your transaction of $X" for a
   debit→spend, "Your deposit of $X" for money in→income — this *is* the paycheck path, confirmed
-  by a real $4,061.55 deposit) **and** the Zelle alert ("A new Zelle payment…"/"You received a
+  by a real a real deposit deposit) **and** the Zelle alert ("A new Zelle payment…"/"You received a
   Zelle payment"). The earlier Zelle-only gap is closed. No merchant in the transaction alert —
   CSV fills it.
 - **Discover** — `discover@services.discover.com`. **Now emailing (updated 2026-07-08):** a
@@ -45,15 +45,16 @@ filter on the main account (`from:(the 3 senders) subject:(the transaction subje
 main-account app password can technically read the whole inbox, mitigated by read-only poller
 behavior (`BODY.PEEK`, label-scoped).
 
-**Not yet done / open:**
-1. **`[H]` Generate the main-account Google app password** (`magpie-imap-main`) → save to
-   `C:\Users\Sonic\.dragonfly-suite\magpie-main-imap.txt` → it becomes `IMAP_PASSWORD` in
-   `server/.env`, with `MAGPIE_IMAP_HOST=imap.gmail.com` + `MAGPIE_IMAP_USER` in the host root
-   `.env`. Until then the compose IMAP vars default empty ⇒ the poller stays off.
-2. **The live end-to-end proof** (a real swipe becomes a pending transaction within one poll
-   interval) is blocked only on #1; everything upstream is built + tested against sanitized
-   fixtures (`server/tests/test_ingest_parsers.py`, `test_ingest_service.py`).
-3. **Bill-issued email parser** (Phase 6) — Discover "You have a new statement" carries a real
+**LIVE 2026-07-08.** The main-account app password is generated + wired (`IMAP_PASSWORD` +
+`INGEST_USER_EMAIL` in `server/.env`; `MAGPIE_IMAP_HOST=imap.gmail.com` + `MAGPIE_IMAP_USER` in the
+host root `.env`). First poll connected and the Amex parser parsed 22 real alerts. They land
+`outcome=unparsed` only because the owner's real accounts (with last4s) don't exist yet — new
+alerts auto-file once the Amex/US Bank/Discover accounts are created on-device.
+
+**Still open:**
+1. **`[H]` Create the real accounts** (last4s) so parsed alerts resolve to an account. The 22
+   already-seen won't retro-file (no replay tool — F15); the CSV backfill brings the real history.
+2. **Bill-issued email parser** (Phase 6) — Discover "You have a new statement" carries a real
    statement date + balance; parse it when Phase 6's bill pipeline needs it.
 
 ## Accounts in scope
