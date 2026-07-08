@@ -8,6 +8,7 @@ pre-confirmed (CLAUDE.md's draft-confirm trust model).
 import datetime
 import hashlib
 import uuid
+from dataclasses import replace
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -15,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.imports.csv_parser import CsvParseError, ParsedCsvRow, parse_csv
+from app.imports.institution_mappings import resolve_sign_flip
 from app.imports.pending_match import PendingCandidate, find_pending_match
 from app.models.account import Account
 from app.models.import_batch import ImportBatch
@@ -98,6 +100,7 @@ async def import_csv(
     institution: str,
     file_bytes: bytes,
     *,
+    flip_sign: bool | None = None,
     now: datetime.datetime | None = None,
 ) -> ImportSummaryOut:
     now = now or datetime.datetime.now(datetime.timezone.utc)
@@ -108,6 +111,14 @@ async def import_csv(
         rows = parse_csv(text)
     except (CsvParseError, UnicodeDecodeError) as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
+
+    # F5: reconcile the file's sign convention with the ledger's (negative = outflow). Amex (and
+    # other "positive amount = a charge" issuers) would otherwise import every charge as income and
+    # every payment as spend — a whole card backfill inverted. Flip the amount (not the balance —
+    # its convention is separate and unvalidated) when the institution default, or an explicit
+    # per-import override, says so.
+    if resolve_sign_flip(institution, flip_sign):
+        rows = [replace(r, amount_cents=-r.amount_cents) for r in rows]
 
     # Oldest first, regardless of the file's own order (bank exports are often newest-first):
     # rule evaluation's cadence/observation logic assumes it sees history chronologically —
