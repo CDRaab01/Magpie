@@ -8,6 +8,7 @@ import com.magpie.data.remote.ApiService
 import com.magpie.data.remote.BillOut
 import com.magpie.data.remote.CategoryCreate
 import com.magpie.data.remote.CategoryOut
+import com.magpie.data.remote.CategoryUpdate
 import com.magpie.data.remote.ImportSummaryOut
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.data.remote.RefreshRequest
@@ -63,6 +64,8 @@ private class FakeApi : ApiService {
     override suspend fun createAccount(req: AccountCreate): AccountOut = error("unused")
     override suspend fun listCategories(): List<CategoryOut> = error("unused")
     override suspend fun createCategory(req: CategoryCreate): CategoryOut = error("unused")
+    override suspend fun updateCategory(id: String, req: CategoryUpdate): CategoryOut = error("unused")
+    override suspend fun deleteCategory(id: String) = error("unused")
 
     override suspend fun listTransactions(
         start: String?,
