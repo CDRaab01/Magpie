@@ -148,7 +148,7 @@ flowchart LR
     C1 -- "derived(C2) = C1.stated + Σ txns in (C1, C2]" --> DELTA{delta = derived − C2.stated\n0 ⇒ 'Reconciled'\nelse 'Off by $X'}
 ```
 
-### Data model — the ten tables (built, migrations 0001–0004)
+### Data model — the ten tables (built, migrations 0001–0004; migration 0005 seeds the shared category vocabulary — V1.md Tier 1 #8)
 
 ```mermaid
 erDiagram
@@ -390,7 +390,12 @@ Phase 1 gap: refresh tokens were minted but nothing could redeem them until this
 transactions (`app/routers/{accounts,categories,transactions}.py` +
 `app/services/{account,category,transaction}_service.py`), all scoped to `CurrentUser` by
 filtering on `user_id` in the query itself (never a separate ownership check — a cross-user
-`test_*_not_visible_to_a_different_user` test pins this per domain). `GET /transactions/summary`
+`test_*_not_visible_to_a_different_user` test pins this per domain). The **shared category
+vocabulary** (Groceries/Dining/Transport/Utilities/Housing/Subscriptions/Entertainment/
+Health/Shopping/Travel/Cash/Income/Other) is seeded with `user_id NULL` by migration
+`c4e17a9b2d38` (V1.md Tier 1 #8) so a fresh user — and the AI stage — has a vocabulary from
+first boot; `list_categories` returns the shared set plus the user's own, and seeded rows are
+read-only (the delete route's ownership filter is the guard). `GET /transactions/summary`
 is the Home month-panel read, backed by `app/ledger/rollups.py`; `AccountOut` now carries
 computed `balance_cents`/`balance_delta_cents` (`app/ledger/balances.py`). `POST /imports/csv`
 (`app/routers/imports.py` + `app/services/import_service.py`) parses via `csv_parser.py`,
