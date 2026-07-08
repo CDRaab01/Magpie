@@ -7,6 +7,10 @@ class CategoryCreate(BaseModel):
     name: str
 
 
+class CategoryUpdate(BaseModel):
+    name: str
+
+
 class CategoryOut(BaseModel):
     id: uuid.UUID
     name: str

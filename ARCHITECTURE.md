@@ -398,8 +398,10 @@ filtering on `user_id` in the query itself (never a separate ownership check —
 vocabulary** (Groceries/Dining/Transport/Utilities/Housing/Subscriptions/Entertainment/
 Health/Shopping/Travel/Cash/Income/Other) is seeded with `user_id NULL` by migration
 `c4e17a9b2d38` (V1.md Tier 1 #8) so a fresh user — and the AI stage — has a vocabulary from
-first boot; `list_categories` returns the shared set plus the user's own, and seeded rows are
-read-only (the delete route's ownership filter is the guard). `GET /transactions/summary`
+first boot; `list_categories` returns the shared set plus the user's own. Category CRUD is
+full — `POST` (create), `PATCH /categories/{id}` (rename, 2026-07-08), `DELETE` — with seeded
+rows read-only: both the rename and delete routes scope by `user_id`, so a shared category
+404s either way (the ownership filter is the read-only guard). `GET /transactions/summary`
 is the Home month-panel read, backed by `app/ledger/rollups.py`; `AccountOut` now carries
 computed `balance_cents`/`balance_delta_cents` (`app/ledger/balances.py`). `POST /imports/csv`
 (`app/routers/imports.py` + `app/services/import_service.py`) parses via `csv_parser.py`,

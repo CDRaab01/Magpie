@@ -5,7 +5,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.category import Category
-from app.schemas.category import CategoryCreate
+from app.schemas.category import CategoryCreate, CategoryUpdate
 
 
 async def list_categories(db: AsyncSession, user_id: uuid.UUID) -> list[Category]:
@@ -21,6 +21,24 @@ async def list_categories(db: AsyncSession, user_id: uuid.UUID) -> list[Category
 async def create_category(db: AsyncSession, user_id: uuid.UUID, req: CategoryCreate) -> Category:
     category = Category(user_id=user_id, name=req.name)
     db.add(category)
+    await db.commit()
+    await db.refresh(category)
+    return category
+
+
+async def update_category(
+    db: AsyncSession, user_id: uuid.UUID, category_id: uuid.UUID, req: CategoryUpdate
+) -> Category:
+    """Rename one of the user's own categories. Shared/seeded categories (user_id NULL) are
+    read-only, so the ownership filter is the guard — renaming a shared one 404s, same as
+    delete."""
+    result = await db.execute(
+        select(Category).where(Category.id == category_id, Category.user_id == user_id)
+    )
+    category = result.scalar_one_or_none()
+    if category is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Category not found")
+    category.name = req.name
     await db.commit()
     await db.refresh(category)
     return category

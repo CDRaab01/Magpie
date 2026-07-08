@@ -54,3 +54,32 @@ async def test_delete_own_category(auth_client):
 async def test_delete_unknown_category_returns_404(auth_client):
     r = await auth_client.delete("/categories/00000000-0000-0000-0000-000000000000")
     assert r.status_code == 404
+
+
+async def test_rename_own_category(auth_client):
+    # A custom name (not one of the seeded shared categories) so the rename is unambiguous.
+    r = await auth_client.post("/categories", json={"name": "Coffee Runs"})
+    category_id = r.json()["id"]
+    r = await auth_client.patch(f"/categories/{category_id}", json={"name": "Espresso"})
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "Espresso"
+    assert r.json()["shared"] is False
+
+    names = [c["name"] for c in (await auth_client.get("/categories")).json()]
+    assert "Espresso" in names
+    assert "Coffee Runs" not in names
+
+
+async def test_rename_shared_category_is_forbidden(auth_client):
+    # Seeded/shared categories (user_id NULL) are read-only — renaming one 404s via the
+    # ownership filter, same guard as delete.
+    shared = next(c for c in (await auth_client.get("/categories")).json() if c["shared"])
+    r = await auth_client.patch(f"/categories/{shared['id']}", json={"name": "Hijacked"})
+    assert r.status_code == 404
+
+
+async def test_rename_unknown_category_returns_404(auth_client):
+    r = await auth_client.patch(
+        "/categories/00000000-0000-0000-0000-000000000000", json={"name": "Nope"}
+    )
+    assert r.status_code == 404
