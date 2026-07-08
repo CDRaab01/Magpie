@@ -208,10 +208,14 @@ Pulse composite build, suite signing/release/deploy conventions.
   CLAUDE.md's own phase list). If a number on the phone is wrong, the bug is here or in what
   feeds it — the `nutrition/` / `lists/merge.py` precedent.
 - **`app/imports/csv_parser.py`** (built, Phase 3) — pure, no DB: auto-detects Date/
-  Description/Amount-or-Debit+Credit/Balance columns from common header aliases (no real
-  institution sample exports were available, so this is deliberately generic rather than
-  per-issuer — see the status header). Handles `$1,234.56`, parenthetical-negative `(12.34)`,
-  and six date formats. 28 tests.
+  Description/Amount-or-Debit+Credit/Balance columns from common header aliases (deliberately
+  generic rather than per-issuer). Handles `$1,234.56`, parenthetical-negative `(12.34)`,
+  and six date formats. 28 tests. **`app/imports/institution_mappings.py` (F5, 2026-07-08)**
+  reconciles the file's sign convention with the ledger's (negative = outflow): `resolve_sign_flip
+  (institution, override)` — `import_csv` flips every row's sign when the institution default
+  (Amex = positive-is-charge) or an explicit per-import override says so, *before* the sign→kind
+  derivation. Without it an Amex backfill would book every charge as income. Discover (a card,
+  likely also positive-is-charge) is deliberately left out until a real export confirms it.
 - **`app/rules/`** (built, Phase 5) — `clock.py` (the injected time seam — `SystemClock` in
   production, `FixedClock` in tests, so cadence/band logic gets real time-travel tests)
   + `recurrence.py` (cadence windows — weekly/biweekly/monthly ± `slack_days`, monthly

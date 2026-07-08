@@ -40,6 +40,31 @@ async def test_import_creates_transactions(auth_client):
     assert review_states == {"needs_review"}
 
 
+async def test_amex_positive_charge_imports_as_spend_not_income(auth_client):
+    # F5: Amex exports a charge as a POSITIVE amount. Without the per-institution sign flip this
+    # would book the charge as income (and a payment as spend) — a whole card backfill inverted.
+    r = await auth_client.post(
+        "/accounts", json={"name": "Amex", "institution": "American Express", "type": "card"}
+    )
+    account_id = r.json()["id"]
+    # Amex convention: a charge is positive, a payment/credit is negative.
+    csv_text = (
+        "Date,Description,Amount\n"
+        "2026-07-01,TEST MERCHANT CO,42.00\n"
+        "2026-07-05,ONLINE PAYMENT,-100.00\n"
+    )
+    r = await auth_client.post(
+        "/imports/csv",
+        data={"account_id": account_id, "institution": "American Express"},
+        files=_csv_file(csv_text),
+    )
+    assert r.status_code == 200, r.text
+    by_merchant = {t["merchant_raw"]: t for t in (await auth_client.get("/transactions")).json()}
+    charge = by_merchant["TEST MERCHANT CO"]
+    assert charge["amount"] == -4200 and charge["kind"] == "spend"  # flipped to an outflow
+    assert by_merchant["ONLINE PAYMENT"]["amount"] == 10000  # flipped to an inflow
+
+
 async def test_reimporting_the_same_file_creates_zero_duplicates(auth_client):
     account_id = await _make_account(auth_client)
     csv_text = "Date,Description,Amount\n2026-07-01,Coffee Shop,-4.50\n"
