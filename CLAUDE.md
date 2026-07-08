@@ -191,9 +191,14 @@ status) · Settings (rules editor, category editor, About). Teal-led PULSE; chan
 Serve fronts it with HTTPS — the Android client uses the `https://…ts.net` URL, so **no
 cleartext exception in the manifest**. 3. SSO-only; JWKS verification identical to siblings
 (`SUITE_JWKS_URL`/`SUITE_ISSUER` pinned in compose `environment:` per suite invariant #4).
-4. Gmail access: a dedicated app password (2FA on) or OAuth refresh token in `server/.env`,
-IMAP scoped by label filter; the mailbox is read-only *by our code's behavior* — the
-ingest module must never move/delete/send mail. 5. Sanitized fixtures only in the public
+4. Gmail access (**revised 2026-07-08**): the poller connects to the **main account** with a
+Google app password (2FA on) in `server/.env` and selects the **`magpie-ingest` label** only.
+_Original plan was a dedicated forwarding mailbox (so the credential saw only alerts); Gmail
+forwarding proved too fragile — its verification kept hitting Google's anti-automation wall — so
+the app now reads the main account scoped to the label instead._ Tradeoff: the app password can
+technically read the whole inbox, mitigated because the ingest module is **read-only by
+behavior** — `BODY.PEEK` only, never marks/moves/deletes/sends, and only ever selects the label.
+See ARCHITECTURE.md "email ingestion". 5. Sanitized fixtures only in the public
 repo. 6. Encrypted-backup precondition (§0). 7. Rate limits + security headers as siblings;
 `/health` + `/version` are the only unauthenticated endpoints (and they're tailnet-only
 anyway).

@@ -48,6 +48,16 @@ services:
       # /auth/suite (a real regression that hit Spotter/Plate/Cookbook — see host OPERATIONS.md).
       SUITE_JWKS_URL: https://id.dragonflymedia.org/.well-known/jwks.json
       SUITE_ISSUER: https://id.dragonflymedia.org
+      # Email ingestion (Phase 4 — main-account IMAP scoped to the "magpie-ingest" label; see
+      # ARCHITECTURE.md "email ingestion"). Non-secret config comes by compose substitution from
+      # the host's root .env, NOT committed here — this is a PUBLIC repo, so no personal email
+      # address lands in git. IMAP_PASSWORD is the one secret, in server/.env. Empty IMAP_HOST ⇒
+      # the poller never starts, so this stays inert until the host .env sets MAGPIE_IMAP_HOST/USER
+      # and server/.env has the app password (set both together — a live host with no password
+      # would just log auth failures, no outage).
+      IMAP_HOST: ${MAGPIE_IMAP_HOST:-}
+      IMAP_USER: ${MAGPIE_IMAP_USER:-}
+      IMAP_LABEL: ${MAGPIE_IMAP_LABEL:-magpie-ingest}
     depends_on:
       db:
         condition: service_healthy

@@ -1,0 +1,13 @@
+From: U.S. Bank Alerts <usbank@notifications.usbank.com>
+To: sentinel@example.com
+Subject: Your transaction is complete.
+Message-ID: <sanitized-usbank-txn-0001@notifications.usbank.com>
+Date: Wed, 8 Jul 2026 09:13:00 -0400
+Content-Type: text/plain; charset=UTF-8
+
+Log in
+
+Your transaction of $42.00 is complete.
+To review this transaction, log in and view your account ending in 0000.
+
+Log in

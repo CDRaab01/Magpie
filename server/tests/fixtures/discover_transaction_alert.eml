@@ -1,0 +1,19 @@
+From: Discover Card <discover@services.discover.com>
+To: sentinel@example.com
+Subject: Transaction Alert
+Message-ID: <sanitized-discover-txn-0001@services.discover.com>
+Date: Mon, 6 Jul 2026 09:30:00 -0400
+Content-Type: text/plain; charset=UTF-8
+
+Account Center - Last 4 #: 0000
+
+A transaction above the limit you set has been initiated.
+
+No action is needed.
+
+Merchant: TEST MERCHANT CO
+Date: July 06, 2026
+Amount: $25.00
+
+The amount shown might be a pending pre-authorization amount that can differ
+from the final amount that will post in the next 2-3 days.
