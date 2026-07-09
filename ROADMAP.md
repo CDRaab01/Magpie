@@ -169,10 +169,18 @@ Pydantic-validated, drafts never auto-commit, descriptive never advisory.
     `{...}`, + 3 regression tests using the real reply shape). (b) **Quality is good** — after the
     fix, 11/12 matched the obvious category, the 1 "miss" defensible (MEIJER→Shopping for a
     superstore), 0 parse failures, ~3.7 s/draft (fine for a background review-queue suggestion).
-    **Still owner-gated:** set `llm_base_url`/`llm_model` in the live server's compose
-    `environment:` (invariant #4) to actually enable the stage in prod, then re-verify draft
-    quality against real post-backfill merchants. Category drafts are the review queue's third
-    stage and may not slip.
+    **Config wired 2026-07-09:** `LLM_BASE_URL` (`http://host.docker.internal:1234`, verified
+    reachable from the container) + `LLM_MODEL` (`google/gemma-4-e4b`) are in the compose
+    `environment:` block (invariant #4; overridable via the host root `.env`), so the stage is
+    **on by default once deployed**. Also hardened the call for going live: `suggest_category` now
+    swallows *any* client failure (unreachable/slow LM Studio, HTTP error, odd response shape) →
+    no draft, never an exception into the poll loop (it only caught parse errors before; the
+    call site in `rule_service` doesn't guard it) — a model hiccup must never break ingestion.
+    **The one remaining step is the deploy `[H]`:** the running prod container is `main`'s image,
+    which lacks the fence fix — so this config only helps once the server is deployed *with* the
+    fence fix (both live on this branch). Deploying = getting this branch onto `main` (CI deploys
+    the server; note the branch also carries `android/**`, so it cuts an APK release too) — the
+    owner's merge/deploy call. After deploy, re-verify draft quality on real post-backfill merchants.
 18. **Monthly insight note** — the unbuilt pitch feature. An LLM-written "what changed"
     (top category deltas vs the trailing median, new recurrences, budget verdicts) generated
     from Wave 1's read models — aggregates in, prose out, never raw rows. Surfaced as a Home

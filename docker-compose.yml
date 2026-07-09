@@ -58,6 +58,17 @@ services:
       IMAP_HOST: ${MAGPIE_IMAP_HOST:-}
       IMAP_USER: ${MAGPIE_IMAP_USER:-}
       IMAP_LABEL: ${MAGPIE_IMAP_LABEL:-magpie-ingest}
+      # AI category drafts (Wave 2 #17). Local-only inference against the suite's LM Studio on the
+      # host (the same google/gemma-4-e4b Spotter/Plate use) — this financial data never leaves the
+      # box (CLAUDE.md §6). host.docker.internal reaches the host from the container (verified
+      # reachable); the client appends /v1/chat/completions, so NO /v1 here. Pinned in compose
+      # environment: (not server/.env) per suite invariant #4 — a required flag in env_file alone
+      # silently vanishes when a redeploy recreates the container. Empty base_url ⇒ the AI stage
+      # stays off (import_service/ingest_service only build the client when it's set), so this is
+      # inert until deployed WITH the JSON-fence fix (2026-07-09) — on an un-fixed image the model
+      # fires but every draft is rejected. Override the model via the host root .env if needed.
+      LLM_BASE_URL: ${MAGPIE_LLM_BASE_URL:-http://host.docker.internal:1234}
+      LLM_MODEL: ${MAGPIE_LLM_MODEL:-google/gemma-4-e4b}
     depends_on:
       db:
         condition: service_healthy

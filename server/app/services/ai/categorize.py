@@ -8,7 +8,7 @@ guessed into existence — the model may only pick from what already exists.
 
 import uuid
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from app.services.ai.llm_client import LlmClient
 
@@ -78,6 +78,11 @@ async def suggest_category(
     try:
         raw = await client.complete(prompt)
         parsed = CategorySuggestion.model_validate_json(_extract_json_object(raw))
-    except (ValidationError, ValueError):
+    except Exception:  # noqa: BLE001 — intentional: the AI stage is strictly best-effort
+        # CLAUDE.md §6: the model drafts, it never decides. A slow/unreachable LM Studio, an HTTP
+        # error, a malformed or unexpectedly-shaped reply — none of it may break ingestion, which
+        # is the app's core function. Any failure just yields no draft (the row still lands in the
+        # review queue, exactly as if the AI stage were off). The deterministic rules + the human
+        # review queue are the primary pipeline; this is a suggestion on top.
         return None
     return categories.get(parsed.category_name)

@@ -74,6 +74,21 @@ async def test_missing_required_field_is_rejected():
     assert result is None
 
 
+async def test_llm_transport_failure_yields_no_draft_not_an_exception():
+    # The AI stage is best-effort: if the model is unreachable/slow/errors, suggest_category must
+    # return None so ingestion continues, NOT raise into the poll loop. Regression for enabling the
+    # live LLM (Wave 2 #17) — the call site in rule_service doesn't guard this.
+    class ExplodingClient:
+        async def complete(self, prompt: str) -> str:
+            raise ConnectionError("LM Studio is down")
+
+    result = await suggest_category(
+        ExplodingClient(), merchant="Trader Joe's", amount_cents=-4500, kind="spend",
+        categories=CATEGORIES,
+    )
+    assert result is None
+
+
 async def test_no_categories_available_never_calls_the_model():
     client = FakeLlmClient('{"category_name": "Groceries", "reasoning": "x"}')
     result = await suggest_category(

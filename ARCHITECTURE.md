@@ -366,7 +366,16 @@ always mocked in CI" rule. **Live-probe fix (2026-07-09):** exercising the real
 *every* real suggestion while the clean-JSON fake stayed green. `suggest_category` now runs the
 reply through `_extract_json_object` (strip a code fence, else take the outermost `{...}` span)
 before validation; three regression tests reproduce the real reply shape (fenced, prose-wrapped,
-clean). This is why the fake must mimic the *real* reply shape, not an idealized one.
+clean). This is why the fake must mimic the *real* reply shape, not an idealized one. **Enabled
+for prod (2026-07-09):** `LLM_BASE_URL` (`http://host.docker.internal:1234` — the client appends
+`/v1/chat/completions`) + `LLM_MODEL` (`google/gemma-4-e4b`) are pinned in the compose
+`environment:` block (invariant #4), so the stage turns on as soon as the server is deployed with
+this branch's code. Going-live hardening: `suggest_category` now catches *any* client exception
+(unreachable/slow model, HTTP error, malformed reply) → returns no draft rather than propagating,
+because the `rule_service` call site doesn't guard it and a model hiccup must never break the poll
+loop (the AI is best-effort on top of the deterministic pipeline). **Not yet live:** the running
+prod container is `main`'s image (no fence fix), so the config is inert there until this branch
+deploys.
 
 **Bill matching (built, Phase 6):** `app/rules/bill_matching.py` — pure — pairs a
 `BillStatement` to the closest-dated payment on its bound account (CLAUDE.md §2: each
