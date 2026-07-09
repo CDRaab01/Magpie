@@ -1,7 +1,9 @@
 package com.magpie.ui.home
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -90,7 +93,11 @@ internal fun HomeContent(
                 .padding(MagpieTheme.spacing.lg)
                 .fillMaxSize(),
         ) {
-            Text("Magpie", style = MaterialTheme.typography.headlineMedium)
+            if (state is HomeUiState.Ready) {
+                MagpieHero(state)
+            } else {
+                Text("Magpie", style = MaterialTheme.typography.headlineMedium)
+            }
             Spacer(Modifier.height(16.dp))
 
             when (state) {
@@ -121,6 +128,50 @@ internal fun HomeContent(
             }
         }
     }
+}
+
+/**
+ * The Home hero (#28) — the personalized gradient panel every sibling opens with, using the
+ * indigo→teal→green "magpie" gradient that was added to Pulse for this app but until now went
+ * unused. Greeting + a one-line money status ("$3,180 net this month · 3 to review · XCEL due
+ * Jul 18"), the finance analogue of Plate's "TRAINED TODAY" line.
+ */
+@Composable
+private fun MagpieHero(state: HomeUiState.Ready) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(MagpieTheme.colors.heroGradient)
+            .padding(20.dp),
+    ) {
+        Column {
+            Text(
+                state.greeting,
+                style = MaterialTheme.typography.titleMedium,
+                color = androidx.compose.ui.graphics.Color.White,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                heroStatusLine(state),
+                style = MaterialTheme.typography.bodyLarge,
+                color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f),
+            )
+        }
+    }
+}
+
+private fun heroStatusLine(state: HomeUiState.Ready): String {
+    val parts = mutableListOf("${formatCentsCompact(state.summary.netCents)} net this month")
+    if (state.reviewCount > 0) parts += "${state.reviewCount} to review"
+    state.nextBill?.let { bill ->
+        val due = runCatching {
+            java.time.LocalDate.parse(bill.dueDate)
+                .format(java.time.format.DateTimeFormatter.ofPattern("MMM d"))
+        }.getOrDefault(bill.dueDate)
+        parts += "${bill.biller} due $due"
+    }
+    return parts.joinToString("  ·  ")
 }
 
 @Composable
