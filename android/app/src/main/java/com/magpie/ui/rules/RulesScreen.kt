@@ -34,6 +34,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.magpie.ui.theme.MagpieTheme
+import com.magpie.ui.util.RefreshOnResume
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
 
@@ -42,6 +43,7 @@ import design.pulse.ui.components.PulseButton
 fun RulesScreen(navController: NavController) {
     val viewModel: RulesViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    RefreshOnResume { viewModel.load() }
 
     RulesContent(
         state = state,

@@ -68,6 +68,8 @@ private class FakeApi : ApiService {
     override suspend fun refresh(req: RefreshRequest): TokenResponse = error("unused")
     override suspend fun listAccounts(): List<AccountOut> = error("unused")
     override suspend fun createAccount(req: AccountCreate): AccountOut = error("unused")
+
+    override suspend fun deleteAccount(id: String) = error("unused")
     override suspend fun listCategories(): List<CategoryOut> = error("unused")
     override suspend fun createCategory(req: CategoryCreate): CategoryOut = error("unused")
     override suspend fun updateCategory(id: String, req: CategoryUpdate): CategoryOut = error("unused")

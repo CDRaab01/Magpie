@@ -28,6 +28,9 @@ interface ApiService {
     @POST("accounts")
     suspend fun createAccount(@Body req: AccountCreate): AccountOut
 
+    @DELETE("accounts/{id}")
+    suspend fun deleteAccount(@Path("id") id: String)
+
     // --- Categories ---
     @GET("categories")
     suspend fun listCategories(): List<CategoryOut>

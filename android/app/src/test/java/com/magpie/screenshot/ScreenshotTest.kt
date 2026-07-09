@@ -257,6 +257,7 @@ private fun AccountsScene() {
         onStartImport = {},
         onDismissImportResult = {},
         onAddAccount = { _, _, _, _ -> },
+        onDelete = {},
     )
 }
 

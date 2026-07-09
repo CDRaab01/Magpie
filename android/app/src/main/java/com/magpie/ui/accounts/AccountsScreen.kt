@@ -18,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -44,6 +45,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.magpie.data.remote.AccountOut
+import com.magpie.ui.util.RefreshOnResume
 import com.magpie.ui.theme.MagpieTheme
 import com.magpie.util.formatCents
 import design.pulse.ui.components.PanelCard
@@ -56,6 +58,7 @@ import design.pulse.ui.components.SectionHeader
 fun AccountsScreen(navController: NavController) {
     val viewModel: AccountsViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    RefreshOnResume { viewModel.load() }
     val context = LocalContext.current
 
     var pendingAccountId by remember { mutableStateOf<String?>(null) }
@@ -78,6 +81,7 @@ fun AccountsScreen(navController: NavController) {
         },
         onDismissImportResult = viewModel::dismissImportResult,
         onAddAccount = viewModel::createAccount,
+        onDelete = viewModel::deleteAccount,
     )
 
     if (showImportDialog) {
@@ -138,8 +142,10 @@ internal fun AccountsContent(
     onStartImport: (accountId: String) -> Unit,
     onDismissImportResult: () -> Unit,
     onAddAccount: (name: String, institution: String, type: String, last4: String?) -> Unit,
+    onDelete: (accountId: String) -> Unit,
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    var deletingAccount by remember { mutableStateOf<AccountOut?>(null) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -175,7 +181,11 @@ internal fun AccountsContent(
                     }
                     else -> LazyColumn(modifier = Modifier.padding(MagpieTheme.spacing.md)) {
                         items(state.accounts, key = { it.id }) { account ->
-                            AccountRow(account, onImport = { onStartImport(account.id) })
+                            AccountRow(
+                                account,
+                                onImport = { onStartImport(account.id) },
+                                onDelete = { deletingAccount = account },
+                            )
                         }
                     }
                 }
@@ -208,6 +218,32 @@ internal fun AccountsContent(
             onConfirm = { name, institution, type, last4 ->
                 onAddAccount(name, institution, type, last4)
                 showAddDialog = false
+            },
+        )
+    }
+
+    deletingAccount?.let { account ->
+        AlertDialog(
+            onDismissRequest = { deletingAccount = null },
+            title = { Text("Delete account?") },
+            text = {
+                Text("Delete “${account.name}” and all of its transactions? This can't be undone.")
+            },
+            confirmButton = {
+                PulseButton(
+                    text = "Delete",
+                    compact = true,
+                    onClick = {
+                        onDelete(account.id)
+                        deletingAccount = null
+                    },
+                )
+            },
+            dismissButton = {
+                PulseButton(
+                    text = "Cancel", tonal = true, compact = true,
+                    onClick = { deletingAccount = null },
+                )
             },
         )
     }
@@ -276,13 +312,20 @@ private fun AddAccountDialog(
 }
 
 @Composable
-private fun AccountRow(account: AccountOut, onImport: () -> Unit) {
+private fun AccountRow(account: AccountOut, onImport: () -> Unit, onDelete: () -> Unit) {
     PanelCard(channel = MagpieTheme.colors.money.base, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         SectionHeader(label = account.name, channel = MagpieTheme.colors.money.base)
         Spacer(Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
-                Text(account.institution, style = MaterialTheme.typography.bodySmall)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    account.institution + (account.last4?.let { " · ••••$it" } ?: ""),
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 // Color grammar (#31): a normal card balance — negative for a credit card — is not an
                 // alarm, so it stays neutral; the reconciled/off-by delta below carries the signal.
                 Text(formatCents(account.balanceCents), color = MaterialTheme.colorScheme.onSurface)
@@ -306,6 +349,9 @@ private fun AccountRow(account: AccountOut, onImport: () -> Unit) {
                 leadingIcon = { Icon(Icons.Default.UploadFile, contentDescription = null) },
                 onClick = onImport,
             )
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete account")
+            }
         }
     }
 }

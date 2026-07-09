@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.magpie.data.remote.TransactionOut
 import com.magpie.ui.theme.MagpieTheme
+import com.magpie.ui.util.RefreshOnResume
 import com.magpie.util.formatCents
 import design.pulse.ui.components.PanelCard
 
@@ -36,6 +37,7 @@ import design.pulse.ui.components.PanelCard
 fun TransactionsScreen(navController: NavController) {
     val viewModel: TransactionsViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    RefreshOnResume { viewModel.load() }
     TransactionsContent(state = state, onSetFilter = viewModel::setFilter)
 }
 

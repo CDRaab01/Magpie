@@ -42,6 +42,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.magpie.data.remote.CategoryOut
+import com.magpie.ui.util.RefreshOnResume
 import com.magpie.ui.theme.MagpieTheme
 import com.magpie.util.formatCents
 import design.pulse.ui.components.PanelCard
@@ -52,6 +53,7 @@ import design.pulse.ui.components.PulseButton
 fun BudgetsScreen(navController: NavController) {
     val viewModel: BudgetsViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    RefreshOnResume { viewModel.load() }
 
     BudgetsContent(
         state = state,

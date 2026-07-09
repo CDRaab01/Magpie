@@ -81,6 +81,18 @@ class AccountsViewModel @Inject constructor(
         }
     }
 
+    fun deleteAccount(accountId: String) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(error = null)
+            try {
+                api.deleteAccount(accountId)
+                load()
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(error = e.message ?: "Couldn't delete account")
+            }
+        }
+    }
+
     fun dismissImportResult() {
         _state.value = _state.value.copy(importResult = null)
     }
