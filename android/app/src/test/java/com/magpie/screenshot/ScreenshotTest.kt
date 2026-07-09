@@ -279,7 +279,7 @@ private fun ReviewQueueScene() {
             loading = false,
         ),
         onBack = {},
-        onConfirm = { _, _, _ -> },
+        onConfirm = { _, _, _, _ -> },
     )
 }
 

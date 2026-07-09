@@ -545,9 +545,13 @@ approve/correct:** every row also carries a tonal "Correct" action opening a `Mo
 (the full category list + a kind selector for the rare sign-ambiguous case); tapping a category
 confirms immediately, so the happy path stays one tap and a correction is at most two. All three
 paths — accept-as-is, accept/pick a category, correct the kind — go through one
-`ReviewQueueViewModel.confirm(id, categoryId?, kind?)` → `PATCH /transactions/{id}`
+`ReviewQueueViewModel.confirm(id, categoryId?, kind?, ruleMatcher?)` → `PATCH /transactions/{id}`
 (`review_state=confirmed`, null = leave untouched); a bad kind change surfaces the server's sign
-re-validation error and leaves the row in the queue.) · `ui/bills/BillsScreen` (**Phase 6** — `GET
+re-validation error and leaves the row in the queue. **Tier 3 #22 "make this a rule" growth loop
+(2026-07-08):** the sheet also carries an "Always file '<merchant>' this way" checkbox — ticking it
+then picking a category passes a `ruleMatcher`, and `confirm` creates a `merchant_category` rule
+(`POST /rules`, matcher = the txn merchant, server-normalized) *after* the confirm, so future
+transactions from that merchant auto-file and skip the queue.) · `ui/bills/BillsScreen` (**Phase 6** — `GET
 /bills`; each row shows the biller, due date, and a Paid/Missing/Awaiting-payment status
 derived from `matched_transaction_id`/`is_missing`; the flat bills list, now the detail view
 behind the calendar) · `ui/cashflow/CashflowScreen` (**Tier 3 #23, 2026-07-08** — the "due before
@@ -567,8 +571,8 @@ each rule shows its matcher, a human type label (Income/Bill/Transfer/Category r
 summary (cadence `kind ±Nd`, band `±N%`, `→ Category`, names from `GET /categories`), an
 enable/disable `Switch` (optimistic → `PATCH /rules/{id}`, disabled rules drop to a muted channel),
 and delete behind a confirm dialog (`DELETE /rules/{id}`); linked from Home; light+dark Roborazzi
-baselines. **Deferred:** the review-queue "make this a rule" growth loop and inline band/cadence
-editing). `ui/settings/SettingsScreen` (**V1 Tier 1 #10** — the category
+baselines. The **"make this a rule" growth loop** landed 2026-07-08 in the review queue (below);
+**deferred:** inline band/cadence editing). `ui/settings/SettingsScreen` (**V1 Tier 1 #10** — the category
 editor: lists categories, the user's own (`shared=false`) get rename/delete affordances while
 seeded/shared ones show a read-only "Shared" label (the server 404s a rename/delete of a shared
 category), plus an "Add" action and an About block with the server `/version`. `SettingsViewModel`

@@ -175,3 +175,10 @@ data class RuleOut(
 data class RuleUpdate(
     val enabled: Boolean,
 )
+
+@Serializable
+data class RuleCreate(
+    val type: String, // e.g. "merchant_category" for the review-queue "make this a rule" loop
+    val matcher: String, // the server normalizes it (normalize_merchant)
+    @SerialName("category_id") val categoryId: String,
+)

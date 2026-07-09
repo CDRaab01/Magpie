@@ -15,6 +15,7 @@ import com.magpie.data.remote.CategoryUpdate
 import com.magpie.data.remote.ImportSummaryOut
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.data.remote.RefreshRequest
+import com.magpie.data.remote.RuleCreate
 import com.magpie.data.remote.RuleOut
 import com.magpie.data.remote.RuleUpdate
 import com.magpie.data.remote.SuiteLoginRequest
@@ -120,6 +121,8 @@ private class FakeApi : ApiService {
     ): ImportSummaryOut = error("unused")
 
     override suspend fun listRules(): List<RuleOut> = error("unused")
+
+    override suspend fun createRule(req: RuleCreate): RuleOut = error("unused")
 
     override suspend fun updateRule(id: String, req: RuleUpdate): RuleOut = error("unused")
 

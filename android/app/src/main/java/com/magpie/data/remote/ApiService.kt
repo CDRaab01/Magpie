@@ -87,6 +87,9 @@ interface ApiService {
     @GET("rules")
     suspend fun listRules(): List<RuleOut>
 
+    @POST("rules")
+    suspend fun createRule(@Body req: RuleCreate): RuleOut
+
     @PATCH("rules/{id}")
     suspend fun updateRule(@Path("id") id: String, @Body req: RuleUpdate): RuleOut
 

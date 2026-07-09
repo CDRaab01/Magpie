@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -56,7 +57,9 @@ fun ReviewQueueScreen(navController: NavController) {
     ReviewQueueContent(
         state = state,
         onBack = { navController.popBackStack() },
-        onConfirm = { id, categoryId, kind -> viewModel.confirm(id, categoryId, kind) },
+        onConfirm = { id, categoryId, kind, ruleMatcher ->
+            viewModel.confirm(id, categoryId, kind, ruleMatcher)
+        },
     )
 }
 
@@ -66,9 +69,15 @@ internal fun ReviewQueueContent(
     state: ReviewQueueUiState,
     onBack: () -> Unit,
     // The one action for the whole queue: categoryId/kind are null when unchanged. Accept-as-is
-    // is (id, null, null); accept AI or pick a category is (id, categoryId, null); a full
-    // correction supplies the kind too. Keeps the confirm/correct flow a single code path.
-    onConfirm: (transactionId: String, categoryId: String?, kind: String?) -> Unit,
+    // is (id, null, null, null); accept AI or pick a category is (id, categoryId, null, null); a
+    // full correction supplies the kind too. `ruleMatcher` is non-null only when the human ticked
+    // "always file this merchant this way" — it creates a merchant→category rule (#22 growth loop).
+    onConfirm: (
+        transactionId: String,
+        categoryId: String?,
+        kind: String?,
+        ruleMatcher: String?,
+    ) -> Unit,
 ) {
     // Which row's correction sheet is open (null = none). Held here so [ReviewQueueContent]
     // stays the one screenshot-testable surface — the sheet is closed in a default capture.
@@ -106,9 +115,9 @@ internal fun ReviewQueueContent(
                         ReviewQueueRow(
                             txn,
                             categoryNamesById = state.categoryNamesById,
-                            onConfirm = { onConfirm(txn.id, null, null) },
+                            onConfirm = { onConfirm(txn.id, null, null, null) },
                             onAcceptAiSuggestion = { categoryId ->
-                                onConfirm(txn.id, categoryId, null)
+                                onConfirm(txn.id, categoryId, null, null)
                             },
                             onCorrect = { correcting = txn },
                         )
@@ -124,8 +133,8 @@ internal fun ReviewQueueContent(
             categories = state.categories,
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             onDismiss = { correcting = null },
-            onConfirm = { categoryId, kind ->
-                onConfirm(txn.id, categoryId, kind)
+            onConfirm = { categoryId, kind, ruleMatcher ->
+                onConfirm(txn.id, categoryId, kind, ruleMatcher)
                 correcting = null
             },
         )
@@ -210,12 +219,17 @@ private fun CorrectionSheet(
     categories: List<CategoryOut>,
     sheetState: SheetState,
     onDismiss: () -> Unit,
-    onConfirm: (categoryId: String?, kind: String?) -> Unit,
+    onConfirm: (categoryId: String?, kind: String?, ruleMatcher: String?) -> Unit,
 ) {
     var selectedKind by remember { mutableStateOf(txn.kind) }
     // Only send a kind when the human actually changed it — an unchanged kind stays null so the
     // server leaves it (and its sign re-validation) untouched.
     val kindOrNull = selectedKind.takeIf { it != txn.kind }
+    // The "make this a rule" growth loop (#22): tick it, then pick a category, and future
+    // transactions from this merchant auto-file. Only offered when there's a merchant to match on.
+    val matcher = txn.merchantRaw ?: txn.merchantNorm
+    var makeRule by remember { mutableStateOf(false) }
+    val ruleMatcher = matcher.takeIf { makeRule }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
@@ -245,6 +259,20 @@ private fun CorrectionSheet(
             }
             Spacer(Modifier.height(MagpieTheme.spacing.md))
 
+            if (matcher != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { makeRule = !makeRule }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = makeRule, onCheckedChange = { makeRule = it })
+                    Text("Always file “$matcher” this way")
+                }
+                Spacer(Modifier.height(MagpieTheme.spacing.sm))
+            }
+
             Text("Category", style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.height(4.dp))
             LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
@@ -254,7 +282,7 @@ private fun CorrectionSheet(
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onConfirm(category.id, kindOrNull) }
+                            .clickable { onConfirm(category.id, kindOrNull, ruleMatcher) }
                             .padding(vertical = 12.dp),
                     )
                 }
@@ -262,7 +290,7 @@ private fun CorrectionSheet(
             Spacer(Modifier.height(MagpieTheme.spacing.md))
             PulseButton(
                 text = "Confirm",
-                onClick = { onConfirm(null, kindOrNull) },
+                onClick = { onConfirm(null, kindOrNull, null) },
                 modifier = Modifier.fillMaxWidth(),
             )
         }

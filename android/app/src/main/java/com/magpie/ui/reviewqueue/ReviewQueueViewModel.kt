@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.magpie.data.remote.ApiService
 import com.magpie.data.remote.CategoryOut
+import com.magpie.data.remote.RuleCreate
 import com.magpie.data.remote.TransactionOut
 import com.magpie.data.remote.TransactionUpdate
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -64,8 +65,18 @@ class ReviewQueueViewModel @Inject constructor(
      * The server re-validates the sign invariant when `kind` is supplied, so a bad kind change
      * surfaces as an error here rather than silently corrupting the ledger — on failure the row
      * stays in the queue.
+     *
+     * `ruleMatcher` powers the "make this a rule" growth loop (#22): when the human corrects a
+     * row and asks to always file this merchant this way, we create a `merchant_category` rule
+     * (matcher → categoryId) *after* the confirm, so future transactions from that merchant
+     * auto-file and skip the queue. Only meaningful alongside a `categoryId`.
      */
-    fun confirm(transactionId: String, categoryId: String? = null, kind: String? = null) {
+    fun confirm(
+        transactionId: String,
+        categoryId: String? = null,
+        kind: String? = null,
+        ruleMatcher: String? = null,
+    ) {
         viewModelScope.launch {
             try {
                 api.updateTransaction(
@@ -76,10 +87,20 @@ class ReviewQueueViewModel @Inject constructor(
                         kind = kind,
                     ),
                 )
+                // The row is confirmed regardless of what happens with the optional rule below.
                 _state.value = _state.value.copy(
                     error = null,
                     transactions = _state.value.transactions.filterNot { it.id == transactionId },
                 )
+                if (ruleMatcher != null && categoryId != null) {
+                    api.createRule(
+                        RuleCreate(
+                            type = "merchant_category",
+                            matcher = ruleMatcher,
+                            categoryId = categoryId,
+                        ),
+                    )
+                }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(error = e.message ?: "Couldn't confirm")
             }
