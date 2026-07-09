@@ -29,7 +29,8 @@ class CashflowViewModel @Inject constructor(
 
     fun load() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true, error = null)
+            // Silent refresh (see BillsViewModel): don't re-flash the spinner on RefreshOnResume.
+            _state.value = _state.value.copy(error = null)
             try {
                 _state.value = _state.value.copy(calendar = api.getCashflow(), loading = false)
             } catch (e: Exception) {

@@ -51,7 +51,9 @@ class HomeViewModel @Inject constructor(
 
     fun load() {
         viewModelScope.launch {
-            _state.value = HomeUiState.Loading
+            // Silent refresh: don't flash the spinner on resume-refresh. The initial StateFlow value
+            // is already Loading, so the first load shows the spinner; later loads (RefreshOnResume,
+            // post-create) keep the current content on screen and swap in fresh data when it arrives.
             try {
                 val accounts = api.listAccounts()
                 if (accounts.isEmpty()) {

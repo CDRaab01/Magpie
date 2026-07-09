@@ -48,7 +48,8 @@ class BudgetsViewModel @Inject constructor(
 
     fun load() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true, error = null)
+            // Silent refresh (see BillsViewModel): don't re-flash the spinner on RefreshOnResume.
+            _state.value = _state.value.copy(error = null)
             try {
                 val budgets = api.listBudgets(monthParam)
                 val categories = api.listCategories()

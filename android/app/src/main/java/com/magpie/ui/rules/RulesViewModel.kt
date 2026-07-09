@@ -58,7 +58,8 @@ class RulesViewModel @Inject constructor(
 
     fun load() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true, error = null)
+            // Silent refresh (see BillsViewModel): don't re-flash the spinner on RefreshOnResume.
+            _state.value = _state.value.copy(error = null)
             try {
                 val rules = api.listRules()
                 val nameById = api.listCategories().associate { it.id to it.name }

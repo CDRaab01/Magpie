@@ -7,7 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
 /**
@@ -19,7 +19,10 @@ import kotlinx.coroutines.flow.stateIn
 class AuthGateViewModel @Inject constructor(
     tokenStore: TokenStore,
 ) : ViewModel() {
-    val isSignedIn: StateFlow<Boolean?> = tokenStore.accessToken
-        .map { it != null }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val isSignedIn: StateFlow<Boolean?> =
+        combine(tokenStore.initialized, tokenStore.accessToken) { initialized, token ->
+            // Stay `null` (nav shows nothing) until the encrypted store's first read lands, so a
+            // signed-in user never flashes the SignIn screen while the token is still decrypting.
+            if (!initialized) null else token != null
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 }

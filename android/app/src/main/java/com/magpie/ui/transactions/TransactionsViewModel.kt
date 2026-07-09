@@ -53,7 +53,8 @@ class TransactionsViewModel @Inject constructor(
 
     fun load() {
         viewModelScope.launch {
-            _state.value = TransactionsUiState.Loading
+            // Silent refresh (see HomeViewModel): initial state is already Loading, so don't re-flash
+            // the spinner on RefreshOnResume — keep the list on screen and swap in fresh rows.
             try {
                 val transactions = transactionRepository.listTransactions()
                 val names = runCatching { api.listCategories().associate { it.id to it.name } }

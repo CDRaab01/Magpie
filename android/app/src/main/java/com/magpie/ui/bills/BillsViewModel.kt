@@ -29,7 +29,9 @@ class BillsViewModel @Inject constructor(
 
     fun load() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true, error = null)
+            // Silent refresh: keep `loading` as-is (true only on the first load, from the initial
+            // state) so RefreshOnResume doesn't flash the spinner over already-loaded content.
+            _state.value = _state.value.copy(error = null)
             try {
                 _state.value = _state.value.copy(bills = api.listBills(), loading = false)
             } catch (e: Exception) {

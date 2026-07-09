@@ -34,7 +34,8 @@ class SettingsViewModel @Inject constructor(
 
     fun load() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true, error = null)
+            // Silent refresh (see BillsViewModel): don't re-flash the spinner on RefreshOnResume.
+            _state.value = _state.value.copy(error = null)
             try {
                 val categories = api.listCategories()
                 // About is nice-to-have — don't let a version fetch failure fail the screen.

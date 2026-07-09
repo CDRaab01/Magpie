@@ -55,10 +55,17 @@ class TokenStore @Inject constructor(
     val accessToken: Flow<String?> = _access.asStateFlow()
     val refreshToken: Flow<String?> = _refresh.asStateFlow()
 
+    // Flips true once the first decrypt read lands. The auth gate treats `!initialized` as "unknown"
+    // (renders nothing) rather than "signed out" — otherwise the synchronous `null` seed above would
+    // read as signed-out and flash the SignIn screen for the ~100ms the Keystore init/decrypt takes.
+    private val _initialized = MutableStateFlow(false)
+    val initialized: Flow<Boolean> = _initialized.asStateFlow()
+
     init {
         scope.launch {
             _access.value = readKey(ACCESS)
             _refresh.value = readKey(REFRESH)
+            _initialized.value = true
             purgeLegacyPlaintext()
         }
     }

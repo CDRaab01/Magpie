@@ -36,7 +36,8 @@ class ReviewQueueViewModel @Inject constructor(
 
     fun load() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true, error = null)
+            // Silent refresh (see BillsViewModel): don't re-flash the spinner on RefreshOnResume.
+            _state.value = _state.value.copy(error = null)
             try {
                 val txns = api.listTransactions(reviewState = "needs_review")
                 val categories = api.listCategories()
