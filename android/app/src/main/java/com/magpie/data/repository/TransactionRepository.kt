@@ -84,6 +84,28 @@ class TransactionRepository @Inject constructor(
     suspend fun listTransactions(start: String? = null, end: String? = null): List<TransactionOut> =
         api.listTransactions(start, end)
 
+    /** #32: filtered + paginated page for the Transactions screen's search / filters / scroll. */
+    suspend fun listTransactionsPage(
+        reviewState: String? = null,
+        kind: String? = null,
+        accountId: String? = null,
+        query: String? = null,
+        start: String? = null,
+        end: String? = null,
+        limit: Int,
+        offset: Int,
+    ): List<TransactionOut> =
+        api.listTransactions(
+            start = start,
+            end = end,
+            reviewState = reviewState,
+            kind = kind,
+            accountId = accountId,
+            query = query?.takeIf { it.isNotBlank() },
+            limit = limit,
+            offset = offset,
+        )
+
     suspend fun monthlySummary(year: Int, month: Int): MonthlySummaryOut =
         api.monthlySummary(year, month)
 

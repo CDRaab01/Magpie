@@ -4,10 +4,13 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -31,15 +34,38 @@ import com.magpie.ui.transactions.TransactionsScreen
  * needed, since saving a session makes the underlying Flow re-emit and this recomposes.
  */
 @Composable
-fun MagpieNavHost() {
+fun MagpieNavHost(deepLinkHost: StateFlow<String?> = MutableStateFlow(null)) {
     val authGateViewModel: AuthGateViewModel = hiltViewModel()
     val isSignedIn by authGateViewModel.isSignedIn.collectAsStateWithLifecycle()
 
     when (isSignedIn) {
         null -> Unit
         false -> SignInScreen()
-        true -> SignedInGraph()
+        true -> SignedInOrOnboarding(deepLinkHost = deepLinkHost)
     }
+}
+
+/** Signed in: show the guided first-run (#33) on a fresh install, otherwise the main graph. */
+@Composable
+private fun SignedInOrOnboarding(deepLinkHost: StateFlow<String?>) {
+    val onboardingViewModel: com.magpie.ui.onboarding.OnboardingViewModel = hiltViewModel()
+    val shouldOnboard by onboardingViewModel.shouldShow.collectAsStateWithLifecycle()
+    when (shouldOnboard) {
+        null -> Unit
+        true -> com.magpie.ui.onboarding.OnboardingScreen(onDone = {})
+        false -> SignedInGraph(deepLinkHost = deepLinkHost)
+    }
+}
+
+/** #34: map an ntfy `magpie://<host>` deep link to the route that lets the owner act on the alert. */
+private fun routeForDeepLink(host: String?): String? = when (host) {
+    "bills" -> Routes.BILLS
+    "cashflow" -> Routes.CASHFLOW
+    "accounts" -> Routes.ACCOUNTS
+    "review" -> Routes.REVIEW_QUEUE
+    "transactions" -> Routes.TRANSACTIONS
+    "home" -> Routes.HOME
+    else -> null
 }
 
 /**
@@ -49,11 +75,19 @@ fun MagpieNavHost() {
  * Review queue, Cash flow, Rules, Cash entry) are pushed normally and keep their own back button.
  */
 @Composable
-private fun SignedInGraph() {
+private fun SignedInGraph(deepLinkHost: StateFlow<String?> = MutableStateFlow(null)) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val isTopLevel = TopLevelDestination.entries.any { it.route == currentRoute }
+
+    // #34: when an alert deep link arrives (signed in), navigate to its screen once, then clear it.
+    val deepHost by deepLinkHost.collectAsStateWithLifecycle()
+    LaunchedEffect(deepHost) {
+        val route = routeForDeepLink(deepHost) ?: return@LaunchedEffect
+        navController.navigate(route) { launchSingleTop = true }
+        (deepLinkHost as? MutableStateFlow<String?>)?.value = null
+    }
 
     val goTab: (String) -> Unit = { route ->
         navController.navigate(route) {

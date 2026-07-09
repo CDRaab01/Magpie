@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -213,16 +214,41 @@ private fun MonthStatTile(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                value,
-                style = Pulse.dataType.dataSmall.copy(fontSize = 16.sp),
-                color = channel,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-            )
+            AutoFitValue(value = value, color = channel)
         }
     }
+}
+
+/**
+ * A stat value that shrinks to fit its column rather than truncating (#35). The #30 single-line
+ * pin still holds, but at a large system font scale (a11y) a longer money value would ellipsize
+ * to "-$1,3…"; here it steps the font down until it fits (floored so it stays readable), and stays
+ * hidden until the fitting size is known so there's no visible reflow.
+ */
+@Composable
+private fun AutoFitValue(
+    value: String,
+    color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+) {
+    var fontSize by remember(value) { mutableStateOf(16.sp) }
+    var readyToDraw by remember(value) { mutableStateOf(false) }
+    Text(
+        value,
+        style = Pulse.dataType.dataSmall.copy(fontSize = fontSize),
+        color = color,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+        modifier = modifier.drawWithContent { if (readyToDraw) drawContent() },
+        onTextLayout = { result ->
+            if (result.hasVisualOverflow && fontSize.value > 11f) {
+                fontSize = (fontSize.value * 0.92f).sp
+            } else {
+                readyToDraw = true
+            }
+        },
+    )
 }
 
 /** Home's review-queue content card (#29) — the count as a live datum, tappable to the queue. */

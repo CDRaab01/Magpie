@@ -53,6 +53,11 @@ interface ApiService {
         @Query("start") start: String? = null,
         @Query("end") end: String? = null,
         @Query("review_state") reviewState: String? = null,
+        @Query("kind") kind: String? = null, // #32 spend/income filter
+        @Query("account_id") accountId: String? = null, // #32 account filter
+        @Query("q") query: String? = null, // #32 merchant search
+        @Query("limit") limit: Int? = null, // #32 infinite scroll
+        @Query("offset") offset: Int? = null,
     ): List<TransactionOut>
 
     @POST("transactions")

@@ -82,6 +82,11 @@ private class FakeApi : ApiService {
         start: String?,
         end: String?,
         reviewState: String?,
+        kind: String?,
+        accountId: String?,
+        query: String?,
+        limit: Int?,
+        offset: Int?,
     ): List<TransactionOut> {
         gate()
         return emptyList()

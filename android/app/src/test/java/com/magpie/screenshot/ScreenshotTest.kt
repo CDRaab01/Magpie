@@ -42,6 +42,7 @@ import com.magpie.ui.rules.RulesContent
 import com.magpie.ui.rules.RulesUiState
 import com.magpie.ui.home.HomeContent
 import com.magpie.ui.home.HomeUiState
+import com.magpie.ui.onboarding.OnboardingContent
 import com.magpie.ui.reviewqueue.ReviewQueueContent
 import com.magpie.ui.reviewqueue.ReviewQueueUiState
 import com.magpie.ui.settings.SettingsContent
@@ -154,20 +155,50 @@ class ScreenshotTest {
 
     @Test
     fun transactions_empty_light() = capture("transactions_empty_light", dark = false) {
-        TransactionsContent(
-            state = TransactionsUiState.Ready(emptyList(), emptyMap(), TxnFilter.ALL),
-            onSetFilter = {},
-            onSplit = { _, _ -> },
+        TxnScene(
+            TransactionsUiState.Ready(
+                items = emptyList(), categoryNamesById = emptyMap(), accounts = emptyList(),
+                categories = emptyList(), filter = TxnFilter.ALL, accountId = null, query = "",
+                endReached = true,
+            ),
         )
     }
 
     @Test
     fun transactions_empty_dark() = capture("transactions_empty_dark", dark = true) {
-        TransactionsContent(
-            state = TransactionsUiState.Ready(emptyList(), emptyMap(), TxnFilter.ALL),
-            onSetFilter = {},
-            onSplit = { _, _ -> },
+        TxnScene(
+            TransactionsUiState.Ready(
+                items = emptyList(), categoryNamesById = emptyMap(), accounts = emptyList(),
+                categories = emptyList(), filter = TxnFilter.ALL, accountId = null, query = "",
+                endReached = true,
+            ),
         )
+    }
+
+    @Test
+    fun onboarding_welcome_light() = capture("onboarding_welcome_light", dark = false) {
+        OnboardingContent(0, false, null, {}, { _, _, _, _ -> }, {}, {}, {})
+    }
+
+    @Test
+    fun onboarding_welcome_dark() = capture("onboarding_welcome_dark", dark = true) {
+        OnboardingContent(0, false, null, {}, { _, _, _, _ -> }, {}, {}, {})
+    }
+
+    @Test
+    fun onboarding_account_light() = capture("onboarding_account_light", dark = false) {
+        OnboardingContent(1, false, null, {}, { _, _, _, _ -> }, {}, {}, {})
+    }
+
+    // #35 a11y guard: the money-dense Home at font scale 1.3 must not truncate.
+    @Test
+    fun home_large_font_light() = capture("home_large_font_light", dark = false) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
+                density = androidx.compose.ui.platform.LocalDensity.current.density,
+                fontScale = 1.3f,
+            ),
+        ) { HomeReadyScene() }
     }
 
     @Test
@@ -234,6 +265,20 @@ private fun SplitSheetScene() {
 }
 
 @Composable
+private fun TxnScene(state: TransactionsUiState) {
+    TransactionsContent(
+        state = state,
+        onSetFilter = {},
+        onSetAccount = {},
+        onSetQuery = {},
+        onLoadMore = {},
+        onRecategorize = { _, _ -> },
+        onSplit = { _, _ -> },
+        onDelete = {},
+    )
+}
+
+@Composable
 private fun TransactionsScene() {
     fun txn(id: String, merchant: String, amount: Long, kind: String, categoryId: String) =
         TransactionOut(
@@ -243,9 +288,9 @@ private fun TransactionsScene() {
             source = "csv", matchedRuleId = null, ruleNote = null, aiSuggestedCategoryId = null,
             createdAt = "2026-07-15T00:00:00Z",
         )
-    TransactionsContent(
-        state = TransactionsUiState.Ready(
-            all = listOf(
+    TxnScene(
+        TransactionsUiState.Ready(
+            items = listOf(
                 txn("1", "XCEL ENERGY", -4500, "spend", "cat-util"),
                 txn("2", "EMPLOYER PAYROLL", 450000, "income", "cat-income"),
                 txn("3", "SAMPLE BISTRO", -3200, "spend", "cat-dining"),
@@ -253,10 +298,16 @@ private fun TransactionsScene() {
             categoryNamesById = mapOf(
                 "cat-util" to "Utilities", "cat-income" to "Income", "cat-dining" to "Dining",
             ),
+            accounts = listOf(
+                AccountOut("acct-1", "Checking", "US Bank", "depository", null, true, 318000, 0),
+                AccountOut("acct-2", "Amex", "American Express", "card", "1234", true, -132000, null),
+            ),
+            categories = emptyList(),
             filter = TxnFilter.ALL,
+            accountId = null,
+            query = "",
+            endReached = true,
         ),
-        onSetFilter = {},
-        onSplit = { _, _ -> },
     )
 }
 

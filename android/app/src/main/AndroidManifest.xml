@@ -27,6 +27,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- #34: ntfy alert deep links. Tapping a notification whose Click header is
+                 magpie://<host> (bills/cashflow/accounts/review/home) opens the app on that
+                 screen; MainActivity reads the host and MagpieNavHost routes it. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="magpie" />
+            </intent-filter>
         </activity>
 
         <!-- AppAuth (suite SSO) themes its AuthorizationManagementActivity as AppCompat but

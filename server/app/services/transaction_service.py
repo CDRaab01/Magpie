@@ -61,6 +61,7 @@ async def list_transactions(
     start: datetime.date | None = None,
     end: datetime.date | None = None,
     review_state: str | None = None,
+    kind: str | None = None,
     account_id: uuid.UUID | None = None,
     q: str | None = None,
     limit: int | None = None,
@@ -80,6 +81,8 @@ async def list_transactions(
         query = query.where(Transaction.date <= end)
     if review_state is not None:
         query = query.where(Transaction.review_state == review_state)
+    if kind is not None:
+        query = query.where(Transaction.kind == kind)
     if account_id is not None:
         query = query.where(Transaction.account_id == account_id)
     if q:
