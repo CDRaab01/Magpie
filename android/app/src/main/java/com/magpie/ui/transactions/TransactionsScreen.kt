@@ -1,5 +1,6 @@
 package com.magpie.ui.transactions
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,11 +10,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -31,38 +31,46 @@ import com.magpie.ui.theme.MagpieTheme
 import com.magpie.util.formatCents
 import design.pulse.ui.components.PanelCard
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionsScreen(navController: NavController) {
     val viewModel: TransactionsViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    TransactionsContent(state = state, onSetFilter = viewModel::setFilter)
+}
 
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("Transactions") })
-        },
-    ) { padding ->
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun TransactionsContent(
+    state: TransactionsUiState,
+    onSetFilter: (TxnFilter) -> Unit,
+) {
+    Scaffold(topBar = { TopAppBar(title = { Text("Transactions") }) }) { padding ->
         when (val s = state) {
             is TransactionsUiState.Loading -> Box(
-                Modifier.fillMaxSize().padding(padding),
-                Alignment.Center,
+                Modifier.fillMaxSize().padding(padding), Alignment.Center,
             ) { CircularProgressIndicator() }
 
             is TransactionsUiState.Error -> Box(
-                Modifier.fillMaxSize().padding(padding),
-                Alignment.Center,
+                Modifier.fillMaxSize().padding(padding), Alignment.Center,
             ) { Text(s.message, color = MaterialTheme.colorScheme.error) }
 
-            is TransactionsUiState.Ready -> {
-                if (s.transactions.isEmpty()) {
-                    Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
+            is TransactionsUiState.Ready -> Column(Modifier.padding(padding).fillMaxSize()) {
+                FilterRow(selected = s.filter, onSelect = onSetFilter)
+                val visible = s.visible
+                when {
+                    s.all.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                         Text("No transactions yet.")
                     }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.padding(padding).padding(MagpieTheme.spacing.md),
+                    visible.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        Text("Nothing matches “${s.filter.label}”.")
+                    }
+                    else -> LazyColumn(
+                        modifier = Modifier.padding(horizontal = MagpieTheme.spacing.md),
                     ) {
-                        items(s.transactions, key = { it.id }) { txn -> TransactionRow(txn) }
+                        items(visible, key = { it.id }) { txn ->
+                            TransactionRow(txn, s.categoryNamesById[txn.categoryId])
+                        }
                     }
                 }
             }
@@ -71,7 +79,26 @@ fun TransactionsScreen(navController: NavController) {
 }
 
 @Composable
-private fun TransactionRow(txn: TransactionOut) {
+private fun FilterRow(selected: TxnFilter, onSelect: (TxnFilter) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = MagpieTheme.spacing.md, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        TxnFilter.entries.forEach { filter ->
+            FilterChip(
+                selected = selected == filter,
+                onClick = { onSelect(filter) },
+                label = { Text(filter.label) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TransactionRow(txn: TransactionOut, categoryName: String?) {
     // Color grammar (#31): ordinary spend is neutral — red is reserved for real deviations, not
     // the app's most common row. Only income gets the green channel; everything else stays neutral.
     val isIncome = txn.kind == "income"
@@ -82,7 +109,10 @@ private fun TransactionRow(txn: TransactionOut) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
                 Text(txn.merchantRaw ?: txn.kind.replaceFirstChar { it.uppercase() })
-                Text(txn.date, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    listOfNotNull(txn.date, categoryName).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
             Text(formatCents(txn.amount), color = amountColor)
         }

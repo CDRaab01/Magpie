@@ -30,6 +30,9 @@ import com.magpie.ui.cashflow.CashflowContent
 import com.magpie.ui.cashflow.CashflowUiState
 import com.magpie.ui.navigation.MagpieBottomBar
 import com.magpie.ui.navigation.Routes
+import com.magpie.ui.transactions.TransactionsContent
+import com.magpie.ui.transactions.TransactionsUiState
+import com.magpie.ui.transactions.TxnFilter
 import com.magpie.ui.rules.RuleRow
 import com.magpie.ui.rules.RulesContent
 import com.magpie.ui.rules.RulesUiState
@@ -138,6 +141,38 @@ class ScreenshotTest {
 
     @Test
     fun bottom_bar_dark() = capture("bottom_bar_dark", dark = true) { BottomBarScene() }
+
+    @Test
+    fun transactions_light() = capture("transactions_light", dark = false) { TransactionsScene() }
+
+    @Test
+    fun transactions_dark() = capture("transactions_dark", dark = true) { TransactionsScene() }
+}
+
+@Composable
+private fun TransactionsScene() {
+    fun txn(id: String, merchant: String, amount: Long, kind: String, categoryId: String) =
+        TransactionOut(
+            id = id, accountId = "acct-1", amount = amount, currency = "USD", date = "2026-07-15",
+            status = "posted", merchantRaw = merchant, merchantNorm = merchant,
+            categoryId = categoryId, kind = kind, transferGroup = null, reviewState = "confirmed",
+            source = "csv", matchedRuleId = null, ruleNote = null, aiSuggestedCategoryId = null,
+            createdAt = "2026-07-15T00:00:00Z",
+        )
+    TransactionsContent(
+        state = TransactionsUiState.Ready(
+            all = listOf(
+                txn("1", "XCEL ENERGY", -4500, "spend", "cat-util"),
+                txn("2", "EMPLOYER PAYROLL", 450000, "income", "cat-income"),
+                txn("3", "SAMPLE BISTRO", -3200, "spend", "cat-dining"),
+            ),
+            categoryNamesById = mapOf(
+                "cat-util" to "Utilities", "cat-income" to "Income", "cat-dining" to "Dining",
+            ),
+            filter = TxnFilter.ALL,
+        ),
+        onSetFilter = {},
+    )
 }
 
 @Composable
