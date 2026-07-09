@@ -469,6 +469,11 @@ ROADMAP.md non-goal for now), so `actual_cents` is computed at read time via the
 that category+month. Migration `0004` (Phase 7) added `transactions
 .ai_suggested_category_id` — a draft, never a confirmed fact, kept structurally separate
 from `category_id` so an AI suggestion can never be mistaken for a human/rule decision.
+`GET /cashflow` (`app/routers/cashflow.py` → `cashflow_service` → pure `app/rules/cashflow.py`,
+Tier 3 #23, 2026-07-08) is the "due before next paycheck" projection: the next paycheck (soonest
+`expected_next_date` across recurring-income rules) + the account's unmatched upcoming bills, each
+flagged `is_overdue`/`before_next_paycheck`. Backend only so far — the Android calendar screen that
+consumes it is the follow-up.
 
 **Planned (Phase 8):** suite membership + release + operational fit — see CLAUDE.md §10.
 No further domains are planned beyond that; Phase 7 was the last content phase.
