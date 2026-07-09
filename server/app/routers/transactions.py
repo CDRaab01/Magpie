@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.schemas.transaction import (
     MonthlySummaryOut,
+    SplitRequest,
+    SplitResult,
     TransactionCreate,
     TransactionOut,
     TransactionUpdate,
@@ -19,7 +21,9 @@ from app.services.transaction_service import (
     get_transaction,
     list_transactions,
     monthly_summary,
+    split_transaction,
     unpair_transaction,
+    unsplit_transaction,
     update_transaction,
 )
 
@@ -90,6 +94,22 @@ async def unpair(transaction_id: uuid.UUID, current_user: CurrentUser, db: DbSes
     """Dissolve the transfer pair this transaction belongs to (F12) — both legs revert to their
     sign-based kind and return to the review queue."""
     return await unpair_transaction(db, current_user.id, transaction_id)
+
+
+@router.post("/{transaction_id}/split", response_model=SplitResult)
+async def split(
+    transaction_id: uuid.UUID, req: SplitRequest, current_user: CurrentUser, db: DbSession
+):
+    """Split one transaction across categories (#26). Parts must sum to the transaction's amount;
+    the parent stays the ledger row and its parts hold the category breakdown."""
+    parent, parts = await split_transaction(db, current_user.id, transaction_id, req)
+    return SplitResult(parent=parent, parts=parts)
+
+
+@router.delete("/{transaction_id}/split", response_model=TransactionOut)
+async def unsplit(transaction_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+    """Undo a split — delete the parts and return the parent to an ordinary row."""
+    return await unsplit_transaction(db, current_user.id, transaction_id)
 
 
 @router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)

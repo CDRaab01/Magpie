@@ -61,7 +61,14 @@ async def actual_spend_by_category(
     result = await db.execute(
         select(Transaction)
         .join(Account, Transaction.account_id == Account.id)
-        .where(Account.user_id == user_id, Transaction.date >= start, Transaction.date <= end)
+        .where(
+            Account.user_id == user_id,
+            Transaction.date >= start,
+            Transaction.date <= end,
+            # A split parent is excluded here — its child parts carry the category breakdown, so
+            # the split's spend lands in the right categories and isn't double-counted (#26).
+            Transaction.is_split.is_(False),
+        )
     )
     rollup_input = (
         TransactionForCategoryRollup(t.category_id, t.kind, t.amount)

@@ -455,7 +455,14 @@ when supplied, never blindly trusted; and changing a transfer leg's kind away fr
 `"transfer"` now dissolves the whole `transfer_group` so no dangling half-group is left, F12);
 `POST /transactions/{id}/unpair` dissolves a transfer pair explicitly (both legs revert to
 their sign-based kind and return to review, F12); `GET /transactions?review_state=needs_review`
-is the review queue's read. `GET/POST /bills`, `POST /bills/{id}/rematch` (`app/routers/bills.py` +
+is the review queue's read. **Transaction splits (Tier 3 #26, 2026-07-08, migration
+`f3b8c2e9a1d7`):** `POST /transactions/{id}/split` (parts must sum to the amount, ≥2, sign-valid,
+not a transfer/already-split) creates child allocations (`split_parent_id` set) and marks the
+parent `is_split`; `DELETE …/split` reverses it. No double-count by construction — the parent stays
+the ledger row (balance/list/month totals filter `split_parent_id IS NULL`) while the parts carry
+the category breakdown (budget rollup filters `NOT is_split`); 7 tests pin that month total +
+balance are unchanged by a split while budget actuals move to the parts. The split *UI* lands on the
+rebuilt Transactions screen (Tier 4 #32). `GET/POST /bills`, `POST /bills/{id}/rematch` (`app/routers/bills.py` +
 `app/services/bill_service.py`) — no migration needed: `BillStatement.account_id` is
 required, so it scopes via the same join-to-`Account.user_id` pattern Phase 3's
 `StatementCheckpoint` already established, no nullable-join gap to close. `is_missing` is

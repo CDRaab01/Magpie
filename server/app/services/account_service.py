@@ -86,7 +86,12 @@ async def _checkpoint_anchors(
 
 async def _dated_amounts(db: AsyncSession, account_id: uuid.UUID) -> list[DatedAmount]:
     result = await db.execute(
-        select(Transaction.date, Transaction.amount).where(Transaction.account_id == account_id)
+        select(Transaction.date, Transaction.amount).where(
+            Transaction.account_id == account_id,
+            # A split parent carries the full amount; its child parts are excluded so the money
+            # isn't double-counted in the balance (#26).
+            Transaction.split_parent_id.is_(None),
+        )
     )
     return [DatedAmount(date=d, amount=a) for d, a in result.all()]
 

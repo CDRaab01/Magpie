@@ -87,7 +87,24 @@ class TransactionOut(BaseModel):
     matched_rule_id: uuid.UUID | None
     rule_note: str | None
     ai_suggested_category_id: uuid.UUID | None
+    is_split: bool
+    split_parent_id: uuid.UUID | None
     created_at: datetime.datetime
+
+
+class SplitPart(BaseModel):
+    category_id: uuid.UUID
+    amount: int  # signed cents; all parts must sum to the parent's amount
+    kind: str
+
+
+class SplitRequest(BaseModel):
+    parts: list[SplitPart]
+
+
+class SplitResult(BaseModel):
+    parent: TransactionOut
+    parts: list[TransactionOut]
 
 
 class MonthlySummaryOut(BaseModel):

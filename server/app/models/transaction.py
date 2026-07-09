@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, String, func
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -65,6 +65,16 @@ class Transaction(Base):
     # AI suggestion can never be mistaken for a human/rule decision.
     ai_suggested_category_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
+    # Transaction splits (V1.md Tier 3 #26). `is_split` marks the *parent* — the real ledger row,
+    # which still carries the full amount for balance/list/month totals but is excluded from
+    # category rollups (its child parts hold the category breakdown). `split_parent_id` marks a
+    # *child* part; children are internal allocations (their amounts sum to the parent's), invisible
+    # to balance/list/month totals and seen only by the category rollup, so the money is counted
+    # exactly once either way. A row is never both.
+    is_split: Mapped[bool] = mapped_column(Boolean, default=False)
+    split_parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"), nullable=True, index=True
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

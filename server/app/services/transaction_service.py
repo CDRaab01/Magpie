@@ -10,7 +10,7 @@ from app.ledger.classify import validate_kind_amount_sign
 from app.ledger.rollups import MonthlyRollup, TransactionForRollup, rollup_month
 from app.models.account import Account
 from app.models.transaction import Transaction
-from app.schemas.transaction import TransactionCreate, TransactionUpdate
+from app.schemas.transaction import SplitRequest, TransactionCreate, TransactionUpdate
 from app.services.rule_service import advance_matched_rule_on_confirm
 
 
@@ -67,7 +67,9 @@ async def list_transactions(
     query = (
         select(Transaction)
         .join(Account, Transaction.account_id == Account.id)
-        .where(Account.user_id == user_id)
+        # Split child parts are internal category allocations — hidden from the list and month
+        # totals; the split *parent* stays and carries the full amount (#26).
+        .where(Account.user_id == user_id, Transaction.split_parent_id.is_(None))
         .order_by(Transaction.date.desc(), Transaction.created_at.desc())
     )
     if start is not None:
@@ -195,3 +197,75 @@ async def monthly_summary(
     end = datetime.date(year, month, monthrange(year, month)[1])
     txns = await list_transactions(db, user_id, start=start, end=end)
     return rollup_month(TransactionForRollup(t.kind, t.amount) for t in txns)
+
+
+async def split_transaction(
+    db: AsyncSession, user_id: uuid.UUID, transaction_id: uuid.UUID, req: SplitRequest
+) -> tuple[Transaction, list[Transaction]]:
+    """Split one transaction into category allocations (V1.md Tier 3 #26 — groceries + cash-back
+    is the canonical case). The parent stays the ledger row (keeps its full amount for balance and
+    month totals) and is marked `is_split`; each part becomes a child that carries a category and
+    sums, with its siblings, to the parent's amount — so the money is never double-counted. Splitting
+    is itself a confirmation, so the parent (and its parts) leave the review queue."""
+    parent = await get_transaction(db, user_id, transaction_id)
+    if parent.is_split or parent.split_parent_id is not None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Transaction is already split or is a split part"
+        )
+    if parent.transfer_group is not None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "A transfer can't be split")
+    if len(req.parts) < 2:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "A split needs at least two parts"
+        )
+    if sum(p.amount for p in req.parts) != parent.amount:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Split parts must sum to the transaction amount"
+        )
+    for part in req.parts:
+        try:
+            validate_kind_amount_sign(part.kind, part.amount)
+        except ValueError as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e))
+
+    children: list[Transaction] = []
+    for part in req.parts:
+        child = Transaction(
+            account_id=parent.account_id,
+            amount=part.amount,
+            currency=parent.currency,
+            date=parent.date,
+            status=parent.status,
+            merchant_raw=parent.merchant_raw,
+            category_id=part.category_id,
+            kind=part.kind,
+            review_state="confirmed",
+            source="split",
+            split_parent_id=parent.id,
+        )
+        db.add(child)
+        children.append(child)
+    parent.is_split = True
+    parent.review_state = "confirmed"
+    parent.category_id = None  # the parent has no single category once it's split
+    await db.commit()
+    await db.refresh(parent)
+    for child in children:
+        await db.refresh(child)
+    return parent, children
+
+
+async def unsplit_transaction(
+    db: AsyncSession, user_id: uuid.UUID, transaction_id: uuid.UUID
+) -> Transaction:
+    """Undo a split: delete the child parts and return the parent to an ordinary (unsplit) row."""
+    parent = await get_transaction(db, user_id, transaction_id)
+    if not parent.is_split:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Transaction is not split")
+    result = await db.execute(select(Transaction).where(Transaction.split_parent_id == parent.id))
+    for child in result.scalars().all():
+        await db.delete(child)
+    parent.is_split = False
+    await db.commit()
+    await db.refresh(parent)
+    return parent
