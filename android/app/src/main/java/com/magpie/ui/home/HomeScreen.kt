@@ -25,18 +25,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.ui.navigation.Routes
 import com.magpie.ui.theme.MagpieTheme
-import com.magpie.util.formatCents
+import com.magpie.util.formatCentsCompact
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
-import design.pulse.ui.components.StatTile
+import design.pulse.ui.theme.Pulse
 
 /** Thin ViewModel-wired wrapper. [HomeContent] below is the pure, screenshot-testable half. */
 @Composable
@@ -127,23 +129,45 @@ private fun MonthPanel(summary: MonthlySummaryOut) {
         SectionHeader(label = "This month", channel = MagpieTheme.colors.money.base)
         Spacer(Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatTile(
-                label = "Income",
-                value = formatCents(summary.incomeCents),
-                channel = MagpieTheme.colors.underBudget.base,
-                modifier = Modifier.weight(1f),
+            MonthStatTile("Income", formatCentsCompact(summary.incomeCents),
+                MagpieTheme.colors.underBudget.base, Modifier.weight(1f))
+            MonthStatTile("Spend", formatCentsCompact(summary.spendCents),
+                MagpieTheme.colors.overBudget.base, Modifier.weight(1f))
+            MonthStatTile("Net", formatCentsCompact(summary.netCents),
+                MagpieTheme.colors.money.base, Modifier.weight(1f))
+        }
+    }
+}
+
+/**
+ * Local month-panel metric tile (#30). Mirrors Pulse's dense `StatTile` (mono numerals) but pins
+ * the value to a single line (`maxLines = 1, softWrap = false`) at a slightly smaller size, so a
+ * money value — inherently longer than the siblings' "148"/"101 g" — fits a 1/3-width column
+ * instead of wrapping mid-number.
+ */
+@Composable
+private fun MonthStatTile(
+    label: String,
+    value: String,
+    channel: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+) {
+    PanelCard(channel = channel, modifier = modifier, contentPadding = 14.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                label.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            StatTile(
-                label = "Spend",
-                value = formatCents(summary.spendCents),
-                channel = MagpieTheme.colors.overBudget.base,
-                modifier = Modifier.weight(1f),
-            )
-            StatTile(
-                label = "Net",
-                value = formatCents(summary.netCents),
-                channel = MagpieTheme.colors.money.base,
-                modifier = Modifier.weight(1f),
+            Text(
+                value,
+                style = Pulse.dataType.dataSmall.copy(fontSize = 16.sp),
+                color = channel,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
