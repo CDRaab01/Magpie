@@ -18,6 +18,31 @@ class CategorySuggestion(BaseModel):
     reasoning: str
 
 
+def _extract_json_object(raw: str) -> str:
+    """Pull the JSON object out of a chat model's reply.
+
+    Instruction-tuned models (verified against the suite's local gemma-4-e4b) routinely wrap
+    JSON in a ```json … ``` markdown fence or add a line of prose around it, even when asked for
+    "only JSON". `model_validate_json` needs a bare object, so a raw fenced reply parses as
+    nothing and every suggestion is silently dropped. Strip a leading/trailing code fence, then
+    take the outermost {...} span — clean JSON passes through unchanged.
+    """
+    s = raw.strip()
+    if s.startswith("```"):
+        s = s[3:]
+        if s[:4].lower() == "json":
+            s = s[4:]
+        fence = s.rfind("```")
+        if fence != -1:
+            s = s[:fence]
+        s = s.strip()
+    start = s.find("{")
+    end = s.rfind("}")
+    if start != -1 and end > start:
+        return s[start : end + 1]
+    return s
+
+
 def build_prompt(
     *, merchant: str | None, amount_cents: int, kind: str, category_names: list[str]
 ) -> str:
@@ -52,7 +77,7 @@ async def suggest_category(
     )
     try:
         raw = await client.complete(prompt)
-        parsed = CategorySuggestion.model_validate_json(raw)
+        parsed = CategorySuggestion.model_validate_json(_extract_json_object(raw))
     except (ValidationError, ValueError):
         return None
     return categories.get(parsed.category_name)

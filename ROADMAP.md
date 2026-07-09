@@ -161,9 +161,18 @@ extracts structured plan/program drafts from conversation; Plate has coach chat 
 vision. Guardrails unchanged (§6): local model only, DB-derived context (never raw emails),
 Pydantic-validated, drafts never auto-commit, descriptive never advisory.
 
-17. **Turn it on.** `[H]`-adjacent: set `llm_base_url` to the live LM Studio, verify category
-    -draft quality against real post-backfill data, tune the prompt if needed. Category
-    drafts are the review queue's third stage and may not slip.
+17. **Turn it on.** **LIVE-PROBED 2026-07-09 against the suite's `google/gemma-4-e4b`** (the
+    model Spotter/Plate use, served by LM Studio on `:1234`). Two findings: (a) **a real bug the
+    fake-client tests hid** — gemma wraps its JSON in a ```json … ``` markdown fence even when
+    told "only JSON", so `model_validate_json` dropped **every** suggestion (0/12) in production
+    while CI stayed green; **fixed** (`_extract_json_object` strips the fence / takes the outermost
+    `{...}`, + 3 regression tests using the real reply shape). (b) **Quality is good** — after the
+    fix, 11/12 matched the obvious category, the 1 "miss" defensible (MEIJER→Shopping for a
+    superstore), 0 parse failures, ~3.7 s/draft (fine for a background review-queue suggestion).
+    **Still owner-gated:** set `llm_base_url`/`llm_model` in the live server's compose
+    `environment:` (invariant #4) to actually enable the stage in prod, then re-verify draft
+    quality against real post-backfill merchants. Category drafts are the review queue's third
+    stage and may not slip.
 18. **Monthly insight note** — the unbuilt pitch feature. An LLM-written "what changed"
     (top category deltas vs the trailing median, new recurrences, budget verdicts) generated
     from Wave 1's read models — aggregates in, prose out, never raw rows. Surfaced as a Home

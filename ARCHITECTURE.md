@@ -24,9 +24,13 @@
 >    alerts stand (owner set up US Bank/Amex/Discover only). Exact alert senders:
 >    `AmericanExpress@welcome.americanexpress.com`, `usbank@notifications.usbank.com`,
 >    `discover@services.discover.com`.
-> 2. **The production LLM has never fired** (`llm_base_url` unset — the AI stage silently
->    skips): category drafts are built and guardrail-tested against `FakeLlmClient` only, and
->    "first insights" (plain-language summaries) were never built at all (ROADMAP.md Wave 2).
+> 2. **The production LLM is not yet enabled** (`llm_base_url` unset in the live server — the AI
+>    stage silently skips), **but the client has now been live-probed** against the suite's
+>    `google/gemma-4-e4b` (2026-07-09): it surfaced a real bug the fake-client tests hid (gemma
+>    fences its JSON, which dropped every suggestion) — now fixed with fence-tolerant extraction —
+>    and confirmed good draft quality (11/12, ~3.7 s/draft). Enabling it in prod is an owner-gated
+>    compose-`environment:` change. **"First insights"** (plain-language summaries) were never
+>    built at all (ROADMAP.md Wave 2).
 > 3. **No `bill_issued` email parser** — Discover's statement-ready sender is still
 >    unconfirmed (browser flakiness; don't guess) — **and no parser-replay tool (F15)**;
 >    bills enter via `POST /bills` only.
@@ -356,7 +360,13 @@ facts (merchant, amount, kind) and the category vocabulary, never a raw email. G
 tests (`test_ai_categorize.py`) pin all four failure modes (malformed JSON, missing field,
 out-of-vocabulary answer, zero categories available never even calling the model) plus a
 happy path — all against `FakeLlmClient`, exactly CLAUDE.md's "IMAP + LM Studio + ntfy
-always mocked in CI" rule.
+always mocked in CI" rule. **Live-probe fix (2026-07-09):** exercising the real
+`LmStudioClient` against the suite's `google/gemma-4-e4b` revealed the model wraps its JSON in a
+```json … ``` markdown fence even when told "only JSON", so `model_validate_json` rejected
+*every* real suggestion while the clean-JSON fake stayed green. `suggest_category` now runs the
+reply through `_extract_json_object` (strip a code fence, else take the outermost `{...}` span)
+before validation; three regression tests reproduce the real reply shape (fenced, prose-wrapped,
+clean). This is why the fake must mimic the *real* reply shape, not an idealized one.
 
 **Bill matching (built, Phase 6):** `app/rules/bill_matching.py` — pure — pairs a
 `BillStatement` to the closest-dated payment on its bound account (CLAUDE.md §2: each
