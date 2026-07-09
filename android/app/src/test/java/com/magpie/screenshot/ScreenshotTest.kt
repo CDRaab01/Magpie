@@ -26,8 +26,11 @@ import com.magpie.ui.bills.BillsUiState
 import com.magpie.ui.budgets.BudgetRow
 import com.magpie.ui.budgets.BudgetsContent
 import com.magpie.ui.budgets.BudgetsUiState
+import com.magpie.ui.cashentry.CashEntryContent
+import com.magpie.ui.cashentry.CashEntryFormState
 import com.magpie.ui.cashflow.CashflowContent
 import com.magpie.ui.cashflow.CashflowUiState
+import com.magpie.ui.signin.SignInContent
 import com.magpie.ui.navigation.MagpieBottomBar
 import com.magpie.ui.navigation.Routes
 import com.magpie.ui.transactions.SplitSheetContent
@@ -172,6 +175,47 @@ class ScreenshotTest {
 
     @Test
     fun split_sheet_dark() = capture("split_sheet_dark", dark = true) { SplitSheetScene() }
+
+    @Test
+    fun sign_in_light() = capture("sign_in_light", dark = false) { SignInScene() }
+
+    @Test
+    fun sign_in_dark() = capture("sign_in_dark", dark = true) { SignInScene() }
+
+    @Test
+    fun cash_entry_light() = capture("cash_entry_light", dark = false) { CashEntryScene() }
+
+    @Test
+    fun cash_entry_dark() = capture("cash_entry_dark", dark = true) { CashEntryScene() }
+}
+
+@Composable
+private fun SignInScene() {
+    SignInContent(error = null, onSignIn = {})
+}
+
+@Composable
+private fun CashEntryScene() {
+    CashEntryContent(
+        state = CashEntryFormState(
+            accounts = listOf(
+                AccountOut(
+                    id = "1", name = "Checking", institution = "US Bank", type = "depository",
+                    last4 = null, active = true, balanceCents = 318000, balanceDeltaCents = 0,
+                ),
+                AccountOut(
+                    id = "2", name = "Amex", institution = "American Express", type = "card",
+                    last4 = "1234", active = true, balanceCents = -132000, balanceDeltaCents = null,
+                ),
+            ),
+            categories = listOf(
+                CategoryOut(id = "cat-dining", name = "Dining", shared = true),
+                CategoryOut(id = "cat-groceries", name = "Groceries", shared = true),
+            ),
+        ),
+        onBack = {},
+        onSubmit = { _, _, _, _, _ -> },
+    )
 }
 
 @Composable

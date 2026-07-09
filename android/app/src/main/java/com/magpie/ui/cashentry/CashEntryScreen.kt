@@ -35,12 +35,32 @@ import androidx.navigation.NavController
 import com.magpie.ui.theme.MagpieTheme
 import design.pulse.ui.components.PulseButton
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun CashEntryScreen(navController: NavController) {
     val viewModel: CashEntryViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
 
+    LaunchedEffect(state.saved) {
+        if (state.saved) navController.popBackStack()
+    }
+
+    CashEntryContent(
+        state = state,
+        onBack = { navController.popBackStack() },
+        onSubmit = { accountId, dollars, kind, merchant, categoryId ->
+            viewModel.submit(accountId, dollars, kind, merchant, categoryId)
+        },
+    )
+}
+
+/** Pure form (screenshot-testable): the one manual-entry surface. Holds its own field state. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+internal fun CashEntryContent(
+    state: CashEntryFormState,
+    onBack: () -> Unit,
+    onSubmit: (accountId: String, dollars: Double, kind: String, merchant: String, categoryId: String?) -> Unit,
+) {
     var selectedAccountId by remember { mutableStateOf<String?>(null) }
     var selectedCategoryId by remember { mutableStateOf<String?>(null) }
     var kind by remember { mutableStateOf("spend") }
@@ -50,16 +70,13 @@ fun CashEntryScreen(navController: NavController) {
     LaunchedEffect(state.accounts) {
         if (selectedAccountId == null) selectedAccountId = state.accounts.firstOrNull()?.id
     }
-    LaunchedEffect(state.saved) {
-        if (state.saved) navController.popBackStack()
-    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Add transaction") },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -145,7 +162,7 @@ fun CashEntryScreen(navController: NavController) {
                 enabled = !state.saving && dollars != null && dollars > 0 && selectedAccountId != null,
                 onClick = {
                     selectedAccountId?.let { accountId ->
-                        viewModel.submit(accountId, dollars!!, kind, merchant, selectedCategoryId)
+                        onSubmit(accountId, dollars!!, kind, merchant, selectedCategoryId)
                     }
                 },
             )

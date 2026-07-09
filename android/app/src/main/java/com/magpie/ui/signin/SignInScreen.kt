@@ -57,6 +57,15 @@ fun SignInScreen() {
         ActivityResultContracts.StartActivityForResult(),
     ) { result -> viewModel.onSignInResult(result.data) }
 
+    SignInContent(
+        error = error,
+        onSignIn = { launcher.launch(viewModel.authorizeIntent()) },
+    )
+}
+
+/** Pure presentation (screenshot-testable): the tailnet SSO landing. */
+@Composable
+internal fun SignInContent(error: String?, onSignIn: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Magpie", style = MaterialTheme.typography.headlineLarge)
@@ -66,10 +75,7 @@ fun SignInScreen() {
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(32.dp))
-            PulseButton(
-                text = "Sign in with Dragonfly",
-                onClick = { launcher.launch(viewModel.authorizeIntent()) },
-            )
+            PulseButton(text = "Sign in with Dragonfly", onClick = onSignIn)
             error?.let {
                 Spacer(Modifier.height(16.dp))
                 Text(it, color = MaterialTheme.colorScheme.error)
