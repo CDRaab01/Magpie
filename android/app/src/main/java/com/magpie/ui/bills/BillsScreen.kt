@@ -91,7 +91,9 @@ private fun BillRow(bill: BillOut) {
                 }
                 Text(status, style = MaterialTheme.typography.bodySmall, color = channel)
             }
-            Text(formatCents(-bill.amountDue), color = channel)
+            // Color grammar (#31): color the status *word* (above), never the amount — a paid
+            // bill's amount rendering green broke the sign grammar. The amount stays neutral.
+            Text(formatCents(-bill.amountDue), color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }

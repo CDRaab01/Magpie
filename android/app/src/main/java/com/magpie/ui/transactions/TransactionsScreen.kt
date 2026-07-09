@@ -72,19 +72,19 @@ fun TransactionsScreen(navController: NavController) {
 
 @Composable
 private fun TransactionRow(txn: TransactionOut) {
-    val channel = when (txn.kind) {
-        "income" -> MagpieTheme.colors.underBudget.base
-        "spend" -> MagpieTheme.colors.overBudget.base
-        "refund" -> MagpieTheme.colors.underBudget.base
-        else -> MagpieTheme.colors.money.base
-    }
-    PanelCard(channel = channel, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    // Color grammar (#31): ordinary spend is neutral — red is reserved for real deviations, not
+    // the app's most common row. Only income gets the green channel; everything else stays neutral.
+    val isIncome = txn.kind == "income"
+    val accent = if (isIncome) MagpieTheme.colors.underBudget.base else null
+    val amountColor =
+        if (isIncome) MagpieTheme.colors.underBudget.base else MaterialTheme.colorScheme.onSurface
+    PanelCard(channel = accent, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
                 Text(txn.merchantRaw ?: txn.kind.replaceFirstChar { it.uppercase() })
                 Text(txn.date, style = MaterialTheme.typography.bodySmall)
             }
-            Text(formatCents(txn.amount), color = channel)
+            Text(formatCents(txn.amount), color = amountColor)
         }
     }
 }

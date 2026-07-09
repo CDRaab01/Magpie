@@ -169,10 +169,12 @@ private fun MonthPanel(summary: MonthlySummaryOut) {
         SectionHeader(label = "This month", channel = MagpieTheme.colors.money.base)
         Spacer(Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Color grammar (#31): income green, net teal (money), but spend is neutral — with the
+            // transaction rows now neutral too, red is reserved for real deviations.
             MonthStatTile("Income", formatCentsCompact(summary.incomeCents),
                 MagpieTheme.colors.underBudget.base, Modifier.weight(1f))
             MonthStatTile("Spend", formatCentsCompact(summary.spendCents),
-                MagpieTheme.colors.overBudget.base, Modifier.weight(1f))
+                MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
             MonthStatTile("Net", formatCentsCompact(summary.netCents),
                 MagpieTheme.colors.money.base, Modifier.weight(1f))
         }

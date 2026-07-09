@@ -149,11 +149,11 @@ private fun ReviewQueueRow(
     onAcceptAiSuggestion: (categoryId: String) -> Unit,
     onCorrect: () -> Unit,
 ) {
+    // Color grammar (#31): the row amount is neutral (only income green) — the card's amber
+    // needs-review context is the one channel that matters here; red is not for ordinary spend.
     val channel = when (txn.kind) {
         "income" -> MagpieTheme.colors.underBudget.base
-        "spend" -> MagpieTheme.colors.overBudget.base
-        "refund" -> MagpieTheme.colors.underBudget.base
-        else -> MagpieTheme.colors.needsReview.base
+        else -> MaterialTheme.colorScheme.onSurface
     }
     PanelCard(
         channel = MagpieTheme.colors.needsReview.base,

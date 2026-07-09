@@ -194,18 +194,15 @@ internal fun AccountsContent(
 
 @Composable
 private fun AccountRow(account: AccountOut, onImport: () -> Unit) {
-    val channel = if (account.balanceCents < 0) {
-        MagpieTheme.colors.overBudget.base
-    } else {
-        MagpieTheme.colors.underBudget.base
-    }
     PanelCard(channel = MagpieTheme.colors.money.base, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         SectionHeader(label = account.name, channel = MagpieTheme.colors.money.base)
         Spacer(Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
                 Text(account.institution, style = MaterialTheme.typography.bodySmall)
-                Text(formatCents(account.balanceCents), color = channel)
+                // Color grammar (#31): a normal card balance — negative for a credit card — is not an
+                // alarm, so it stays neutral; the reconciled/off-by delta below carries the signal.
+                Text(formatCents(account.balanceCents), color = MaterialTheme.colorScheme.onSurface)
                 account.balanceDeltaCents?.let { delta ->
                     val deltaColor = if (delta == 0L) {
                         MagpieTheme.colors.underBudget.base
