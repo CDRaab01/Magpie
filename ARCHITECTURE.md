@@ -1,84 +1,52 @@
 # ARCHITECTURE.md — Magpie (software-level)
 
-> **Status: Phases 0–8 built and deployed (2026-07-05); remaining v1 work is tracked in
-> [V1.md](V1.md), which supersedes CLAUDE.md §10's phase list** — including the
-> severity-ranked findings (F1–F18) of the 2026-07-05 deep code review of the correctness
-> core. Server: SSO-only auth, the full data
-> model, `app/ledger/` (classify/rollups/balances/per-category, all pure and exhaustively
-> tested), accounts/categories/transactions CRUD, CSV reconciliation (`app/imports/`), email
-> ingestion (`app/ingest/`), the rules engine + review queue, bill matching + the first ntfy
-> alert, budgets, and the AI category-draft guardrail (`app/rules/`, `app/services/{bill,
-> sweep,budget}_service.py`, `app/services/ai/`) are live at
-> `https://dragonfly.tail2ce561.ts.net`. Android: Home/Transactions/CashEntry/Accounts/
-> Review-queue/Bills on Retrofit+Room+Hilt+navigation-compose, with Roborazzi baselines for
-> **four** of the six (Home ×2 states, Accounts, Review queue, Bills — Transactions and
-> CashEntry have none; V1.md Tier 4 closes that). **Known gaps, all deliberate, none
-> silent:**
-> 1. The suite SSO client `magpie` is not yet registered on dragonfly-id, so on-device sign-in
->    can't complete end-to-end — see "Open items" below.
-> 2. The CSV parser is generic/institution-agnostic (no real per-issuer sample exports were
->    available when it was built) — importing real 12-month history is a human step.
-> 3. **Email ingestion has real parsers for three issuers — Amex, US Bank, and Discover —
->    built from the real corpus (updated 2026-07-08).** US Bank's coverage grew from Zelle-only
->    to the account-wide "Your transaction is complete." alert (ordinary debits **and**
->    deposits/paychecks). Discover — which Phase −1 had found push-only — now emails a
->    "Transaction Alert" with clean labeled fields (Merchant/Date/Amount/Last-4), so it has a
->    real parser. The Visa account in CLAUDE.md's Phase −1 scope is **out of v1** (owner set up
->    alerts on US Bank/Amex/Discover only). Exact senders: `AmericanExpress@welcome.americanexpress.com`,
->    `usbank@notifications.usbank.com`, `discover@services.discover.com`.
-> 4. **The ingestion routing changed from a forwarding mailbox to main-account IMAP scoped by
->    label (2026-07-08).** The original design forwarded the `magpie-ingest`-labelled alerts to a
->    dedicated mailbox so Magpie's credential saw only alerts (least privilege). Gmail forwarding
->    proved too fragile (its verification hit Google's anti-automation wall repeatedly), so the
->    approach is now: the poller connects to the **main account** (`IMAP_USER`) and selects the
->    **`magpie-ingest` label** (`IMAP_LABEL`). Tradeoff, deliberately accepted: the app password
->    can technically read the whole main inbox, but the poller is read-only by behavior
->    (`BODY.PEEK`, never marks/moves/deletes) and only ever selects the label. **LIVE as of
->    2026-07-08:** the app password is wired (`IMAP_PASSWORD`/`INGEST_USER_EMAIL` in `server/.env`,
->    `MAGPIE_IMAP_HOST`/`MAGPIE_IMAP_USER` in the host root `.env`), and the first poll connected to
->    Gmail and parsed 22 real Amex alerts. They sit `outcome=unparsed` only because the owner's real
->    accounts (with last4s) don't exist yet — a "Test" account is all there is; once the real
->    accounts exist, new alerts auto-file (the 22 already-seen won't retro-file — no replay tool,
->    F15). Tier 1 #11 complete.
-> 5. **Phase 5's rules engine auto-files transfers, recurring income/bills, and
->    merchant→category matches. Pending→posted matching is now built too (F4, 2026-07-08):** a
->    CSV-truth reconciliation pass merges an email-sourced pending row into the posted row for
->    the same swipe rather than creating a second — closing the rollup double-count.
-> 6. **Phase 6's bill matching and "missing bill" detection are fully built and tested, but
->    there is still no `bill_issued` *email* parser for any issuer.** Real "statement ready"
->    emails with genuine structured data (statement date, balance) were confirmed for
->    Discover specifically during this phase — but the exact sender address couldn't be
->    confirmed (repeated attempts to open a sample email hit browser-automation flakiness),
->    and per the same Phase −1 discipline that kept Discover's transaction parser unbuilt,
->    guessing at the address here would be the same mistake. Bills exist today only via
->    `POST /bills` (manual/CSV-adjacent creation) — real bill-issued emails becoming
->    `BillStatement` rows automatically is a fast-follow once a sender is confirmed. Sweep
->    alerts (2026-07-08): **unparsed-backlog + missing-bill** are built and latched on a
->    **persisted** latch (`alert_latches`, F11 — survives redeploys), meeting the "a simulated
->    missing bill pages the phone" exit; **paycheck late/short, per-account freshness, and
->    auth-hold expiry** are the remaining three (same latched pattern).
-> 7. **The AI category-draft guardrail is fully built and tested against a fake LLM — the
->    real `LmStudioClient` has never been exercised against a live LM Studio instance**
->    (`llm_base_url` is unset in production; the AI stage silently never fires until it's
->    configured). **No Android Budgets screen exists yet** — `GET/POST /budgets` and
->    per-category actuals are live server-side, but the screen wasn't built this pass to
->    keep pace across phases; it's a small, well-understood gap, not an unknown one.
->    "First insights" (plain-language summary text, CLAUDE.md's other Phase 7 scope item)
->    is also not built — only category-suggestion drafts are.
-> 8. **Phase 8 (suite membership) is now running end-to-end** (verified 2026-07-05, later
->    the same day as the "not yet" version of this note): the `magpie` runner service is
->    installed and Running, the repo Actions variables/secrets are set (CI, Release, and
->    Deploy all green on real pushes — the deployed `/version` reports the HEAD commit),
->    `Test-SuiteInvariants.ps1` carries the Magpie tunnel exemption + `tailscale serve`
->    check, and `Backup-DragonflyDatabases.ps1` includes magpie-db. **Still open:** the
->    uptime-kuma monitor (unverified), and — load-bearing — **the NAS dumps are not
->    encrypted yet** (host ROADMAP2 Tier 1 #10), which is V1.md's Tier 0 gate: magpie-db now
->    rides the nightly unencrypted backup, so real financial data must not enter the DB
->    until that lands.
+> **Status (2026-07-09): v1 feature-complete through V1.md's tiers and live** at
+> `https://dragonfly.tail2ce561.ts.net` (tailnet-only, SSO-only; CI → Release → Deploy green;
+> the deployed `/version` tracks `main`). The 2026-07-05 deep-review findings F1–F18 are all
+> closed except the F13/F15 remnants below. Server: SSO-only auth; the full data model
+> (eleven tables incl. `alert_latches`); the pure `app/ledger/` + `app/rules/` correctness
+> core; CSV reconciliation with per-institution sign conventions + multiplicity-aware dedupe;
+> **live email ingestion** (Amex / US Bank / Discover parsers from the real corpus, main-account
+> IMAP scoped to the `magpie-ingest` label — see "The ingestion pipeline"); the rules engine +
+> review queue with corrections and rule-creation; bills + the cash-flow projection; user-scoped
+> budgets; transaction splits; **four latched ntfy sweeps** with `magpie://` deep links; and the
+> AI category-draft guardrail. Android: the full suite-parity app — bottom bar, hero, content
+> Home, Transactions with server-backed filters/search/infinite scroll + split/recategorize/
+> delete, onboarding, encrypted token store, ~28 light+dark Roborazzi baselines.
+> **Remaining work is planned in [ROADMAP.md](ROADMAP.md)** (rewritten 2026-07-09 as the single
+> forward roadmap; [V1.md](V1.md) is the closed tier-build record). **Known gaps, all
+> deliberate, none silent:**
+> 1. **The ledger has never held a real dollar.** One "Test" account exists; 22 real Amex
+>    alerts sit `outcome=unparsed` awaiting the real accounts (and the F15 replay tool to
+>    retro-file them). The 12-month CSV backfill, the Discover sign-convention confirmation,
+>    the Visa in/out decision, and the statement-parity clock (the v1 acceptance gate) have
+>    not started — ROADMAP.md Wave 0 is that critical path. The Visa is **out of v1** as
+>    alerts stand (owner set up US Bank/Amex/Discover only). Exact alert senders:
+>    `AmericanExpress@welcome.americanexpress.com`, `usbank@notifications.usbank.com`,
+>    `discover@services.discover.com`.
+> 2. **The production LLM has never fired** (`llm_base_url` unset — the AI stage silently
+>    skips): category drafts are built and guardrail-tested against `FakeLlmClient` only, and
+>    "first insights" (plain-language summaries) were never built at all (ROADMAP.md Wave 2).
+> 3. **No `bill_issued` email parser** — Discover's statement-ready sender is still
+>    unconfirmed (browser flakiness; don't guess) — **and no parser-replay tool (F15)**;
+>    bills enter via `POST /bills` only.
+> 4. **Two sweeps unbuilt** — auth-hold expiry (the first data-*mutation* sweep) and
+>    paycheck-*short* (band-based, at ingestion) — and bill matching still lacks F13's
+>    sign/kind pool filters + one-bill-per-transaction.
+> 5. **Zero data visualization** — no `Sparkline`/`ProgressRing`/`TickerNumber`/Canvas
+>    anywhere, unique in the suite for its most numbers-heavy app (ROADMAP.md Wave 1: read
+>    models + charts).
+> 6. **On-device verification batch owed `[H]`:** formal SSO sign-in confirmation,
+>    split-sheet interaction, encrypted token store (F17), one real alert deep-link tap,
+>    font-scale/TalkBack, and a human eyeball pass over the recorded baselines.
+> 7. **Ops:** the uptime-kuma monitor is unverified; the smoke user's prod residue is
+>    undocumented; host ROADMAP2's Magpie rows still need the planned→live update. (The
+>    NAS-dump encryption gate and the smoke-token subject-email pin both closed 2026-07-08 —
+>    the real-data gate is open.)
 >
 > Per the suite docs rule, convert each section to as-built language in the same PR that
 > lands it. Suite-level context: `C:\Code\ARCHITECTURE.md`. Build spec + locked decisions:
-> [CLAUDE.md](CLAUDE.md). Post-v1 direction: [ROADMAP.md](ROADMAP.md).
+> [CLAUDE.md](CLAUDE.md). Forward plan: [ROADMAP.md](ROADMAP.md).
 
 Magpie is household cash-flow tracking with a review-not-enter product law: money events
 arrive automatically (alert emails, monthly CSV), deterministic rules file the regular ones,
@@ -161,7 +129,7 @@ flowchart LR
     C1 -- "derived(C2) = C1.stated + Σ txns in (C1, C2]" --> DELTA{delta = derived − C2.stated\n0 ⇒ 'Reconciled'\nelse 'Off by $X'}
 ```
 
-### Data model — the ten tables (built, migrations 0001–0004; migration 0005 seeds the shared category vocabulary — V1.md Tier 1 #8)
+### Data model — eleven tables (migrations 0001–0004 + `c4e17a9b2d38` seed categories, `d5f2a1b3c4e6` alert latches, `e7c1a9d4f0b2` budget user-scope, `f3b8c2e9a1d7` splits; `alert_latches` — user_id + alert_key + latch bit — not diagrammed)
 
 ```mermaid
 erDiagram
@@ -173,7 +141,7 @@ erDiagram
     accounts ||--o{ bill_statements : "payment rail"
     accounts ||--o{ statement_checkpoints : anchors
     categories |o--o{ transactions : "category_id / ai_suggested_category_id"
-    categories ||--o{ budgets : "no user_id — F10"
+    categories ||--o{ budgets : "user-scoped (F10)"
     rules |o--o{ transactions : matched_rule_id
     ingest_events |o--o| transactions : provenance
     import_batches |o--o{ transactions : provenance
@@ -209,8 +177,9 @@ Pulse composite build, suite signing/release/deploy conventions.
   stated balance, so it can't be summed twice; `reconciliation_delta` is the ledger-vs-statement
   honesty meter, checking whether the ledger accounts for all movement between the earliest and
   latest checkpoints. Anchoring is what makes the statement-parity gate reachable after a
-  backfill). 34 table-driven tests total. Per-category and vs-budget rollups are not built yet (Budgets CRUD is Phase 7 per
-  CLAUDE.md's own phase list). If a number on the phone is wrong, the bug is here or in what
+  backfill). 34 table-driven tests total, plus `rollup_by_category` (per-category actuals for
+  budgets — user-scoped per F10 — and the natural feed for ROADMAP.md Wave 1's read models).
+  If a number on the phone is wrong, the bug is here or in what
   feeds it — the `nutrition/` / `lists/merge.py` precedent.
 - **`app/imports/csv_parser.py`** (built, Phase 3) — pure, no DB: auto-detects Date/
   Description/Amount-or-Debit+Credit/Balance columns from common header aliases (deliberately
@@ -237,9 +206,9 @@ Pulse composite build, suite signing/release/deploy conventions.
   within a day window. Requiring the card-payment shape — not merely two ±equal amounts —
   stops a card spend and a coincidental same-amount deposit from fusing into a bogus transfer;
   non-card internal moves fall through to review. The confirmed-partner guard and the un-pair
-  path live in the transaction service). All pure, 23 table-driven tests. Deviation detection (missing bill / out-of-band / short-paycheck) is
-  Phase 6, not built yet — the clock/band primitives exist, the alert sweeps that use them
-  don't.
+  path live in the transaction service). All pure, 23 table-driven tests. Deviation detection
+  runs on these primitives in the latched sweep loop (see "Alert latching" below);
+  paycheck-*short* is the one deviation not yet detected anywhere (ROADMAP.md Wave 0).
 
 ### The ingestion pipeline (`app/ingest/`)
 
@@ -256,11 +225,11 @@ Manual entry (cash only) → same pipeline tail
 ```
 
 **Testability seams (architectural):** four injected dependencies, each one interface with
-a fake — the **clock** (`rules/` and all sweeps take `now`; every recurrence/expiry/
-freshness test is a time-travel test — not built yet, Phase 5), **the IMAP fetcher** (built,
-Phase 4 — see below), the LLM client, and the ntfy publisher (alert tests assert **latching**:
-one publish per condition episode, not per sweep — not built yet). Nothing in the pipeline
-reads a wall clock or opens a socket directly.
+a fake, all built — the **clock** (`rules/` and all sweeps take `now`; every recurrence/
+expiry/freshness test is a time-travel test), **the IMAP fetcher** (see below), the LLM
+client, and the ntfy publisher (alert tests assert **latching**: one publish per condition
+episode, not per sweep — persisted, F11). Nothing in the pipeline reads a wall clock or
+opens a socket directly.
 
 **Built (Phase 1):** the suite-token test helper — `tests/conftest.py` generates one local RSA
 keypair per test session and stubs the JWKS fetch, so tests mint valid RS256 suite tokens
@@ -316,13 +285,12 @@ email-sourced pending row and the CSV-imported posted row for the same swipe mer
 reconciled row (`app/imports/pending_match.py` is the pure matcher — same account, same
 direction, ±3 days, exact or tip-settled amount; `import_service.py` promotes the pending row
 in place, keeping its email provenance and any human/rule decision). This closes the F4
-double-count. **Not built yet, called out rather than silently skipped:**
-the clock-driven sweeps (auth-hold expiry, freshness alerts); and
-the ntfy unparsed-backlog alert. **The live proof of the whole pipeline — a real swipe
-appearing as a pending transaction within one poll interval — has not happened yet**: it
-needs IMAP credentials for the dedicated ingestion mailbox, which is blocked on finishing
-Gmail's forwarding verification (see the status header). What's shippable *right now* is
-everything upstream of that one external credential.
+double-count. **Not built yet, called out rather than silently skipped:** the
+auth-hold-expiry sweep (the freshness and unparsed-backlog sweeps are built and latched —
+see "Alert latching") and the F15 parser-replay tool. **The live proof happened
+2026-07-08:** the first real poll connected to Gmail and parsed 22 real Amex alerts
+(`parser=amex`); they sit `outcome=unparsed` pending the owner's real accounts
+(ROADMAP.md Wave 0 #1) and the replay tool to retro-file them.
 
 Design rules: parsers are one module per issuer with **committed sanitized `.eml` fixtures**
 (public repo — nothing real in git); an email that parses to nothing becomes an `unparsed`
@@ -497,13 +465,26 @@ Tier 3 #23, 2026-07-08) is the "due before next paycheck" projection: the next p
 flagged `is_overdue`/`before_next_paycheck`. Consumed by the Android `ui/cashflow/` screen (see the
 Android section).
 
-**Planned (Phase 8):** suite membership + release + operational fit — see CLAUDE.md §10.
-No further domains are planned beyond that; Phase 7 was the last content phase.
+**Read models (ROADMAP.md Wave 1, 2026-07-09):** `app/routers/summary.py` +
+`app/services/summary_service.py` expose four read-only analytics aggregations for the chart
+surfaces, all under one `/summary` prefix (kept off `/categories`/`/merchants` to avoid
+route collisions): `GET /summary/history?months=N` (last N calendar months of income/spend/net,
+oldest first — pure `app/ledger/rollups.py::rollup_month_series`, zeros for empty months so a
+chart never gaps), `GET /summary/categories?month=` (net spend per category, largest first —
+`rollup_by_category` joined with names, was only reachable through budget actuals),
+`GET /summary/merchants?month=&category_id=&limit=` (top merchants, aggregated in SQL — never
+loads a backfill month into Python, F14 discipline — grouped by `coalesce(merchant_norm,
+merchant_raw)` so ingested and manual rows both participate), and `GET /summary/safe-to-spend`
+(the genre's headline number — depository balances minus bills due before the next paycheck,
+*composed* from the existing account-balance + cashflow services, cards excluded). 9 tests
+(`test_summary.py`), pure series math table-driven. The Android chart screens that consume
+these are Wave 1 #13–#16, still to build.
 
-**Deferred fast-follow, not a full phase:** pending→posted matching between email-sourced and
-CSV-sourced rows for the same swipe (see the ingestion pipeline section above); an Android
-Budgets screen (server-side is live, no UI yet); "first insights" plain-language summaries
-(CLAUDE.md's other Phase 7 scope item — only category-suggestion drafts were built).
+**Phase 8 (suite membership + release + operational fit) is built and verified** — see
+"Operational fit" below. The one Phase-7 scope item never built is **"first insights"**
+(plain-language summaries — only category-suggestion drafts exist); it is planned as
+ROADMAP.md Wave 2, alongside the read-model endpoints (`/summary/history`,
+`/categories/summary`, `/merchants/top`) that Wave 1's charts need.
 
 ## Android design (`android/`, package `com.magpie`)
 
@@ -513,24 +494,21 @@ teal = money/primary, green = income/under-budget, amber = needs-review, a red c
 locally from Pulse's proven `PulseRed`/`PulseRedDeep` (not a new library accent) =
 over-budget/deviation.
 
-**Design-parity + color review (2026-07-05, vs Spotter/Plate/Cookbook — the work is V1.md
-Tier 4):** the screens are functionally correct but sit at Spotter's pre-PULSE-redesign
-fidelity. Concretely missing vs every sibling: the hero greeting panel (the "magpie"
-indigo→teal→green gradient is plumbed into `MagpieTheme.heroGradient` and **used by no
-screen**), a bottom nav shell (Home is a stacked-button menu), content on Home (siblings show
-today's data; Magpie shows links), compact stat-tile values (`$4,500.00` wraps across three
-lines — siblings keep tile values short), and designed empty/error states. **Color grammar
-as-used contradicts the theme's own docstring**: `overBudget` red paints every ordinary
-spend row and every negative account balance (the app's most common datum wears the alarm
-color; a card's normal statement balance reads as an error), Bills colors the *amount* by
-paid/missing status (a green −$45 breaks the sign grammar), and teal carries four unrelated
-meanings (primary, net/transfer, awaiting-payment, AI-suggestion text). Corrective rules,
-binding for Tier 4: ordinary spend + normal balances = neutral foreground; red strictly for
-over-budget/out-of-band/missing; Bills colors the status word, never the amount; teal =
-brand/primary + money-total only; AI drafts get their own voice (violet — unclaimed inside
-Magpie); ≤2 channels per card. What was right and stays: the green/amber assignments, the
-channel-triple structure, and deriving red from proven Pulse hues instead of inventing new
-ones.
+**Design parity (the 2026-07-05 review's findings, closed by the Tier 4 pass 2026-07-08/09):**
+the hero greeting panel (`MagpieTheme.heroGradient`, previously used by no screen, now leads
+Home with a live status sentence), the suite bottom nav shell (`MagpieBottomBar`, mirrors
+Cookbook's), content on Home instead of links (review-count + next-bill `PanelCard`s), dense
+stat tiles that fit their money values (+ an `AutoFitValue` large-font guard), designed
+empty/error states (`EmptyState` on every screen), refresh-on-resume, and onboarding. **Color
+grammar** was corrected per the review's binding rules: ordinary spend + normal balances are
+neutral (red strictly for over-budget/out-of-band/missing), Bills colors the status word
+never the amount; green = income/under-budget/reconciled and amber = needs-review stay.
+**Remaining from that review (ROADMAP.md Wave 0):** AI-suggestion text still borrows teal —
+it gets its own violet voice, and teal pares back to brand/primary + money-totals.
+**The one design gap Tier 4 did not touch (now the headline one): no data visualization.**
+No `Sparkline`, `ProgressRing`, `TickerNumber`, or Canvas chart anywhere — while Plate's Home
+leads with a ring + ticker + weekly sparkline and Spotter has an animated Canvas trend chart.
+ROADMAP.md Wave 1 (read models + charts, Pulse components only) is that pass.
 
 **Built (Phase 2):** `data/remote/` — `ApiService` (Retrofit + kotlinx-serialization),
 `AuthInterceptor` + `TokenRefreshAuthenticator` (mirrors Spotter/Cookbook's hardened
@@ -602,8 +580,11 @@ editor: lists categories, the user's own (`shared=false`) get rename/delete affo
 seeded/shared ones show a read-only "Shared" label (the server 404s a rename/delete of a shared
 category), plus an "Add" action and an About block with the server `/version`. `SettingsViewModel`
 wraps the existing `POST`/`PATCH`/`DELETE /categories` CRUD; the rules editor is deferred to Tier
-3.) **Not built this pass:** badge counts on Home for the review queue's size or the bills-missing
-count (CLAUDE.md's target design) — the screens exist, the Home-panel summary of either doesn't yet.
+3.) **Tier 4 #28/#29 (2026-07-08/09):** Home now leads with `MagpieHero` (the indigo→teal→green
+gradient, a time-of-day greeting, and the status sentence "net this month · N to review · next
+bill due") over live content cards — `ReviewQueueCard` (the count as a big amber datum → the
+queue) and `UpcomingBillCard` (the soonest bill → the cash-flow calendar) — above the dense-tile
+month panel; Accounts and Rules remain compact secondary links, and the FAB stays cash entry.
 
 Each screen splits into a thin ViewModel-wired composable and a pure `*Content` composable
 taking plain state + callbacks (`HomeScreen` → `HomeContent`, `AccountsScreen` →
@@ -618,23 +599,20 @@ Cookbook's recipe cache). Acceptable because the phone is on Tailscale wherever 
 Because Tailscale Serve provides HTTPS, the manifest needs **no cleartext exception** (unlike
 Hawksnest's bare-IP problem).
 
-### Open item: the `magpie` suite OAuth client isn't registered yet
+### Resolved: the `magpie` suite OAuth client (registered 2026-07-05)
 
-`SuiteAuthManager` is wired for client id `magpie`, redirect `com.magpie:/oauth2redirect` — the
-naming CLAUDE.md's Phase 8 section already commits to. But dragonfly-id's static client list
-(`Dragonfly/server/app/oidc/clients.py`) only has `spotter`/`plate`/`cookbook`/`dragonfly`/
-`localdev` today. **On-device sign-in cannot complete until `magpie` is added there** — a small,
-additive change to a live production identity server, deliberately not made without a separate
-go-ahead (same caution as the Pulse `PulseAccent.Teal` change: touching shared/live suite
-infrastructure gets its own explicit authorization, not a silent side effect of an app-repo
-task). CLAUDE.md's own Phase 8 scopes this registration there; it may make sense to pull it
-forward once someone wants to actually test the sign-in flow on a phone.
+`SuiteAuthManager` uses client id `magpie`, redirect `com.magpie:/oauth2redirect`, and the
+client is registered on dragonfly-id (see "Operational fit"). The formal on-device
+confirmation of the full sign-in flow is still owed (`[H]`, ROADMAP.md Wave 0) — though the
+owner's real-device use of released builds implies it works.
 
 ## Trust boundaries
 
 1. **Internet → Magpie: none.** No public DNS, no tunnel. Reachability = tailnet membership.
-2. **Mailbox → Magpie:** a read-scoped-by-behavior IMAP session using a dedicated app
-   password/OAuth token in `server/.env`; parser output is untrusted input (validated,
+2. **Mailbox → Magpie:** a main-account Gmail app password in `server/.env`, scoped by
+   behavior to the `magpie-ingest` label (`BODY.PEEK` only — never marks/moves/deletes/sends;
+   the label-only-forwarding design fell to Gmail's anti-automation wall, CLAUDE.md §8);
+   parser output is untrusted input (validated,
    bounded, deduped) — an attacker who can email you should at worst create a
    `needs_review` draft, never an auto-filed transaction (rules only auto-file against
    *learned history*, not novel senders).
@@ -647,8 +625,8 @@ forward once someone wants to actually test the sign-in flow on a phone.
 
 ## Failure modes to design for (ranked)
 
-1. **Silent parser rot** (issuer redesigns its email) → unparsed-event counter (built, Phase 4:
-   `GET /ingest/events?outcome=unparsed`; the ntfy backlog alert itself is still Phase 6) +
+1. **Silent parser rot** (issuer redesigns its email) → unparsed-event counter (built:
+   `GET /ingest/events?outcome=unparsed` + the latched ntfy backlog alert) +
    fixtures pinning every template (sourced from the Phase −1 real-email corpus) + raw
    payloads kept in `ingest_events.raw_payload` with `parse_version` so a fixed parser
    **replays history** — a bad parse is recoverable, never permanent. Already proved useful
@@ -665,9 +643,9 @@ forward once someone wants to actually test the sign-in flow on a phone.
    post-reconciliation) remains v1's acceptance criterion — real bank CSVs, not the synthetic
    fixtures the parser is tested against, are what that gate actually measures.
 4. **Pending/posted drift** (tip adjustments) and **auth holds that never post** → CSV
-   reconciliation updates matched rows in place (not built); the expiry sweep drops
-   unmatched pendings after ~7 days with an audit note (not built — `app/rules/clock.py`'s
-   seam exists, nothing schedules this sweep yet).
+   reconciliation promotes the matched pending row in place (built, F4 —
+   `app/imports/pending_match.py`); the expiry sweep dropping unmatched pendings after
+   ~7 days with an audit note is the one unbuilt sweep (ROADMAP.md Wave 0).
 5. **Alert-coverage illusion** (an account quietly stops alerting) → per-account "last event
    seen" freshness + a latched staleness alert via ntfy — **built (2026-07-08)**,
    `run_account_freshness_sweep` (`account_freshness_days`, default 14).
@@ -709,9 +687,11 @@ forward once someone wants to actually test the sign-in flow on a phone.
   Magpie-only `tailscale serve status` mapping assertion) and magpie-db in
   `Backup-DragonflyDatabases.ps1`'s dump list.
 
-**Still open (V1.md Tier 0 / Tier 5):**
-- **Encrypting the NAS dumps** (host ROADMAP2 Tier 1 #10) — the Tier 0 gate: magpie-db now
-  rides the nightly backup *unencrypted*; no real financial data before this lands.
+**Closed 2026-07-08:** the NAS dumps are gpg-encrypted fail-closed with restore drills
+passing (the real-data gate is open), and the smoke-token subject email is pinned via
+dragonfly-id's `SMOKE_SUBJECT_EMAILS` allowlist (F2), deployed live.
+
+**Still open (ROADMAP.md Wave 0):**
 - The **uptime-kuma** monitor on `http://host.docker.internal:8005/health` (unverified).
-- Pinning the smoke-token subject email on dragonfly-id to the designated throwaway address
-  (V1.md F2 — least-privilege hardening of the smoke mechanism, per §9's original design).
+- The smoke user's prod residue (clean out or document as expected); host ROADMAP2's
+  Magpie rows still need the planned→live update.

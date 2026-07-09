@@ -47,6 +47,41 @@ def rollup_month(transactions: Iterable[TransactionForRollup]) -> MonthlyRollup:
     )
 
 
+class DatedForSeries(NamedTuple):
+    year: int
+    month: int
+    kind: str
+    amount: int  # signed integer cents
+
+
+@dataclass(frozen=True)
+class MonthlyRollupForMonth:
+    year: int
+    month: int
+    income_cents: int
+    spend_cents: int
+    net_cents: int
+
+
+def rollup_month_series(
+    transactions: Iterable[DatedForSeries], months: list[tuple[int, int]]
+) -> list[MonthlyRollupForMonth]:
+    """The trend endpoint (ROADMAP.md Wave 1): one `rollup_month` per requested (year, month),
+    returned in the given order with zeros for months that had no activity — so a chart gets a
+    dense series and never a gap. Reuses `rollup_month`'s kind semantics exactly (transfers
+    excluded, refunds netted into spend), so history and the Home panel can never disagree."""
+    buckets: dict[tuple[int, int], list[TransactionForRollup]] = {m: [] for m in months}
+    for t in transactions:
+        key = (t.year, t.month)
+        if key in buckets:  # a stray out-of-range row is ignored, not miscounted
+            buckets[key].append(TransactionForRollup(t.kind, t.amount))
+    out: list[MonthlyRollupForMonth] = []
+    for year, month in months:
+        r = rollup_month(buckets[(year, month)])
+        out.append(MonthlyRollupForMonth(year, month, r.income_cents, r.spend_cents, r.net_cents))
+    return out
+
+
 class TransactionForCategoryRollup(NamedTuple):
     category_id: str | None
     kind: str
