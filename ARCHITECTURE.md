@@ -461,8 +461,12 @@ not a transfer/already-split) creates child allocations (`split_parent_id` set) 
 parent `is_split`; `DELETE …/split` reverses it. No double-count by construction — the parent stays
 the ledger row (balance/list/month totals filter `split_parent_id IS NULL`) while the parts carry
 the category breakdown (budget rollup filters `NOT is_split`); 7 tests pin that month total +
-balance are unchanged by a split while budget actuals move to the parts. The split *UI* lands on the
-rebuilt Transactions screen (Tier 4 #32). `GET/POST /bills`, `POST /bills/{id}/rematch` (`app/routers/bills.py` +
+balance are unchanged by a split while budget actuals move to the parts. **The split *UI* landed
+2026-07-09** (Tier 4 #32): the Transactions screen opens `ui/transactions/SplitSheet.kt` — a
+`ModalBottomSheet` wrapping a pure `SplitSheetContent` allocator (parts of category + amount, live
+remaining, Split enabled only when the parts sum to the total) → `POST /transactions/{id}/split`;
+`is_split` was added to the Android `TransactionOut`, split parents show a "Split" tag and aren't
+re-splittable. The interactive allocation still needs an on-device pass (Roborazzi covers layout only). `GET/POST /bills`, `POST /bills/{id}/rematch` (`app/routers/bills.py` +
 `app/services/bill_service.py`) — no migration needed: `BillStatement.account_id` is
 required, so it scopes via the same join-to-`Account.user_id` pattern Phase 3's
 `StatementCheckpoint` already established, no nullable-join gap to close. `is_missing` is

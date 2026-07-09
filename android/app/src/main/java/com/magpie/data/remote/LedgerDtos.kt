@@ -100,7 +100,26 @@ data class TransactionOut(
     @SerialName("matched_rule_id") val matchedRuleId: String? = null,
     @SerialName("rule_note") val ruleNote: String? = null,
     @SerialName("ai_suggested_category_id") val aiSuggestedCategoryId: String? = null,
+    @SerialName("is_split") val isSplit: Boolean = false,
     @SerialName("created_at") val createdAt: String,
+)
+
+@Serializable
+data class SplitPart(
+    @SerialName("category_id") val categoryId: String,
+    val amount: Long, // signed cents; all parts must sum to the parent's amount
+    val kind: String,
+)
+
+@Serializable
+data class SplitRequest(
+    val parts: List<SplitPart>,
+)
+
+@Serializable
+data class SplitResult(
+    val parent: TransactionOut,
+    val parts: List<TransactionOut>,
 )
 
 @Serializable

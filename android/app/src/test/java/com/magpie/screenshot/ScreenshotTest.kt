@@ -30,6 +30,7 @@ import com.magpie.ui.cashflow.CashflowContent
 import com.magpie.ui.cashflow.CashflowUiState
 import com.magpie.ui.navigation.MagpieBottomBar
 import com.magpie.ui.navigation.Routes
+import com.magpie.ui.transactions.SplitSheetContent
 import com.magpie.ui.transactions.TransactionsContent
 import com.magpie.ui.transactions.TransactionsUiState
 import com.magpie.ui.transactions.TxnFilter
@@ -153,6 +154,7 @@ class ScreenshotTest {
         TransactionsContent(
             state = TransactionsUiState.Ready(emptyList(), emptyMap(), TxnFilter.ALL),
             onSetFilter = {},
+            onSplit = { _, _ -> },
         )
     }
 
@@ -161,8 +163,30 @@ class ScreenshotTest {
         TransactionsContent(
             state = TransactionsUiState.Ready(emptyList(), emptyMap(), TxnFilter.ALL),
             onSetFilter = {},
+            onSplit = { _, _ -> },
         )
     }
+
+    @Test
+    fun split_sheet_light() = capture("split_sheet_light", dark = false) { SplitSheetScene() }
+
+    @Test
+    fun split_sheet_dark() = capture("split_sheet_dark", dark = true) { SplitSheetScene() }
+}
+
+@Composable
+private fun SplitSheetScene() {
+    SplitSheetContent(
+        txn = TransactionOut(
+            id = "1", accountId = "a", amount = -5000, currency = "USD", date = "2026-07-15",
+            status = "pending", merchantRaw = "MEIJER", merchantNorm = "MEIJER", categoryId = null,
+            kind = "spend", transferGroup = null, reviewState = "needs_review", source = "email",
+            matchedRuleId = null, ruleNote = null, aiSuggestedCategoryId = null,
+            createdAt = "2026-07-15T00:00:00Z",
+        ),
+        categoryNames = mapOf("cat-groc" to "Groceries", "cat-cash" to "Cash"),
+        onSplit = {},
+    )
 }
 
 @Composable
@@ -188,6 +212,7 @@ private fun TransactionsScene() {
             filter = TxnFilter.ALL,
         ),
         onSetFilter = {},
+        onSplit = { _, _ -> },
     )
 }
 

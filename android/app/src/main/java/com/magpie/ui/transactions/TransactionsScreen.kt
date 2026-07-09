@@ -23,7 +23,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.magpie.data.remote.SplitPart
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -43,7 +48,11 @@ fun TransactionsScreen(navController: NavController) {
     val viewModel: TransactionsViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
     RefreshOnResume { viewModel.load() }
-    TransactionsContent(state = state, onSetFilter = viewModel::setFilter)
+    TransactionsContent(
+        state = state,
+        onSetFilter = viewModel::setFilter,
+        onSplit = viewModel::split,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,7 +60,9 @@ fun TransactionsScreen(navController: NavController) {
 internal fun TransactionsContent(
     state: TransactionsUiState,
     onSetFilter: (TxnFilter) -> Unit,
+    onSplit: (transactionId: String, parts: List<SplitPart>) -> Unit,
 ) {
+    var splitting by remember { mutableStateOf<TransactionOut?>(null) }
     Scaffold(topBar = { TopAppBar(title = { Text("Transactions") }) }) { padding ->
         when (val s = state) {
             is TransactionsUiState.Loading -> Box(
@@ -82,9 +93,26 @@ internal fun TransactionsContent(
                         modifier = Modifier.padding(horizontal = MagpieTheme.spacing.md),
                     ) {
                         items(visible, key = { it.id }) { txn ->
-                            TransactionRow(txn, s.categoryNamesById[txn.categoryId])
+                            TransactionRow(
+                                txn,
+                                s.categoryNamesById[txn.categoryId],
+                                onClick = { if (!txn.isSplit) splitting = txn },
+                            )
                         }
                     }
+                }
+
+                splitting?.let { txn ->
+                    SplitSheet(
+                        txn = txn,
+                        categoryNames = s.categoryNamesById,
+                        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                        onDismiss = { splitting = null },
+                        onSplit = { parts ->
+                            onSplit(txn.id, parts)
+                            splitting = null
+                        },
+                    )
                 }
             }
         }
@@ -111,19 +139,24 @@ private fun FilterRow(selected: TxnFilter, onSelect: (TxnFilter) -> Unit) {
 }
 
 @Composable
-private fun TransactionRow(txn: TransactionOut, categoryName: String?) {
+private fun TransactionRow(txn: TransactionOut, categoryName: String?, onClick: () -> Unit) {
     // Color grammar (#31): ordinary spend is neutral — red is reserved for real deviations, not
     // the app's most common row. Only income gets the green channel; everything else stays neutral.
     val isIncome = txn.kind == "income"
     val accent = if (isIncome) MagpieTheme.colors.underBudget.base else null
     val amountColor =
         if (isIncome) MagpieTheme.colors.underBudget.base else MaterialTheme.colorScheme.onSurface
-    PanelCard(channel = accent, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    PanelCard(
+        channel = accent,
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
                 Text(txn.merchantRaw ?: txn.kind.replaceFirstChar { it.uppercase() })
                 Text(
-                    listOfNotNull(txn.date, categoryName).joinToString(" · "),
+                    listOfNotNull(txn.date, categoryName, if (txn.isSplit) "Split" else null)
+                        .joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

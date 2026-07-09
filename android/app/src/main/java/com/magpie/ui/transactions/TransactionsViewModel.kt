@@ -3,6 +3,8 @@ package com.magpie.ui.transactions
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.magpie.data.remote.ApiService
+import com.magpie.data.remote.SplitPart
+import com.magpie.data.remote.SplitRequest
 import com.magpie.data.remote.TransactionOut
 import com.magpie.data.repository.TransactionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -67,6 +69,17 @@ class TransactionsViewModel @Inject constructor(
         val current = _state.value
         if (current is TransactionsUiState.Ready) {
             _state.value = current.copy(filter = filter)
+        }
+    }
+
+    fun split(transactionId: String, parts: List<SplitPart>) {
+        viewModelScope.launch {
+            try {
+                api.splitTransaction(transactionId, SplitRequest(parts))
+            } catch (e: Exception) {
+                _state.value = TransactionsUiState.Error(e.message ?: "Couldn't split")
+            }
+            load()
         }
     }
 }

@@ -58,6 +58,9 @@ interface ApiService {
     @POST("transactions")
     suspend fun createTransaction(@Body req: TransactionCreate): TransactionOut
 
+    @POST("transactions/{id}/split")
+    suspend fun splitTransaction(@Path("id") id: String, @Body req: SplitRequest): SplitResult
+
     @GET("transactions/summary")
     suspend fun monthlySummary(
         @Query("year") year: Int,

@@ -20,6 +20,8 @@ import com.magpie.data.remote.RuleOut
 import com.magpie.data.remote.RuleUpdate
 import com.magpie.data.remote.SuiteLoginRequest
 import com.magpie.data.remote.TokenResponse
+import com.magpie.data.remote.SplitRequest
+import com.magpie.data.remote.SplitResult
 import com.magpie.data.remote.TransactionCreate
 import com.magpie.data.remote.TransactionOut
 import com.magpie.data.remote.VersionOut
@@ -70,6 +72,7 @@ private class FakeApi : ApiService {
     override suspend fun createAccount(req: AccountCreate): AccountOut = error("unused")
 
     override suspend fun deleteAccount(id: String) = error("unused")
+    override suspend fun splitTransaction(id: String, req: SplitRequest): SplitResult = error("unused")
     override suspend fun listCategories(): List<CategoryOut> = error("unused")
     override suspend fun createCategory(req: CategoryCreate): CategoryOut = error("unused")
     override suspend fun updateCategory(id: String, req: CategoryUpdate): CategoryOut = error("unused")
