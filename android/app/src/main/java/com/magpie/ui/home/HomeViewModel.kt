@@ -34,6 +34,10 @@ sealed interface HomeUiState {
         val greeting: String = "Hello",
         val reviewCount: Int = 0,
         val nextBill: UpcomingBillOut? = null,
+        // The genre's headline number (#12a): depository balances minus bills due before the next
+        // paycheck. Best-effort — null if the endpoint hiccups, so the hero degrades to just the
+        // status line rather than blanking.
+        val safeToSpendCents: Long? = null,
     ) : HomeUiState
     data class Error(val message: String) : HomeUiState
 }
@@ -68,8 +72,10 @@ class HomeViewModel @Inject constructor(
                         .getOrDefault(0)
                 val nextBill =
                     runCatching { api.getCashflow().bills.firstOrNull() }.getOrNull()
+                val safeToSpend =
+                    runCatching { api.getSafeToSpend().safeToSpendCents }.getOrNull()
                 _state.value = HomeUiState.Ready(
-                    summary, accounts, greetingForNow(), reviewCount, nextBill,
+                    summary, accounts, greetingForNow(), reviewCount, nextBill, safeToSpend,
                 )
             } catch (e: Exception) {
                 _state.value = HomeUiState.Error(e.message ?: "Couldn't reach Magpie")

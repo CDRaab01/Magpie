@@ -33,10 +33,11 @@
 > 4. **Two sweeps unbuilt** — auth-hold expiry (the first data-*mutation* sweep) and
 >    paycheck-*short* (band-based, at ingestion) — and bill matching still lacks F13's
 >    sign/kind pool filters + one-bill-per-transaction.
-> 5. **Data visualization is now landing** — the Wave 1 read models + the Trends screen
->    (`Sparkline`s: net trend + income/spend tiles + category bars) shipped 2026-07-09;
->    still to come are the Home hero `TickerNumber`, the Budgets `ProgressRing`, and the
->    merchant drill-down (ROADMAP.md Wave 1 #13/#15/#16).
+> 5. **Data visualization is now landing** (ROADMAP.md Wave 1, 2026-07-09) — the read models,
+>    the Trends screen (`Sparkline`s: net trend + income/spend tiles + category bars), the Home
+>    hero safe-to-spend `TickerNumber`, and the Budgets month-utilization `ProgressRing` all
+>    shipped; still to come are the Home month-tile sparklines and the merchant drill-down
+>    (Wave 1 #13-remainder/#16).
 > 6. **On-device verification batch owed `[H]`:** formal SSO sign-in confirmation,
 >    split-sheet interaction, encrypted token store (F17), one real alert deep-link tap,
 >    font-scale/TalkBack, and a human eyeball pass over the recorded baselines.
@@ -510,9 +511,12 @@ it gets its own violet voice, and teal pares back to brand/primary + money-total
 (`ui/trends/`): a net headline over a filled 6-month `Sparkline`, an Income/Spend dense-`StatTile`
 row (each with its own sparkline — income green, spend neutral per #31), the month's category
 breakdown as proportional bars, and top merchants — consuming the new `/summary/*` read models,
-reached from Home as a secondary link, light+dark Roborazzi baselines. Still to come: the Home
-hero `TickerNumber`, a Budgets `ProgressRing`, and the merchant drill-down (Wave 1 #13/#15/#16) —
-all Pulse components, matching the idioms the siblings actually ship (Plate's ring+ticker+sparkline,
+reached from Home as a secondary link, light+dark Roborazzi baselines. **The Home hero** now
+leads with a rolling safe-to-spend `TickerNumber` (`GET /summary/safe-to-spend`, best-effort;
+the hero taps through to the cash-flow calendar), and **Budgets** tops its list with a
+month-utilization `ProgressRing` (total spent/budget, red only when the household is over — #31).
+Still to come: the Home month-tile sparklines and the merchant drill-down (Wave 1 #13-remainder/#16)
+— all Pulse components, matching the idioms the siblings actually ship (Plate's ring+ticker+sparkline,
 Spotter's filled-line stat tiles) rather than inventing a bespoke Canvas.
 
 **Built (Phase 2):** `data/remote/` — `ApiService` (Retrofit + kotlinx-serialization),

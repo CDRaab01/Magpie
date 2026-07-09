@@ -2,6 +2,7 @@ package com.magpie.ui.home
 
 import androidx.compose.material.icons.filled.Refresh
 import design.pulse.ui.components.EmptyState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -48,6 +49,7 @@ import com.magpie.util.formatCentsCompact
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
+import design.pulse.ui.components.TickerNumber
 import design.pulse.ui.theme.Pulse
 
 /** Thin ViewModel-wired wrapper. [HomeContent] below is the pure, screenshot-testable half. */
@@ -96,7 +98,7 @@ internal fun HomeContent(
                 .fillMaxSize(),
         ) {
             if (state is HomeUiState.Ready) {
-                MagpieHero(state)
+                MagpieHero(state, onClick = onViewCashflow)
             } else {
                 Text("Magpie", style = MaterialTheme.typography.headlineMedium)
             }
@@ -146,12 +148,14 @@ internal fun HomeContent(
  * Jul 18"), the finance analogue of Plate's "TRAINED TODAY" line.
  */
 @Composable
-private fun MagpieHero(state: HomeUiState.Ready) {
+private fun MagpieHero(state: HomeUiState.Ready, onClick: () -> Unit) {
+    val white = androidx.compose.ui.graphics.Color.White
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
             .background(MagpieTheme.colors.heroGradient)
+            .clickable(onClick = onClick)
             .padding(20.dp),
     ) {
         Column {
@@ -160,13 +164,31 @@ private fun MagpieHero(state: HomeUiState.Ready) {
             Text(
                 state.greeting,
                 style = MaterialTheme.typography.headlineMedium,
-                color = androidx.compose.ui.graphics.Color.White,
+                color = white,
             )
+            // The genre's headline number (#12a/#13): safe-to-spend as a rolling TickerNumber, the
+            // finance analogue of Plate's animated calorie hero. Tapping the hero opens the
+            // cash-flow calendar, where the "due before payday" breakdown behind the figure lives.
+            state.safeToSpendCents?.let { cents ->
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "SAFE TO SPEND",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = white.copy(alpha = 0.85f),
+                )
+                val dollars = (cents / 100).toInt()
+                TickerNumber(
+                    target = kotlin.math.abs(dollars),
+                    prefix = if (dollars < 0) "-$" else "$",
+                    style = MagpieTheme.dataType.dataLarge,
+                    color = white,
+                )
+            }
             Spacer(Modifier.height(6.dp))
             Text(
                 heroStatusLine(state),
                 style = MaterialTheme.typography.bodyLarge,
-                color = androidx.compose.ui.graphics.Color.White,
+                color = white,
             )
         }
     }

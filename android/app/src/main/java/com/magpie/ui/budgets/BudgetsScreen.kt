@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -47,8 +48,12 @@ import com.magpie.data.remote.CategoryOut
 import com.magpie.ui.util.RefreshOnResume
 import com.magpie.ui.theme.MagpieTheme
 import com.magpie.util.formatCents
+import design.pulse.ui.components.DataText
 import design.pulse.ui.components.PanelCard
+import design.pulse.ui.components.ProgressRing
 import design.pulse.ui.components.PulseButton
+import design.pulse.ui.components.SectionHeader
+import design.pulse.ui.theme.Pulse
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,6 +107,7 @@ internal fun BudgetsContent(
                     subtitle = "Tap + to set a monthly amount per category.",
                 )
                 else -> LazyColumn(modifier = Modifier.padding(MagpieTheme.spacing.md)) {
+                    item { BudgetsRingHeader(state.rows) }
                     items(state.rows.size) { i -> BudgetRowCard(state.rows[i]) }
                 }
             }
@@ -117,6 +123,47 @@ internal fun BudgetsContent(
                 showAddDialog = false
             },
         )
+    }
+}
+
+/**
+ * Overall month-utilization ring (Wave 1 #15) — Plate's hero-ring pattern in Magpie's teal: total
+ * spent across every budgeted category over total budget. Teal (money) normally, red only when the
+ * household is genuinely over its combined budget (#31 grammar — the ring, not every row, carries
+ * the alarm).
+ */
+@Composable
+private fun BudgetsRingHeader(rows: List<BudgetRow>) {
+    val totalBudget = rows.sumOf { it.amountCents }
+    val totalSpent = rows.sumOf { it.spentCents }
+    val over = totalSpent > totalBudget
+    val channel = if (over) MagpieTheme.colors.overBudget.base else MagpieTheme.colors.money.base
+    val fraction =
+        if (totalBudget <= 0) 0f else (totalSpent.toFloat() / totalBudget).coerceIn(0f, 1f)
+    val pct = if (totalBudget <= 0) 0 else ((totalSpent * 100) / totalBudget).toInt()
+    PanelCard(
+        channel = channel,
+        modifier = Modifier.fillMaxWidth().padding(bottom = MagpieTheme.spacing.sm),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MagpieTheme.spacing.md),
+        ) {
+            ProgressRing(progress = fraction, channel = channel, modifier = Modifier.size(96.dp)) {
+                DataText("$pct%", style = Pulse.dataType.dataSmall, color = channel)
+            }
+            Column {
+                SectionHeader(label = "This month", channel = channel)
+                Text("${formatCents(totalSpent)} of ${formatCents(totalBudget)}")
+                val remaining = totalBudget - totalSpent
+                Text(
+                    if (remaining >= 0) "${formatCents(remaining)} left"
+                    else "Over by ${formatCents(-remaining)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = channel,
+                )
+            }
+        }
     }
 }
 

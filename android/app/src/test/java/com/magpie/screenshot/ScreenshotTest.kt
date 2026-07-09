@@ -381,6 +381,7 @@ private fun HomeReadyScene() {
                 isOverdue = false,
                 beforeNextPaycheck = true,
             ),
+            safeToSpendCents = 74000,
         ),
         onAddTransaction = {},
         onViewAccounts = {},

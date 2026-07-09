@@ -112,19 +112,23 @@ exact components and idioms; invent nothing new.
       the bills due before the next paycheck (composed from the existing account-balance and
       `/cashflow` services — cards excluded, since a card balance is money owed).
     **Still to do:** the Android chart screens that consume these (#13–#16).
-12a. **"Safe to spend" on Home** — the single most iconic number in this genre (Simple bank's
-    identity). The cash-flow screen already lists the bills; this surfaces the *reduction*:
-    "$740 safe before Jul 24" as a hero element, tappable through to the cash-flow calendar
-    for the breakdown. Uses `GET /safe-to-spend`; `TickerNumber` for the figure (#13).
+12a. **"Safe to spend" on Home — DONE 2026-07-09.** The Home hero now leads with a rolling
+    `TickerNumber` "SAFE TO SPEND $740" (the genre's iconic number — Simple bank's identity),
+    fed by `GET /summary/safe-to-spend` (best-effort in `HomeViewModel`, degrades to the status
+    line if it hiccups). The whole hero is tappable through to the cash-flow calendar, where the
+    "due before payday" breakdown behind the figure lives. This also satisfies #13's hero-ticker
+    half. Home baselines re-recorded + eyeballed (the number settles to $740, not a mid-animation
+    $0).
 12b. **Offline read cache** — today the only offline surface is the cash-entry queue (no read
     cache, unlike Cookbook), and Magpie is tailnet-only, so any moment the phone is off the
     tailnet the app shows *nothing* — a habit-killer for a product whose core law is a
     ten-second daily review. Cache the last-known transactions + month summary + safe-to-spend
     (Room, Cookbook's read-cache precedent) so the app opens to stale-but-real data and
     refreshes when reachable. Small, and it removes the one way the daily habit silently breaks.
-13. **Home: numbers that move.** `TickerNumber` on the hero's net figure (Plate's animated
-    hero precedent); the month panel's dense `StatTile`s gain 6-month sparklines in the slot
-    the dense layout already has (exactly Spotter's usage).
+13. **Home: numbers that move.** Hero `TickerNumber` **DONE** (#12a, on the safe-to-spend
+    figure — the better headline than net). **Still to do:** the month panel's dense `StatTile`s
+    gaining 6-month sparklines in the slot the dense layout already has (exactly Spotter's usage);
+    the Trends screen already proves the tile-with-sparkline pattern, so this is a small lift.
 14. **Trends screen — DONE 2026-07-09.** `ui/trends/` (`TrendsScreen` + pure, screenshot-tested
     `TrendsContent` + `TrendsViewModel`), Spotter's `ProgressScreen` analog: a net headline over a
     filled 6-month `Sparkline`, an Income/Spend dense-`StatTile` row each with its own sparkline
@@ -134,9 +138,11 @@ exact components and idioms; invent nothing new.
     + `testDebugUnitTest` green. **Deferred:** tap-a-category → its own monthly trend drill-down
     (folds into #16); Magpie uses Pulse's `Sparkline` rather than a bespoke Canvas, matching the
     dense-tile idiom the siblings actually ship.
-15. **Budgets: a ring where it earns it.** Rows keep the linear bar; add an overall
-    month-utilization `ProgressRing` header (Plate's hero-ring pattern in Magpie's teal),
-    red only when genuinely over (#31 grammar).
+15. **Budgets: a ring where it earns it — DONE 2026-07-09.** A `BudgetsRingHeader` tops the list:
+    an overall month-utilization `ProgressRing` (total spent / total budget, e.g. "74% · $707 of
+    $950 · $243 left"), teal normally and red only when the household is genuinely over its combined
+    budget (#31 grammar — the ring carries the alarm, not every row). Rows keep their linear bars.
+    Baselines re-recorded + eyeballed.
 16. **Merchant view:** tap a merchant anywhere → its history, total, average, and cadence if
     a rule knows it. Cheap — the search/filter plumbing from Tier 4 #32 already exists.
 
