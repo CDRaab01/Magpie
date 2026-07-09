@@ -70,14 +70,7 @@ internal fun BudgetsContent(
     var showAddDialog by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Budgets · ${state.monthLabel}") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
+            TopAppBar(title = { Text("Budgets · ${state.monthLabel}") })
         },
         floatingActionButton = {
             if (!state.loading && state.categories.isNotEmpty()) {

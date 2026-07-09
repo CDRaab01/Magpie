@@ -568,7 +568,12 @@ each row colored by the corrected grammar — red only when overdue, amber for t
 teal otherwise; linked from Home; light+dark Roborazzi baselines).
 `ui/navigation/MagpieNavHost` gates the whole graph on `AuthGateViewModel.isSignedIn` (a
 `TokenStore` Flow) — no explicit post-sign-in navigation call is needed, since saving a
-session makes the Flow re-emit. `ui/budgets/BudgetsScreen` (**Tier 3 #25, 2026-07-08** — the
+session makes the Flow re-emit. **Tier 4 #27 (2026-07-08, mirrors `CookbookBottomBar`):** the
+signed-in graph is wrapped in a `Scaffold` + `MagpieBottomBar` (`TopLevelDestination` = Home ·
+Activity · Bills · Budgets · Settings; teal money-channel selection) shown only on top-level
+routes, with Cookbook's `goTab` save/restore navigation; tab screens dropped their back buttons
+while secondary screens (Accounts, Review queue, Cash flow, Rules, Cash entry) are pushed and keep
+theirs. `ui/budgets/BudgetsScreen` (**Tier 3 #25, 2026-07-08** — the
 month-vs-budget view: `GET /budgets?month=` for the current month with category names from `GET
 /categories`, each row an actual-vs-budget `LinearProgressIndicator` with "$X left"/"Over by $X",
 over-budget in the red channel and under in green; a FAB opens an add-budget dialog — category

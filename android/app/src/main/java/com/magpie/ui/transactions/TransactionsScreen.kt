@@ -39,14 +39,7 @@ fun TransactionsScreen(navController: NavController) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Transactions") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
+            TopAppBar(title = { Text("Transactions") })
         },
     ) { padding ->
         when (val s = state) {

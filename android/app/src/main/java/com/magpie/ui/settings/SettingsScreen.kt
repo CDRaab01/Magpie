@@ -75,14 +75,7 @@ internal fun SettingsContent(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
+            TopAppBar(title = { Text("Settings") })
         },
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {

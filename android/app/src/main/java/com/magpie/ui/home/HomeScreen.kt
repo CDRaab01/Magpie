@@ -52,14 +52,10 @@ fun HomeScreen(navController: NavController) {
     HomeContent(
         state = state,
         onAddTransaction = { navController.navigate(Routes.CASH_ENTRY) },
-        onViewTransactions = { navController.navigate(Routes.TRANSACTIONS) },
         onViewAccounts = { navController.navigate(Routes.ACCOUNTS) },
         onViewReviewQueue = { navController.navigate(Routes.REVIEW_QUEUE) },
-        onViewBills = { navController.navigate(Routes.BILLS) },
         onViewCashflow = { navController.navigate(Routes.CASHFLOW) },
-        onViewBudgets = { navController.navigate(Routes.BUDGETS) },
         onViewRules = { navController.navigate(Routes.RULES) },
-        onViewSettings = { navController.navigate(Routes.SETTINGS) },
         onCreateFirstAccount = viewModel::createFirstAccount,
     )
 }
@@ -68,14 +64,10 @@ fun HomeScreen(navController: NavController) {
 internal fun HomeContent(
     state: HomeUiState,
     onAddTransaction: () -> Unit,
-    onViewTransactions: () -> Unit,
     onViewAccounts: () -> Unit,
     onViewReviewQueue: () -> Unit,
-    onViewBills: () -> Unit,
     onViewCashflow: () -> Unit,
-    onViewBudgets: () -> Unit,
     onViewRules: () -> Unit,
-    onViewSettings: () -> Unit,
     onCreateFirstAccount: (name: String, institution: String, type: String) -> Unit,
 ) {
     Scaffold(
@@ -109,21 +101,15 @@ internal fun HomeContent(
                 is HomeUiState.Ready -> {
                     MonthPanel(state.summary)
                     Spacer(Modifier.height(16.dp))
-                    PulseButton(text = "View transactions", tonal = true, onClick = onViewTransactions)
-                    Spacer(Modifier.height(8.dp))
-                    PulseButton(text = "Accounts", tonal = true, onClick = onViewAccounts)
-                    Spacer(Modifier.height(8.dp))
+                    // Only the screens NOT in the bottom bar are linked here (Home/Transactions/
+                    // Bills/Budgets/Settings are tabs now). #29 turns these into live content cards.
                     PulseButton(text = "Review queue", tonal = true, onClick = onViewReviewQueue)
-                    Spacer(Modifier.height(8.dp))
-                    PulseButton(text = "Bills", tonal = true, onClick = onViewBills)
                     Spacer(Modifier.height(8.dp))
                     PulseButton(text = "Cash flow", tonal = true, onClick = onViewCashflow)
                     Spacer(Modifier.height(8.dp))
-                    PulseButton(text = "Budgets", tonal = true, onClick = onViewBudgets)
+                    PulseButton(text = "Accounts", tonal = true, onClick = onViewAccounts)
                     Spacer(Modifier.height(8.dp))
                     PulseButton(text = "Rules", tonal = true, onClick = onViewRules)
-                    Spacer(Modifier.height(8.dp))
-                    PulseButton(text = "Settings", tonal = true, onClick = onViewSettings)
                 }
             }
         }

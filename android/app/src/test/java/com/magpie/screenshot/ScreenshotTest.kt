@@ -28,6 +28,8 @@ import com.magpie.ui.budgets.BudgetsContent
 import com.magpie.ui.budgets.BudgetsUiState
 import com.magpie.ui.cashflow.CashflowContent
 import com.magpie.ui.cashflow.CashflowUiState
+import com.magpie.ui.navigation.MagpieBottomBar
+import com.magpie.ui.navigation.Routes
 import com.magpie.ui.rules.RuleRow
 import com.magpie.ui.rules.RulesContent
 import com.magpie.ui.rules.RulesUiState
@@ -130,6 +132,17 @@ class ScreenshotTest {
 
     @Test
     fun rules_dark() = capture("rules_dark", dark = true) { RulesScene() }
+
+    @Test
+    fun bottom_bar_light() = capture("bottom_bar_light", dark = false) { BottomBarScene() }
+
+    @Test
+    fun bottom_bar_dark() = capture("bottom_bar_dark", dark = true) { BottomBarScene() }
+}
+
+@Composable
+private fun BottomBarScene() {
+    MagpieBottomBar(currentRoute = Routes.HOME, onNavigate = {})
 }
 
 @Composable
@@ -156,14 +169,10 @@ private fun HomeReadyScene() {
             ),
         ),
         onAddTransaction = {},
-        onViewTransactions = {},
         onViewAccounts = {},
         onViewReviewQueue = {},
-        onViewBills = {},
         onViewCashflow = {},
-        onViewBudgets = {},
         onViewRules = {},
-        onViewSettings = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
 }
@@ -173,14 +182,10 @@ private fun HomeNeedsAccountScene() {
     HomeContent(
         state = HomeUiState.NeedsAccount,
         onAddTransaction = {},
-        onViewTransactions = {},
         onViewAccounts = {},
         onViewReviewQueue = {},
-        onViewBills = {},
         onViewCashflow = {},
-        onViewBudgets = {},
         onViewRules = {},
-        onViewSettings = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
 }

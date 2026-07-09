@@ -46,14 +46,7 @@ fun BillsScreen(navController: NavController) {
 internal fun BillsContent(state: BillsUiState, onBack: () -> Unit) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Bills") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
+            TopAppBar(title = { Text("Bills") })
         },
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
