@@ -1,5 +1,7 @@
 package com.magpie.ui.home
 
+import androidx.compose.material.icons.filled.Refresh
+import design.pulse.ui.components.EmptyState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -102,7 +104,11 @@ internal fun HomeContent(
                     CircularProgressIndicator()
                 }
                 is HomeUiState.NeedsAccount -> CreateFirstAccountForm(onCreate = onCreateFirstAccount)
-                is HomeUiState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error)
+                is HomeUiState.Error -> EmptyState(
+                    icon = Icons.Default.Refresh,
+                    title = "Couldn't reach Magpie",
+                    subtitle = state.message,
+                )
                 is HomeUiState.Ready -> {
                     MonthPanel(state.summary)
                     Spacer(Modifier.height(12.dp))

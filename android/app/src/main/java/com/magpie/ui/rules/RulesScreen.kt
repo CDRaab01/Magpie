@@ -1,5 +1,7 @@
 package com.magpie.ui.rules
 
+import androidx.compose.material.icons.filled.AutoAwesome
+import design.pulse.ui.components.EmptyState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -86,12 +88,11 @@ internal fun RulesContent(
                 state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     CircularProgressIndicator()
                 }
-                state.rules.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Text(
-                        "No rules yet. Magpie adds them as it learns your recurring transactions.",
-                        modifier = Modifier.padding(MagpieTheme.spacing.lg),
-                    )
-                }
+                state.rules.isEmpty() -> EmptyState(
+                    icon = Icons.Default.AutoAwesome,
+                    title = "No rules yet",
+                    subtitle = "Magpie adds them as it learns your recurring transactions.",
+                )
                 else -> LazyColumn(modifier = Modifier.padding(MagpieTheme.spacing.md)) {
                     items(state.rules.size) { i ->
                         RuleRowCard(

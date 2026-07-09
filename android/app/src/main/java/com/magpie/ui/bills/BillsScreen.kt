@@ -1,5 +1,7 @@
 package com.magpie.ui.bills
 
+import androidx.compose.material.icons.filled.CalendarMonth
+import design.pulse.ui.components.EmptyState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,9 +65,11 @@ internal fun BillsContent(state: BillsUiState, onBack: () -> Unit) {
                 state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     CircularProgressIndicator()
                 }
-                state.bills.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Text("No bills yet.")
-                }
+                state.bills.isEmpty() -> EmptyState(
+                    icon = Icons.Default.CalendarMonth,
+                    title = "No bills yet",
+                    subtitle = "Bill-due alerts and CSV imports show up here.",
+                )
                 else -> LazyColumn(modifier = Modifier.padding(MagpieTheme.spacing.md)) {
                     items(state.bills, key = { it.id }) { bill -> BillRow(bill) }
                 }

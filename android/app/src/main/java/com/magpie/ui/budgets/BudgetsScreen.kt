@@ -1,5 +1,7 @@
 package com.magpie.ui.budgets
 
+import androidx.compose.material.icons.filled.PieChart
+import design.pulse.ui.components.EmptyState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -94,9 +96,11 @@ internal fun BudgetsContent(
                 state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     CircularProgressIndicator()
                 }
-                state.rows.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Text("No budgets set for ${state.monthLabel}.")
-                }
+                state.rows.isEmpty() -> EmptyState(
+                    icon = Icons.Default.PieChart,
+                    title = "No budgets for ${state.monthLabel}",
+                    subtitle = "Tap + to set a monthly amount per category.",
+                )
                 else -> LazyColumn(modifier = Modifier.padding(MagpieTheme.spacing.md)) {
                     items(state.rows.size) { i -> BudgetRowCard(state.rows[i]) }
                 }
