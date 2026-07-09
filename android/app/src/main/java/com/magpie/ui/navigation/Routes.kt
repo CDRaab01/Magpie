@@ -10,5 +10,6 @@ object Routes {
     const val CASHFLOW = "cashflow"
     const val BUDGETS = "budgets"
     const val RULES = "rules"
+    const val TRENDS = "trends"
     const val SETTINGS = "settings"
 }

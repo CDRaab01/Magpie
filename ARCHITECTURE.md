@@ -33,9 +33,10 @@
 > 4. **Two sweeps unbuilt** — auth-hold expiry (the first data-*mutation* sweep) and
 >    paycheck-*short* (band-based, at ingestion) — and bill matching still lacks F13's
 >    sign/kind pool filters + one-bill-per-transaction.
-> 5. **Zero data visualization** — no `Sparkline`/`ProgressRing`/`TickerNumber`/Canvas
->    anywhere, unique in the suite for its most numbers-heavy app (ROADMAP.md Wave 1: read
->    models + charts).
+> 5. **Data visualization is now landing** — the Wave 1 read models + the Trends screen
+>    (`Sparkline`s: net trend + income/spend tiles + category bars) shipped 2026-07-09;
+>    still to come are the Home hero `TickerNumber`, the Budgets `ProgressRing`, and the
+>    merchant drill-down (ROADMAP.md Wave 1 #13/#15/#16).
 > 6. **On-device verification batch owed `[H]`:** formal SSO sign-in confirmation,
 >    split-sheet interaction, encrypted token store (F17), one real alert deep-link tap,
 >    font-scale/TalkBack, and a human eyeball pass over the recorded baselines.
@@ -505,10 +506,14 @@ neutral (red strictly for over-budget/out-of-band/missing), Bills colors the sta
 never the amount; green = income/under-budget/reconciled and amber = needs-review stay.
 **Remaining from that review (ROADMAP.md Wave 0):** AI-suggestion text still borrows teal —
 it gets its own violet voice, and teal pares back to brand/primary + money-totals.
-**The one design gap Tier 4 did not touch (now the headline one): no data visualization.**
-No `Sparkline`, `ProgressRing`, `TickerNumber`, or Canvas chart anywhere — while Plate's Home
-leads with a ring + ticker + weekly sparkline and Spotter has an animated Canvas trend chart.
-ROADMAP.md Wave 1 (read models + charts, Pulse components only) is that pass.
+**Data visualization (ROADMAP.md Wave 1) began 2026-07-09** with the **Trends screen**
+(`ui/trends/`): a net headline over a filled 6-month `Sparkline`, an Income/Spend dense-`StatTile`
+row (each with its own sparkline — income green, spend neutral per #31), the month's category
+breakdown as proportional bars, and top merchants — consuming the new `/summary/*` read models,
+reached from Home as a secondary link, light+dark Roborazzi baselines. Still to come: the Home
+hero `TickerNumber`, a Budgets `ProgressRing`, and the merchant drill-down (Wave 1 #13/#15/#16) —
+all Pulse components, matching the idioms the siblings actually ship (Plate's ring+ticker+sparkline,
+Spotter's filled-line stat tiles) rather than inventing a bespoke Canvas.
 
 **Built (Phase 2):** `data/remote/` — `ApiService` (Retrofit + kotlinx-serialization),
 `AuthInterceptor` + `TokenRefreshAuthenticator` (mirrors Spotter/Cookbook's hardened

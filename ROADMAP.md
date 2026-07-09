@@ -125,10 +125,15 @@ exact components and idioms; invent nothing new.
 13. **Home: numbers that move.** `TickerNumber` on the hero's net figure (Plate's animated
     hero precedent); the month panel's dense `StatTile`s gain 6-month sparklines in the slot
     the dense layout already has (exactly Spotter's usage).
-14. **Trends screen** — Spotter's `ProgressScreen` analog and the natural home for the
-    custom-Canvas idiom: 12-month in/out/net bars, the current month's category breakdown,
-    tap a category → its monthly trend + top merchants. Reached from Home as a secondary
-    link (like Accounts/Rules).
+14. **Trends screen — DONE 2026-07-09.** `ui/trends/` (`TrendsScreen` + pure, screenshot-tested
+    `TrendsContent` + `TrendsViewModel`), Spotter's `ProgressScreen` analog: a net headline over a
+    filled 6-month `Sparkline`, an Income/Spend dense-`StatTile` row each with its own sparkline
+    (income green, spend neutral per #31), the current month's category breakdown as proportional
+    bars, and the top merchants. Reached from Home as a secondary link (added alongside
+    Accounts/Rules); designed empty + error states; light+dark Roborazzi baselines. `assembleDebug`
+    + `testDebugUnitTest` green. **Deferred:** tap-a-category → its own monthly trend drill-down
+    (folds into #16); Magpie uses Pulse's `Sparkline` rather than a bespoke Canvas, matching the
+    dense-tile idiom the siblings actually ship.
 15. **Budgets: a ring where it earns it.** Rows keep the linear bar; add an overall
     month-utilization `ProgressRing` header (Plate's hero-ring pattern in Magpie's teal),
     red only when genuinely over (#31 grammar).

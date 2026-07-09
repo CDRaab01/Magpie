@@ -27,6 +27,7 @@ import com.magpie.ui.rules.RulesScreen
 import com.magpie.ui.settings.SettingsScreen
 import com.magpie.ui.signin.SignInScreen
 import com.magpie.ui.transactions.TransactionsScreen
+import com.magpie.ui.trends.TrendsScreen
 
 /**
  * Gated on [AuthGateViewModel.isSignedIn]: `null` briefly while DataStore's first read lands,
@@ -120,6 +121,7 @@ private fun SignedInGraph(deepLinkHost: StateFlow<String?> = MutableStateFlow(nu
             composable(Routes.CASHFLOW) { CashflowScreen(navController) }
             composable(Routes.BUDGETS) { BudgetsScreen(navController) }
             composable(Routes.RULES) { RulesScreen(navController) }
+            composable(Routes.TRENDS) { TrendsScreen(navController) }
             composable(Routes.SETTINGS) { SettingsScreen(navController) }
         }
     }

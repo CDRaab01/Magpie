@@ -11,7 +11,11 @@ import com.magpie.data.remote.BudgetOut
 import com.magpie.data.remote.CashflowCalendarOut
 import com.magpie.data.remote.CategoryCreate
 import com.magpie.data.remote.CategoryOut
+import com.magpie.data.remote.CategorySummaryOut
 import com.magpie.data.remote.CategoryUpdate
+import com.magpie.data.remote.HistoryOut
+import com.magpie.data.remote.MerchantSummaryOut
+import com.magpie.data.remote.SafeToSpendOut
 import com.magpie.data.remote.ImportSummaryOut
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.data.remote.RefreshRequest
@@ -143,6 +147,18 @@ private class FakeApi : ApiService {
     override suspend fun createBudget(req: BudgetCreate): BudgetOut = error("unused")
 
     override suspend fun getCashflow(): CashflowCalendarOut = error("unused")
+
+    override suspend fun getHistory(months: Int): HistoryOut = error("unused")
+
+    override suspend fun getCategorySummary(month: String): CategorySummaryOut = error("unused")
+
+    override suspend fun getTopMerchants(
+        month: String,
+        categoryId: String?,
+        limit: Int?,
+    ): MerchantSummaryOut = error("unused")
+
+    override suspend fun getSafeToSpend(): SafeToSpendOut = error("unused")
 
     override suspend fun getVersion(): VersionOut = error("unused")
 }

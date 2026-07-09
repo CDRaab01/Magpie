@@ -118,6 +118,23 @@ interface ApiService {
     @GET("cashflow")
     suspend fun getCashflow(): CashflowCalendarOut
 
+    // --- Summary / analytics (Wave 1 read models) ---
+    @GET("summary/history")
+    suspend fun getHistory(@Query("months") months: Int = 6): HistoryOut
+
+    @GET("summary/categories")
+    suspend fun getCategorySummary(@Query("month") month: String): CategorySummaryOut
+
+    @GET("summary/merchants")
+    suspend fun getTopMerchants(
+        @Query("month") month: String,
+        @Query("category_id") categoryId: String? = null,
+        @Query("limit") limit: Int? = null,
+    ): MerchantSummaryOut
+
+    @GET("summary/safe-to-spend")
+    suspend fun getSafeToSpend(): SafeToSpendOut
+
     // --- Ops ---
     @GET("version")
     suspend fun getVersion(): VersionOut

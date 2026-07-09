@@ -37,6 +37,11 @@ import com.magpie.ui.transactions.SplitSheetContent
 import com.magpie.ui.transactions.TransactionsContent
 import com.magpie.ui.transactions.TransactionsUiState
 import com.magpie.ui.transactions.TxnFilter
+import com.magpie.data.remote.CategorySummaryItem
+import com.magpie.data.remote.MerchantSummaryItem
+import com.magpie.data.remote.MonthSummaryOut
+import com.magpie.ui.trends.TrendsContent
+import com.magpie.ui.trends.TrendsUiState
 import com.magpie.ui.rules.RuleRow
 import com.magpie.ui.rules.RulesContent
 import com.magpie.ui.rules.RulesUiState
@@ -218,6 +223,44 @@ class ScreenshotTest {
 
     @Test
     fun cash_entry_dark() = capture("cash_entry_dark", dark = true) { CashEntryScene() }
+
+    @Test
+    fun trends_light() = capture("trends_light", dark = false) { TrendsScene() }
+
+    @Test
+    fun trends_dark() = capture("trends_dark", dark = true) { TrendsScene() }
+}
+
+@Composable
+private fun TrendsScene() {
+    fun month(m: Int, income: Long, spend: Long) =
+        MonthSummaryOut(year = 2026, month = m, incomeCents = income, spendCents = spend, netCents = income + spend)
+    TrendsContent(
+        state = TrendsUiState(
+            monthLabel = "July 2026",
+            history = listOf(
+                month(2, 450000, -410000),
+                month(3, 450000, -382000),
+                month(4, 460000, -455000),
+                month(5, 450000, -390000),
+                month(6, 470000, -402000),
+                month(7, 450000, -132000),
+            ),
+            categories = listOf(
+                CategorySummaryItem("cat-groc", "Groceries", -62000),
+                CategorySummaryItem("cat-dining", "Dining", -41000),
+                CategorySummaryItem("cat-transport", "Transport", -18000),
+                CategorySummaryItem(null, "Uncategorized", -9000),
+            ),
+            merchants = listOf(
+                MerchantSummaryItem("MEIJER", -32000, 4),
+                MerchantSummaryItem("SAMPLE BISTRO", -18000, 3),
+                MerchantSummaryItem("BIG BOX", -14000, 1),
+            ),
+            loading = false,
+        ),
+        onBack = {},
+    )
 }
 
 @Composable
@@ -344,6 +387,7 @@ private fun HomeReadyScene() {
         onViewReviewQueue = {},
         onViewCashflow = {},
         onViewRules = {},
+        onViewTrends = {},
         onCreateFirstAccount = { _, _, _, _ -> },
     )
 }
@@ -357,6 +401,7 @@ private fun HomeNeedsAccountScene() {
         onViewReviewQueue = {},
         onViewCashflow = {},
         onViewRules = {},
+        onViewTrends = {},
         onCreateFirstAccount = { _, _, _, _ -> },
     )
 }

@@ -166,6 +166,56 @@ data class BudgetOut(
     @SerialName("actual_cents") val actualCents: Long,
 )
 
+// --- Summary / analytics read models (ROADMAP.md Wave 1) ---
+
+@Serializable
+data class MonthSummaryOut(
+    val year: Int,
+    val month: Int,
+    @SerialName("income_cents") val incomeCents: Long,
+    @SerialName("spend_cents") val spendCents: Long,
+    @SerialName("net_cents") val netCents: Long,
+)
+
+@Serializable
+data class HistoryOut(
+    val months: List<MonthSummaryOut>,
+)
+
+@Serializable
+data class CategorySummaryItem(
+    @SerialName("category_id") val categoryId: String?,
+    @SerialName("category_name") val categoryName: String,
+    @SerialName("spend_cents") val spendCents: Long, // signed (negative); the month's net spend
+)
+
+@Serializable
+data class CategorySummaryOut(
+    val month: String,
+    val categories: List<CategorySummaryItem>,
+)
+
+@Serializable
+data class MerchantSummaryItem(
+    val merchant: String,
+    @SerialName("spend_cents") val spendCents: Long,
+    @SerialName("transaction_count") val transactionCount: Int,
+)
+
+@Serializable
+data class MerchantSummaryOut(
+    val month: String,
+    val merchants: List<MerchantSummaryItem>,
+)
+
+@Serializable
+data class SafeToSpendOut(
+    @SerialName("safe_to_spend_cents") val safeToSpendCents: Long,
+    @SerialName("depository_balance_cents") val depositoryBalanceCents: Long,
+    @SerialName("due_before_paycheck_cents") val dueBeforePaycheckCents: Long,
+    @SerialName("next_paycheck_date") val nextPaycheckDate: String?,
+)
+
 @Serializable
 data class RuleCadence(
     val kind: String? = null,

@@ -64,6 +64,7 @@ fun HomeScreen(navController: NavController) {
         onViewReviewQueue = { navController.navigate(Routes.REVIEW_QUEUE) },
         onViewCashflow = { navController.navigate(Routes.CASHFLOW) },
         onViewRules = { navController.navigate(Routes.RULES) },
+        onViewTrends = { navController.navigate(Routes.TRENDS) },
         onCreateFirstAccount = viewModel::createFirstAccount,
     )
 }
@@ -76,6 +77,7 @@ internal fun HomeContent(
     onViewReviewQueue: () -> Unit,
     onViewCashflow: () -> Unit,
     onViewRules: () -> Unit,
+    onViewTrends: () -> Unit,
     onCreateFirstAccount: (name: String, institution: String, type: String, last4: String?) -> Unit,
 ) {
     Scaffold(
@@ -123,6 +125,9 @@ internal fun HomeContent(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         PulseButton(
                             text = "Accounts", tonal = true, compact = true, onClick = onViewAccounts,
+                        )
+                        PulseButton(
+                            text = "Trends", tonal = true, compact = true, onClick = onViewTrends,
                         )
                         PulseButton(
                             text = "Rules", tonal = true, compact = true, onClick = onViewRules,
