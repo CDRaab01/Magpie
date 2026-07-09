@@ -1,24 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Magpie's "magpie" gradient (indigo -> teal -> green) for the adaptive icon background —
-     the same 3-stop sweep as the in-app hero, evoking the bird's structural iridescence. -->
+<!-- Near-white background for the low-poly magpie foreground (2026-07-09). The bird carries the
+     brand color itself (iridescent blue/teal/green facets), so it sits on a clean light ground
+     rather than the old teal gradient, which its own wings blended into. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:pathData="M0,0h108v108h-108z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:startX="0"
-                android:startY="0"
-                android:endX="108"
-                android:endY="108"
-                android:type="linear">
-                <item android:offset="0" android:color="#FF5B2BE0" />
-                <item android:offset="0.5" android:color="#FF0F766E" />
-                <item android:offset="1" android:color="#FF047857" />
-            </gradient>
-        </aapt:attr>
-    </path>
+    <path
+        android:fillColor="#FFF5F6F8"
+        android:pathData="M0,0h108v108h-108z" />
 </vector>
