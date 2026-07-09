@@ -37,6 +37,7 @@ import androidx.navigation.NavController
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.ui.navigation.Routes
 import com.magpie.ui.theme.MagpieTheme
+import com.magpie.util.formatCents
 import com.magpie.util.formatCentsCompact
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
@@ -100,16 +101,22 @@ internal fun HomeContent(
                 is HomeUiState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error)
                 is HomeUiState.Ready -> {
                     MonthPanel(state.summary)
+                    Spacer(Modifier.height(12.dp))
+                    // Content, not links (#29): the review queue and the next bill are live cards
+                    // showing their own data; only the two non-tab utilities (Accounts, Rules) stay
+                    // as compact secondary links.
+                    ReviewQueueCard(count = state.reviewCount, onClick = onViewReviewQueue)
+                    Spacer(Modifier.height(8.dp))
+                    UpcomingBillCard(bill = state.nextBill, onClick = onViewCashflow)
                     Spacer(Modifier.height(16.dp))
-                    // Only the screens NOT in the bottom bar are linked here (Home/Transactions/
-                    // Bills/Budgets/Settings are tabs now). #29 turns these into live content cards.
-                    PulseButton(text = "Review queue", tonal = true, onClick = onViewReviewQueue)
-                    Spacer(Modifier.height(8.dp))
-                    PulseButton(text = "Cash flow", tonal = true, onClick = onViewCashflow)
-                    Spacer(Modifier.height(8.dp))
-                    PulseButton(text = "Accounts", tonal = true, onClick = onViewAccounts)
-                    Spacer(Modifier.height(8.dp))
-                    PulseButton(text = "Rules", tonal = true, onClick = onViewRules)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PulseButton(
+                            text = "Accounts", tonal = true, compact = true, onClick = onViewAccounts,
+                        )
+                        PulseButton(
+                            text = "Rules", tonal = true, compact = true, onClick = onViewRules,
+                        )
+                    }
                 }
             }
         }
@@ -152,13 +159,7 @@ private fun MagpieHero(state: HomeUiState.Ready) {
 private fun heroStatusLine(state: HomeUiState.Ready): String {
     val parts = mutableListOf("${formatCentsCompact(state.summary.netCents)} net this month")
     if (state.reviewCount > 0) parts += "${state.reviewCount} to review"
-    state.nextBill?.let { bill ->
-        val due = runCatching {
-            java.time.LocalDate.parse(bill.dueDate)
-                .format(java.time.format.DateTimeFormatter.ofPattern("MMM d"))
-        }.getOrDefault(bill.dueDate)
-        parts += "${bill.biller} due $due"
-    }
+    state.nextBill?.let { bill -> parts += "${bill.biller} due ${formatShortDate(bill.dueDate)}" }
     return parts.joinToString("  ·  ")
 }
 
@@ -211,6 +212,63 @@ private fun MonthStatTile(
         }
     }
 }
+
+/** Home's review-queue content card (#29) — the count as a live datum, tappable to the queue. */
+@Composable
+private fun ReviewQueueCard(count: Int, onClick: () -> Unit) {
+    val channel =
+        if (count > 0) MagpieTheme.colors.needsReview.base else MagpieTheme.colors.underBudget.base
+    PanelCard(channel = channel, onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Column {
+            SectionHeader(label = "Review queue", channel = channel)
+            Spacer(Modifier.height(8.dp))
+            if (count > 0) {
+                Text("$count", style = Pulse.dataType.dataMedium, color = channel)
+                Text("to review", style = MaterialTheme.typography.bodyMedium)
+            } else {
+                Text("All caught up", style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+    }
+}
+
+/** Home's next-bill content card (#29) — the soonest upcoming bill, tappable to the cash-flow calendar. */
+@Composable
+private fun UpcomingBillCard(bill: com.magpie.data.remote.UpcomingBillOut?, onClick: () -> Unit) {
+    val channel = MagpieTheme.colors.money.base
+    PanelCard(channel = channel, onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            SectionHeader(label = "Upcoming", channel = channel)
+            Spacer(Modifier.height(8.dp))
+            if (bill != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column {
+                        Text(bill.biller, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "due ${formatShortDate(bill.dueDate)}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Text(
+                        formatCents(-bill.amountDueCents),
+                        color = if (bill.isOverdue) MagpieTheme.colors.overBudget.base
+                        else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            } else {
+                Text("Nothing due soon", style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+    }
+}
+
+private fun formatShortDate(iso: String): String = runCatching {
+    java.time.LocalDate.parse(iso)
+        .format(java.time.format.DateTimeFormatter.ofPattern("MMM d"))
+}.getOrDefault(iso)
 
 @Composable
 private fun CreateFirstAccountForm(onCreate: (name: String, institution: String, type: String) -> Unit) {
