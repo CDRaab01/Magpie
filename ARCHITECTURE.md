@@ -208,6 +208,13 @@ Pulse composite build, suite signing/release/deploy conventions.
   17 card payments + 49 refunds miscounted), spend −$198k net of refunds, transfers excluded.
   Depository accounts keep the plain income/spend convention (a checking deposit *is* income);
   the checking-side leg of a card payment is refined by cross-account transfer pairing.
+  **Internal transfers (2026-07-09, from the real US Bank export):** a checking↔savings move
+  ("MOBILE BANKING TRANSFER …") is neither income nor spend, but depository↔depository can't
+  auto-pair (the F3 payment-shape guard is card+depository by design), so `looks_like_internal_transfer`
+  books both legs as `transfer` by description. Validated on a real 4-account overlap month (Amex +
+  Discover + Checking + Savings): the Amex/Discover payments pair to zero cross-account, paychecks
+  book as income, internal transfers are excluded (removed $18k of phantom income). Judgment-call
+  outflows (an investment buy, payments to *untracked* cards) stay spend — the owner recategorizes.
 - **`app/rules/`** (built, Phase 5) — `clock.py` (the injected time seam — `SystemClock` in
   production, `FixedClock` in tests, so cadence/band logic gets real time-travel tests)
   + `recurrence.py` (cadence windows — weekly/biweekly/monthly ± `slack_days`, monthly

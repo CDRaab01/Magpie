@@ -49,8 +49,13 @@ else in this wave can run in parallel with it.
    `institution_mappings.default_kind_for` (card: positive = payment→transfer / refund, never
    income); re-verified on the corpus ($0 income, −$198k net spend, transfers excluded). **Still
    to do:** deploy the fix `[H]`, then the real prod import (needs the account created + owner
-   auth — minting a session token server-side is the agreed path); **US Bank checking** (the other
-   leg of the card payments + the actual income/paychecks — still owed); **Visa in/out** decision.
+   auth — minting a session token server-side is the agreed path). **US Bank Checking + Savings
+   format VALIDATED (2026-07-09)** on a 1-month sample: parses with no code change (standard signed
+   format, "Name" = description, no flip); paychecks book as income; the Amex/Discover payment legs
+   pair to zero cross-account; and a new fix books internal checking↔savings moves as transfers
+   (they were double-counted as spend+income). **Still owed: the full ~3-year US Bank export** (this
+   was the default 1-month range). **Visa: likely moot** — the "VISA" lines in checking are
+   *debit-card* purchases already captured in the checking feed, not a separate credit card.
    **Discover IN HAND + confirmed (2026-07-09):** a real 24-month export (693 rows, 2024-07 →
    2026-06); same positive-is-charge convention as Amex (added to the sign-flip list), and its two
    date columns ("Trans. Date"/"Post Date") needed new parser aliases or the import failed outright.
