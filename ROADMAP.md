@@ -125,10 +125,11 @@ exact components and idioms; invent nothing new.
     ten-second daily review. Cache the last-known transactions + month summary + safe-to-spend
     (Room, Cookbook's read-cache precedent) so the app opens to stale-but-real data and
     refreshes when reachable. Small, and it removes the one way the daily habit silently breaks.
-13. **Home: numbers that move.** Hero `TickerNumber` **DONE** (#12a, on the safe-to-spend
-    figure — the better headline than net). **Still to do:** the month panel's dense `StatTile`s
-    gaining 6-month sparklines in the slot the dense layout already has (exactly Spotter's usage);
-    the Trends screen already proves the tile-with-sparkline pattern, so this is a small lift.
+13. **Home: numbers that move — DONE 2026-07-09.** Hero `TickerNumber` on the safe-to-spend
+    figure (#12a), and the month panel's three tiles (Income/Spend/Net) each carry a 6-month
+    `Sparkline` under the value (`GET /summary/history`, best-effort; spend uses magnitudes so the
+    line reads "how much", income/net signed). Values still fit their 1/3-width columns (the #30
+    single-line pin + #35 AutoFitValue hold). Home baselines re-recorded + eyeballed.
 14. **Trends screen — DONE 2026-07-09.** `ui/trends/` (`TrendsScreen` + pure, screenshot-tested
     `TrendsContent` + `TrendsViewModel`), Spotter's `ProgressScreen` analog: a net headline over a
     filled 6-month `Sparkline`, an Income/Spend dense-`StatTile` row each with its own sparkline

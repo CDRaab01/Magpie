@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.magpie.data.remote.AccountCreate
 import com.magpie.data.remote.AccountOut
 import com.magpie.data.remote.ApiService
+import com.magpie.data.remote.MonthSummaryOut
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.data.remote.UpcomingBillOut
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -38,6 +39,9 @@ sealed interface HomeUiState {
         // paycheck. Best-effort — null if the endpoint hiccups, so the hero degrades to just the
         // status line rather than blanking.
         val safeToSpendCents: Long? = null,
+        // 6-month income/spend/net series for the month-tile sparklines (#13). Best-effort; empty
+        // just means the tiles render without their trend line (the value still shows).
+        val history: List<MonthSummaryOut> = emptyList(),
     ) : HomeUiState
     data class Error(val message: String) : HomeUiState
 }
@@ -74,8 +78,10 @@ class HomeViewModel @Inject constructor(
                     runCatching { api.getCashflow().bills.firstOrNull() }.getOrNull()
                 val safeToSpend =
                     runCatching { api.getSafeToSpend().safeToSpendCents }.getOrNull()
+                val history =
+                    runCatching { api.getHistory(6).months }.getOrDefault(emptyList())
                 _state.value = HomeUiState.Ready(
-                    summary, accounts, greetingForNow(), reviewCount, nextBill, safeToSpend,
+                    summary, accounts, greetingForNow(), reviewCount, nextBill, safeToSpend, history,
                 )
             } catch (e: Exception) {
                 _state.value = HomeUiState.Error(e.message ?: "Couldn't reach Magpie")

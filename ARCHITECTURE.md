@@ -35,9 +35,9 @@
 >    sign/kind pool filters + one-bill-per-transaction.
 > 5. **Data visualization is now landing** (ROADMAP.md Wave 1, 2026-07-09) — the read models,
 >    the Trends screen (`Sparkline`s: net trend + income/spend tiles + category bars), the Home
->    hero safe-to-spend `TickerNumber`, and the Budgets month-utilization `ProgressRing` all
->    shipped; still to come are the Home month-tile sparklines and the merchant drill-down
->    (Wave 1 #13-remainder/#16).
+>    hero safe-to-spend `TickerNumber`, the Home month-tile sparklines, and the Budgets
+>    month-utilization `ProgressRing` all shipped; the merchant drill-down (Wave 1 #16) is the
+>    last chart surface, and the offline read cache (#12b) is the remaining infra item.
 > 6. **On-device verification batch owed `[H]`:** formal SSO sign-in confirmation,
 >    split-sheet interaction, encrypted token store (F17), one real alert deep-link tap,
 >    font-scale/TalkBack, and a human eyeball pass over the recorded baselines.
@@ -514,10 +514,11 @@ breakdown as proportional bars, and top merchants — consuming the new `/summar
 reached from Home as a secondary link, light+dark Roborazzi baselines. **The Home hero** now
 leads with a rolling safe-to-spend `TickerNumber` (`GET /summary/safe-to-spend`, best-effort;
 the hero taps through to the cash-flow calendar), and **Budgets** tops its list with a
-month-utilization `ProgressRing` (total spent/budget, red only when the household is over — #31).
-Still to come: the Home month-tile sparklines and the merchant drill-down (Wave 1 #13-remainder/#16)
-— all Pulse components, matching the idioms the siblings actually ship (Plate's ring+ticker+sparkline,
-Spotter's filled-line stat tiles) rather than inventing a bespoke Canvas.
+month-utilization `ProgressRing` (total spent/budget, red only when the household is over — #31),
+and **the Home month tiles** (Income/Spend/Net) each carry a 6-month `Sparkline` under the value.
+Still to come: the merchant drill-down (Wave 1 #16) — all Pulse components, matching the idioms the
+siblings actually ship (Plate's ring+ticker+sparkline, Spotter's filled-line stat tiles) rather than
+inventing a bespoke Canvas.
 
 **Built (Phase 2):** `data/remote/` — `ApiService` (Retrofit + kotlinx-serialization),
 `AuthInterceptor` + `TokenRefreshAuthenticator` (mirrors Spotter/Cookbook's hardened

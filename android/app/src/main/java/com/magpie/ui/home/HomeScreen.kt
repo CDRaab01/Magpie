@@ -49,6 +49,7 @@ import com.magpie.util.formatCentsCompact
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
+import design.pulse.ui.components.Sparkline
 import design.pulse.ui.components.TickerNumber
 import design.pulse.ui.theme.Pulse
 
@@ -115,7 +116,7 @@ internal fun HomeContent(
                     subtitle = state.message,
                 )
                 is HomeUiState.Ready -> {
-                    MonthPanel(state.summary)
+                    MonthPanel(state.summary, state.history)
                     Spacer(Modifier.height(12.dp))
                     // Content, not links (#29): the review queue and the next bill are live cards
                     // showing their own data; only the two non-tab utilities (Accounts, Rules) stay
@@ -202,7 +203,16 @@ private fun heroStatusLine(state: HomeUiState.Ready): String {
 }
 
 @Composable
-private fun MonthPanel(summary: MonthlySummaryOut) {
+private fun MonthPanel(
+    summary: MonthlySummaryOut,
+    history: List<com.magpie.data.remote.MonthSummaryOut>,
+) {
+    // 6-month trend series per tile (#13). Spend uses magnitudes so the bars read "how much"
+    // rather than as an inverted dip; income/net use their signed values (net can go negative,
+    // and the filled sparkline's min–max normalization keeps that readable).
+    val incomeSeries = history.map { it.incomeCents.toFloat() }
+    val spendSeries = history.map { kotlin.math.abs(it.spendCents.toFloat()) }
+    val netSeries = history.map { it.netCents.toFloat() }
     PanelCard(channel = MagpieTheme.colors.money.base) {
         SectionHeader(label = "This month", channel = MagpieTheme.colors.money.base)
         Spacer(Modifier.height(12.dp))
@@ -210,11 +220,11 @@ private fun MonthPanel(summary: MonthlySummaryOut) {
             // Color grammar (#31): income green, net teal (money), but spend is neutral — with the
             // transaction rows now neutral too, red is reserved for real deviations.
             MonthStatTile("Income", formatCentsCompact(summary.incomeCents),
-                MagpieTheme.colors.underBudget.base, Modifier.weight(1f))
+                MagpieTheme.colors.underBudget.base, incomeSeries, Modifier.weight(1f))
             MonthStatTile("Spend", formatCentsCompact(summary.spendCents),
-                MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
+                MaterialTheme.colorScheme.onSurface, spendSeries, Modifier.weight(1f))
             MonthStatTile("Net", formatCentsCompact(summary.netCents),
-                MagpieTheme.colors.money.base, Modifier.weight(1f))
+                MagpieTheme.colors.money.base, netSeries, Modifier.weight(1f))
         }
     }
 }
@@ -230,6 +240,7 @@ private fun MonthStatTile(
     label: String,
     value: String,
     channel: androidx.compose.ui.graphics.Color,
+    sparkline: List<Float>,
     modifier: Modifier = Modifier,
 ) {
     PanelCard(channel = channel, modifier = modifier, contentPadding = 14.dp) {
@@ -242,6 +253,16 @@ private fun MonthStatTile(
                 overflow = TextOverflow.Ellipsis,
             )
             AutoFitValue(value = value, color = channel)
+            // The 6-month trend in the slot the dense sibling tiles already carry (Spotter's usage).
+            if (sparkline.size >= 2) {
+                Sparkline(
+                    values = sparkline,
+                    channel = channel,
+                    asBars = false,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.fillMaxWidth().height(18.dp),
+                )
+            }
         }
     }
 }
