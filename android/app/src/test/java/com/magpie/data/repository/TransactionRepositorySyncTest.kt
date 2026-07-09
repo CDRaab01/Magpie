@@ -15,6 +15,8 @@ import com.magpie.data.remote.CategoryUpdate
 import com.magpie.data.remote.ImportSummaryOut
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.data.remote.RefreshRequest
+import com.magpie.data.remote.RuleOut
+import com.magpie.data.remote.RuleUpdate
 import com.magpie.data.remote.SuiteLoginRequest
 import com.magpie.data.remote.TokenResponse
 import com.magpie.data.remote.TransactionCreate
@@ -116,6 +118,12 @@ private class FakeApi : ApiService {
         institution: okhttp3.RequestBody,
         file: okhttp3.MultipartBody.Part,
     ): ImportSummaryOut = error("unused")
+
+    override suspend fun listRules(): List<RuleOut> = error("unused")
+
+    override suspend fun updateRule(id: String, req: RuleUpdate): RuleOut = error("unused")
+
+    override suspend fun deleteRule(id: String) = error("unused")
 
     override suspend fun listBudgets(month: String): List<BudgetOut> = error("unused")
 

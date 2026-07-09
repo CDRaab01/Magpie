@@ -11,6 +11,7 @@ import com.magpie.ui.accounts.AccountsScreen
 import com.magpie.ui.bills.BillsScreen
 import com.magpie.ui.budgets.BudgetsScreen
 import com.magpie.ui.cashflow.CashflowScreen
+import com.magpie.ui.rules.RulesScreen
 import com.magpie.ui.cashentry.CashEntryScreen
 import com.magpie.ui.home.HomeScreen
 import com.magpie.ui.reviewqueue.ReviewQueueScreen
@@ -42,6 +43,7 @@ fun MagpieNavHost() {
                 composable(Routes.BILLS) { BillsScreen(navController) }
                 composable(Routes.CASHFLOW) { CashflowScreen(navController) }
                 composable(Routes.BUDGETS) { BudgetsScreen(navController) }
+                composable(Routes.RULES) { RulesScreen(navController) }
                 composable(Routes.SETTINGS) { SettingsScreen(navController) }
             }
         }

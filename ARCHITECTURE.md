@@ -561,7 +561,14 @@ session makes the Flow re-emit. `ui/budgets/BudgetsScreen` (**Tier 3 #25, 2026-0
 month-vs-budget view: `GET /budgets?month=` for the current month with category names from `GET
 /categories`, each row an actual-vs-budget `LinearProgressIndicator` with "$X left"/"Over by $X",
 over-budget in the red channel and under in green; a FAB opens an add-budget dialog — category
-picker + amount → `POST /budgets`; linked from Home; light+dark Roborazzi baselines). `ui/settings/SettingsScreen` (**V1 Tier 1 #10** — the category
+picker + amount → `POST /budgets`; linked from Home; light+dark Roborazzi baselines).
+`ui/rules/RulesScreen` (**Tier 3 #22, 2026-07-08** — the rules editor on the Phase-5 rules CRUD:
+each rule shows its matcher, a human type label (Income/Bill/Transfer/Category rule) and a one-line
+summary (cadence `kind ±Nd`, band `±N%`, `→ Category`, names from `GET /categories`), an
+enable/disable `Switch` (optimistic → `PATCH /rules/{id}`, disabled rules drop to a muted channel),
+and delete behind a confirm dialog (`DELETE /rules/{id}`); linked from Home; light+dark Roborazzi
+baselines. **Deferred:** the review-queue "make this a rule" growth loop and inline band/cadence
+editing). `ui/settings/SettingsScreen` (**V1 Tier 1 #10** — the category
 editor: lists categories, the user's own (`shared=false`) get rename/delete affordances while
 seeded/shared ones show a read-only "Shared" label (the server 404s a rename/delete of a shared
 category), plus an "Add" action and an About block with the server `/version`. `SettingsViewModel`

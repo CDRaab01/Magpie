@@ -28,6 +28,9 @@ import com.magpie.ui.budgets.BudgetsContent
 import com.magpie.ui.budgets.BudgetsUiState
 import com.magpie.ui.cashflow.CashflowContent
 import com.magpie.ui.cashflow.CashflowUiState
+import com.magpie.ui.rules.RuleRow
+import com.magpie.ui.rules.RulesContent
+import com.magpie.ui.rules.RulesUiState
 import com.magpie.ui.home.HomeContent
 import com.magpie.ui.home.HomeUiState
 import com.magpie.ui.reviewqueue.ReviewQueueContent
@@ -121,6 +124,12 @@ class ScreenshotTest {
 
     @Test
     fun budgets_dark() = capture("budgets_dark", dark = true) { BudgetsScene() }
+
+    @Test
+    fun rules_light() = capture("rules_light", dark = false) { RulesScene() }
+
+    @Test
+    fun rules_dark() = capture("rules_dark", dark = true) { RulesScene() }
 }
 
 @Composable
@@ -143,6 +152,7 @@ private fun HomeReadyScene() {
         onViewBills = {},
         onViewCashflow = {},
         onViewBudgets = {},
+        onViewRules = {},
         onViewSettings = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
@@ -159,6 +169,7 @@ private fun HomeNeedsAccountScene() {
         onViewBills = {},
         onViewCashflow = {},
         onViewBudgets = {},
+        onViewRules = {},
         onViewSettings = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
@@ -290,6 +301,41 @@ private fun SettingsScene() {
         onAddCategory = {},
         onRenameCategory = { _, _ -> },
         onDeleteCategory = {},
+    )
+}
+
+@Composable
+private fun RulesScene() {
+    RulesContent(
+        state = RulesUiState(
+            rules = listOf(
+                RuleRow(
+                    id = "1",
+                    typeLabel = "Income",
+                    matcher = "EMPLOYER PAYROLL",
+                    summary = "biweekly ±3d",
+                    enabled = true,
+                ),
+                RuleRow(
+                    id = "2",
+                    typeLabel = "Bill",
+                    matcher = "XCEL ENERGY",
+                    summary = "monthly ±20% · → Utilities",
+                    enabled = true,
+                ),
+                RuleRow(
+                    id = "3",
+                    typeLabel = "Category rule",
+                    matcher = "SAMPLE BISTRO",
+                    summary = "→ Dining",
+                    enabled = false,
+                ),
+            ),
+            loading = false,
+        ),
+        onBack = {},
+        onSetEnabled = { _, _ -> },
+        onDelete = {},
     )
 }
 

@@ -146,3 +146,32 @@ data class BudgetOut(
     // negative), never stored.
     @SerialName("actual_cents") val actualCents: Long,
 )
+
+@Serializable
+data class RuleCadence(
+    val kind: String? = null,
+    @SerialName("slack_days") val slackDays: Int? = null,
+)
+
+@Serializable
+data class RuleAmountBand(
+    val pct: Double? = null,
+)
+
+@Serializable
+data class RuleOut(
+    val id: String,
+    val type: String, // recurring_income | recurring_bill | transfer_match | merchant_category
+    @SerialName("account_id") val accountId: String? = null,
+    val matcher: String,
+    val cadence: RuleCadence? = null,
+    @SerialName("amount_band") val amountBand: RuleAmountBand? = null,
+    @SerialName("category_id") val categoryId: String? = null,
+    @SerialName("last_matched_at") val lastMatchedAt: String? = null,
+    val enabled: Boolean,
+)
+
+@Serializable
+data class RuleUpdate(
+    val enabled: Boolean,
+)

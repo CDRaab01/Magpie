@@ -83,6 +83,16 @@ interface ApiService {
         @Part file: MultipartBody.Part,
     ): ImportSummaryOut
 
+    // --- Rules ---
+    @GET("rules")
+    suspend fun listRules(): List<RuleOut>
+
+    @PATCH("rules/{id}")
+    suspend fun updateRule(@Path("id") id: String, @Body req: RuleUpdate): RuleOut
+
+    @DELETE("rules/{id}")
+    suspend fun deleteRule(@Path("id") id: String)
+
     // --- Budgets ---
     @GET("budgets")
     suspend fun listBudgets(@Query("month") month: String): List<BudgetOut>
