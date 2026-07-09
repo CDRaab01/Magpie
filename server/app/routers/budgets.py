@@ -31,7 +31,7 @@ async def all_budgets(
     db: DbSession,
     month: Annotated[datetime.date, Query()],
 ):
-    budgets = await list_budgets(db, month)
+    budgets = await list_budgets(db, current_user.id, month)
     actual = await actual_spend_by_category(db, current_user.id, month)
     return [_to_out(b, actual) for b in budgets]
 

@@ -7,7 +7,11 @@ from app.models.category import Category
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.budget import BudgetCreate
-from app.services.budget_service import actual_spend_by_category, create_budget
+from app.services.budget_service import (
+    actual_spend_by_category,
+    create_budget,
+    list_budgets,
+)
 
 
 def _unique_email() -> str:
@@ -81,3 +85,19 @@ async def test_create_budget_and_read_actual_via_router_helper():
         )
     assert budget.category_id == category_id
     assert budget.amount == 10000
+
+
+async def test_budgets_are_scoped_to_their_owner():
+    # F10: before user_id scoping, list_budgets(month) returned every user's rows for the month.
+    a_user, _, a_cat = await _make_user_account_category()
+    b_user, _, b_cat = await _make_user_account_category()
+    month = datetime.date(2026, 7, 1)
+    async with AsyncSessionLocal() as db:
+        await create_budget(db, a_user, BudgetCreate(category_id=a_cat, month=month, amount=10000))
+        await create_budget(db, b_user, BudgetCreate(category_id=b_cat, month=month, amount=20000))
+
+    async with AsyncSessionLocal() as db:
+        a_budgets = await list_budgets(db, a_user, month)
+        b_budgets = await list_budgets(db, b_user, month)
+    assert [b.amount for b in a_budgets] == [10000]
+    assert [b.amount for b in b_budgets] == [20000]  # A's budget is not visible to B

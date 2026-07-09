@@ -83,6 +83,13 @@ interface ApiService {
         @Part file: MultipartBody.Part,
     ): ImportSummaryOut
 
+    // --- Budgets ---
+    @GET("budgets")
+    suspend fun listBudgets(@Query("month") month: String): List<BudgetOut>
+
+    @POST("budgets")
+    suspend fun createBudget(@Body req: BudgetCreate): BudgetOut
+
     // --- Cash-flow calendar ---
     @GET("cashflow")
     suspend fun getCashflow(): CashflowCalendarOut

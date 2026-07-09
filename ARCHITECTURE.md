@@ -461,10 +461,12 @@ required, so it scopes via the same join-to-`Account.user_id` pattern Phase 3's
 `StatementCheckpoint` already established, no nullable-join gap to close. `is_missing` is
 computed at read time (`_to_out()`, mirroring `AccountOut`'s balance fields from Phase 3),
 never stored. `GET/POST /budgets` (`app/routers/budgets.py` + `app/services/budget_service
-.py`) — no migration needed either: `Budget` carries no `user_id`/`account_id` of its own
-by deliberate design (its own model comment: "single-user in practice today... add a
-user_id column when that lands rather than before" — household-sharing is an explicit
-ROADMAP.md non-goal for now), so `actual_cents` is computed at read time via the new
+.py`) — **`Budget` gained `user_id` (F10, migration `e7c1a9d4f0b2`, 2026-07-08)** when the Budgets
+screen landed: before it, `list_budgets(month)` returned *every* user's rows for the month (the
+smoke client's throwaway user is a real second user in prod), so the screen would have leaked
+cross-user budgets. The column is nullable/additive (safe against pre-scoping orphans, which then
+match no user); `create_budget` sets it and `list_budgets(user_id, month)` filters it, with a
+cross-user scoping test. `actual_cents` is computed at read time via the new
 `app/ledger/rollups.py::rollup_by_category` across every one of the user's accounts for
 that category+month. Migration `0004` (Phase 7) added `transactions
 .ai_suggested_category_id` — a draft, never a confirmed fact, kept structurally separate
@@ -555,8 +557,11 @@ each row colored by the corrected grammar — red only when overdue, amber for t
 teal otherwise; linked from Home; light+dark Roborazzi baselines).
 `ui/navigation/MagpieNavHost` gates the whole graph on `AuthGateViewModel.isSignedIn` (a
 `TokenStore` Flow) — no explicit post-sign-in navigation call is needed, since saving a
-session makes the Flow re-emit. **No Budgets screen yet** (server-side `GET/POST /budgets`
-is live — see the domain map). `ui/settings/SettingsScreen` (**V1 Tier 1 #10** — the category
+session makes the Flow re-emit. `ui/budgets/BudgetsScreen` (**Tier 3 #25, 2026-07-08** — the
+month-vs-budget view: `GET /budgets?month=` for the current month with category names from `GET
+/categories`, each row an actual-vs-budget `LinearProgressIndicator` with "$X left"/"Over by $X",
+over-budget in the red channel and under in green; a FAB opens an add-budget dialog — category
+picker + amount → `POST /budgets`; linked from Home; light+dark Roborazzi baselines). `ui/settings/SettingsScreen` (**V1 Tier 1 #10** — the category
 editor: lists categories, the user's own (`shared=false`) get rename/delete affordances while
 seeded/shared ones show a read-only "Shared" label (the server 404s a rename/delete of a shared
 category), plus an "Add" action and an About block with the server `/version`. `SettingsViewModel`

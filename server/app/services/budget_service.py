@@ -1,7 +1,7 @@
-"""Budgets domain (CLAUDE.md §4/Phase 7): CRUD + month-vs-budget. `Budget` carries no
-`user_id`/`account_id` of its own — single-household in practice today (see the model's own
-comment); "actual spend" is computed across every one of the user's accounts for that
-category+month, not scoped further, since a budget is a whole-household cap.
+"""Budgets domain (CLAUDE.md §4/Phase 7): CRUD + month-vs-budget. Each `Budget` is scoped to its
+owner via `user_id` (F10); "actual spend" is computed across every one of that user's accounts for
+the category+month (a budget is a whole-household cap across the owner's accounts, not scoped by
+account).
 """
 
 import datetime
@@ -35,15 +35,19 @@ async def _owned_category(db: AsyncSession, user_id: uuid.UUID, category_id: uui
 
 async def create_budget(db: AsyncSession, user_id: uuid.UUID, req: BudgetCreate) -> Budget:
     await _owned_category(db, user_id, req.category_id)
-    budget = Budget(category_id=req.category_id, month=req.month, amount=req.amount)
+    budget = Budget(
+        user_id=user_id, category_id=req.category_id, month=req.month, amount=req.amount
+    )
     db.add(budget)
     await db.commit()
     await db.refresh(budget)
     return budget
 
 
-async def list_budgets(db: AsyncSession, month: datetime.date) -> list[Budget]:
-    result = await db.execute(select(Budget).where(Budget.month == month))
+async def list_budgets(db: AsyncSession, user_id: uuid.UUID, month: datetime.date) -> list[Budget]:
+    result = await db.execute(
+        select(Budget).where(Budget.user_id == user_id, Budget.month == month)
+    )
     return list(result.scalars().all())
 
 

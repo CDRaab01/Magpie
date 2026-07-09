@@ -23,6 +23,9 @@ import com.magpie.ui.accounts.AccountsContent
 import com.magpie.ui.accounts.AccountsUiState
 import com.magpie.ui.bills.BillsContent
 import com.magpie.ui.bills.BillsUiState
+import com.magpie.ui.budgets.BudgetRow
+import com.magpie.ui.budgets.BudgetsContent
+import com.magpie.ui.budgets.BudgetsUiState
 import com.magpie.ui.cashflow.CashflowContent
 import com.magpie.ui.cashflow.CashflowUiState
 import com.magpie.ui.home.HomeContent
@@ -112,6 +115,12 @@ class ScreenshotTest {
 
     @Test
     fun cashflow_dark() = capture("cashflow_dark", dark = true) { CashflowScene() }
+
+    @Test
+    fun budgets_light() = capture("budgets_light", dark = false) { BudgetsScene() }
+
+    @Test
+    fun budgets_dark() = capture("budgets_dark", dark = true) { BudgetsScene() }
 }
 
 @Composable
@@ -133,6 +142,7 @@ private fun HomeReadyScene() {
         onViewReviewQueue = {},
         onViewBills = {},
         onViewCashflow = {},
+        onViewBudgets = {},
         onViewSettings = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
@@ -148,6 +158,7 @@ private fun HomeNeedsAccountScene() {
         onViewReviewQueue = {},
         onViewBills = {},
         onViewCashflow = {},
+        onViewBudgets = {},
         onViewSettings = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
@@ -279,6 +290,24 @@ private fun SettingsScene() {
         onAddCategory = {},
         onRenameCategory = { _, _ -> },
         onDeleteCategory = {},
+    )
+}
+
+@Composable
+private fun BudgetsScene() {
+    BudgetsContent(
+        state = BudgetsUiState(
+            monthLabel = "July 2026",
+            rows = listOf(
+                BudgetRow(id = "1", categoryName = "Dining", amountCents = 20000, spentCents = 26500),
+                BudgetRow(id = "2", categoryName = "Groceries", amountCents = 60000, spentCents = 41200),
+                BudgetRow(id = "3", categoryName = "Transport", amountCents = 15000, spentCents = 3000),
+            ),
+            categories = emptyList(),
+            loading = false,
+        ),
+        onBack = {},
+        onAddBudget = { _, _ -> },
     )
 }
 

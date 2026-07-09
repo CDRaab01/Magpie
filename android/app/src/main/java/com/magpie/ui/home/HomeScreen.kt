@@ -52,6 +52,7 @@ fun HomeScreen(navController: NavController) {
         onViewReviewQueue = { navController.navigate(Routes.REVIEW_QUEUE) },
         onViewBills = { navController.navigate(Routes.BILLS) },
         onViewCashflow = { navController.navigate(Routes.CASHFLOW) },
+        onViewBudgets = { navController.navigate(Routes.BUDGETS) },
         onViewSettings = { navController.navigate(Routes.SETTINGS) },
         onCreateFirstAccount = viewModel::createFirstAccount,
     )
@@ -66,6 +67,7 @@ internal fun HomeContent(
     onViewReviewQueue: () -> Unit,
     onViewBills: () -> Unit,
     onViewCashflow: () -> Unit,
+    onViewBudgets: () -> Unit,
     onViewSettings: () -> Unit,
     onCreateFirstAccount: (name: String, institution: String, type: String) -> Unit,
 ) {
@@ -105,6 +107,8 @@ internal fun HomeContent(
                     PulseButton(text = "Bills", tonal = true, onClick = onViewBills)
                     Spacer(Modifier.height(8.dp))
                     PulseButton(text = "Cash flow", tonal = true, onClick = onViewCashflow)
+                    Spacer(Modifier.height(8.dp))
+                    PulseButton(text = "Budgets", tonal = true, onClick = onViewBudgets)
                     Spacer(Modifier.height(8.dp))
                     PulseButton(text = "Settings", tonal = true, onClick = onViewSettings)
                 }

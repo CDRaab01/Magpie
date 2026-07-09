@@ -128,3 +128,21 @@ data class CashflowCalendarOut(
     @SerialName("total_due_before_paycheck_cents") val totalDueBeforePaycheckCents: Long,
     val bills: List<UpcomingBillOut>,
 )
+
+@Serializable
+data class BudgetCreate(
+    @SerialName("category_id") val categoryId: String,
+    val month: String, // first-of-month marker, yyyy-MM-dd
+    val amount: Long, // positive cents — the monthly cap
+)
+
+@Serializable
+data class BudgetOut(
+    val id: String,
+    @SerialName("category_id") val categoryId: String,
+    val month: String,
+    val amount: Long,
+    // Computed server-side — the actual spend/refund total for this category+month (spend is
+    // negative), never stored.
+    @SerialName("actual_cents") val actualCents: Long,
+)

@@ -6,6 +6,8 @@ import com.magpie.data.remote.AccountCreate
 import com.magpie.data.remote.AccountOut
 import com.magpie.data.remote.ApiService
 import com.magpie.data.remote.BillOut
+import com.magpie.data.remote.BudgetCreate
+import com.magpie.data.remote.BudgetOut
 import com.magpie.data.remote.CashflowCalendarOut
 import com.magpie.data.remote.CategoryCreate
 import com.magpie.data.remote.CategoryOut
@@ -114,6 +116,10 @@ private class FakeApi : ApiService {
         institution: okhttp3.RequestBody,
         file: okhttp3.MultipartBody.Part,
     ): ImportSummaryOut = error("unused")
+
+    override suspend fun listBudgets(month: String): List<BudgetOut> = error("unused")
+
+    override suspend fun createBudget(req: BudgetCreate): BudgetOut = error("unused")
 
     override suspend fun getCashflow(): CashflowCalendarOut = error("unused")
 
