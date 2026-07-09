@@ -52,9 +52,11 @@
 >    and per the same Phase −1 discipline that kept Discover's transaction parser unbuilt,
 >    guessing at the address here would be the same mistake. Bills exist today only via
 >    `POST /bills` (manual/CSV-adjacent creation) — real bill-issued emails becoming
->    `BillStatement` rows automatically is a fast-follow once a sender is confirmed. Only
->    one of the four named alert sweeps (unparsed-email backlog) is built; auth-hold expiry,
->    per-account freshness, missing-bill, and paycheck-deviation alerts are not.
+>    `BillStatement` rows automatically is a fast-follow once a sender is confirmed. Sweep
+>    alerts (2026-07-08): **unparsed-backlog + missing-bill** are built and latched on a
+>    **persisted** latch (`alert_latches`, F11 — survives redeploys), meeting the "a simulated
+>    missing bill pages the phone" exit; **paycheck late/short, per-account freshness, and
+>    auth-hold expiry** are the remaining three (same latched pattern).
 > 7. **The AI category-draft guardrail is fully built and tested against a fake LLM — the
 >    real `LmStudioClient` has never been exercised against a live LM Studio instance**
 >    (`llm_base_url` is unset in production; the AI stage silently never fires until it's
@@ -391,20 +393,20 @@ still unmatched) that `app/services/bill_service.py` combines with "no match yet
 shouldn't sit "missing" forever) and `POST /bills/{id}/rematch` re-checks after a later
 import/poll brings in the settling payment.
 
-**Alert latching (built, Phase 6):** `app/rules/alerts.py::should_alert` — pure, fires only
-on the true rising edge (a condition becoming true), stays silent while it persists, and
-fires again if it resolves and recurs — exactly CLAUDE.md's "once per episode, not once per
-sweep" bar, proven with a fake-clock-free logic test plus a real DB-backed
-`test_sweep_service.py` exercising all three cases. **`app/services/ntfy_client.py`** is the
-fourth and final injected seam (clock, IMAP fetcher, ntfy publisher, LLM client — the LLM
-client is still Phase 7): `FakeNtfyPublisher` records what would have been sent,
-`HttpNtfyPublisher` POSTs for real. **Built and wired into a lifespan sweep loop: exactly
-one alert** — the unparsed-email backlog, latched, checked every `sweep_interval_minutes`.
-**Not built yet:** auth-hold expiry, per-account freshness, missing-bill, and
-paycheck-deviation sweeps — `app/rules/clock.py`'s `Clock` seam and the bill-matching/rule
-primitives they'd need already exist; nothing schedules them yet. **Cash rule** (the ATM
-withdrawal *is* the spend, manual cash entries draw that bucket down) is still target
-design, not built.
+**Alert latching:** `app/rules/alerts.py::should_alert` — pure, fires only on the true rising
+edge, stays silent while a condition persists, fires again if it resolves and recurs (CLAUDE.md's
+"once per episode, not once per sweep"). **F11 (2026-07-08):** that "already alerted?" bit is now
+**persisted data** — `app/services/alert_latch_service.latched_should_alert` reads/writes an
+`alert_latches` row keyed per condition (migration `d5f2a1b3c4e6`), so a redeploy no longer
+re-pages a still-open condition (the old sweep held it in process memory and reset on every
+container recreate). **`app/services/ntfy_client.py`** is the fourth injected seam
+(`FakeNtfyPublisher` records, `HttpNtfyPublisher` POSTs). **Built + wired into the lifespan sweep
+loop: two latched alerts** — the unparsed-email backlog and **missing-bill** (an overdue unmatched
+`BillStatement` past an owner-local due-date grace, F18 — the "a simulated missing bill pages the
+phone" exit), checked every `sweep_interval_minutes`; 8 time-travel tests in
+`test_sweep_service.py`. **Remaining three (same latched pattern):** paycheck late/short,
+per-account freshness, auth-hold expiry. **Cash rule** (the ATM withdrawal *is* the spend) is still
+target design, not built.
 
 ### Domain map
 
