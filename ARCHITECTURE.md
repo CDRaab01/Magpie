@@ -196,6 +196,15 @@ Pulse composite build, suite signing/release/deploy conventions.
   (Amex = positive-is-charge) or an explicit per-import override says so, *before* the sign→kind
   derivation. Without it an Amex backfill would book every charge as income. Discover (a card,
   likely also positive-is-charge) is deliberately left out until a real export confirms it.
+  **`default_kind_for(account_type, amount, description)` (2026-07-09, from the real Amex
+  backfill):** sign alone is wrong for a card — a credit card never receives *income*, so a
+  positive (balance-reducing) amount is a **payment** (transfer, if the description matches
+  `looks_like_card_payment` — "MOBILE PAYMENT - THANK YOU", AUTOPAY, …) or a **refund**, never
+  income. `import_csv` uses this instead of the naive `amount>0 ⇒ income`. Proven on the real
+  18-month Amex corpus (2633 rows): it books $0 income (the old logic would have booked ~$208k —
+  17 card payments + 49 refunds miscounted), spend −$198k net of refunds, transfers excluded.
+  Depository accounts keep the plain income/spend convention (a checking deposit *is* income);
+  the checking-side leg of a card payment is refined by cross-account transfer pairing.
 - **`app/rules/`** (built, Phase 5) — `clock.py` (the injected time seam — `SystemClock` in
   production, `FixedClock` in tests, so cadence/band logic gets real time-travel tests)
   + `recurrence.py` (cadence windows — weekly/biweekly/monthly ± `slack_days`, monthly

@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.imports.csv_parser import CsvParseError, ParsedCsvRow, parse_csv
-from app.imports.institution_mappings import resolve_sign_flip
+from app.imports.institution_mappings import default_kind_for, resolve_sign_flip
 from app.imports.pending_match import PendingCandidate, find_pending_match
 from app.models.account import Account
 from app.models.import_batch import ImportBatch
@@ -113,7 +113,7 @@ async def import_csv(
     now: datetime.datetime | None = None,
 ) -> ImportSummaryOut:
     now = now or datetime.datetime.now(datetime.timezone.utc)
-    await _owned_account(db, user_id, account_id)
+    account = await _owned_account(db, user_id, account_id)
 
     try:
         text = file_bytes.decode("utf-8-sig")  # tolerate a BOM (common in bank CSV exports)
@@ -174,7 +174,10 @@ async def import_csv(
             skipped += 1
             continue
 
-        default_kind = "income" if row.amount_cents > 0 else "spend"
+        # Card-aware kind (not just sign): on a card a positive amount is a payment (transfer) or
+        # a refund, never income (institution_mappings.default_kind_for). A depository account
+        # keeps the plain income/spend convention.
+        default_kind = default_kind_for(account.type, row.amount_cents, row.description)
         evaluation = await evaluate_transaction(
             db,
             user_id,

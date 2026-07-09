@@ -41,13 +41,20 @@ else in this wave can run in parallel with it.
 1. **[H] Create the real accounts** (Amex, US Bank checking, Discover — with last4s). New
    alerts auto-file the moment these exist; the 22 already-seen stay unfiled until the replay
    tool (#7) retro-files them.
-2. **[H] 12-month CSV backfill** per account via the Accounts screen. Expect parser
-   reality-fixes — that's the point. While here: confirm **Discover's sign convention**
-   against the real export (extend `institution_mappings.py`; almost certainly
-   positive-is-charge, left out per the don't-guess rule) and **decide whether the Visa is in
-   scope for v1** (never checked in Phase −1; no decision recorded). The backfill seeds the
-   rules engine's medians (cold start §5) and is the precondition for Wave 2's AI being
-   worth anything.
+2. **CSV backfill** per account. **Amex IN HAND + first reality-fix landed (2026-07-09):** the
+   owner supplied 16 Amex exports = a complete **18-month** run (2024-12-09 → 2026-06-12, 2633
+   rows, one card account). Dry-running the *real* import service against them surfaced the
+   expected reality-fix: sign alone is wrong for a card — the naive `amount>0 ⇒ income` would have
+   booked **~$208k of phantom income** (17 card payments + 49 refunds). Fixed with
+   `institution_mappings.default_kind_for` (card: positive = payment→transfer / refund, never
+   income); re-verified on the corpus ($0 income, −$198k net spend, transfers excluded). **Still
+   to do:** deploy the fix `[H]`, then the real prod import (needs the account created + owner
+   auth — minting a session token server-side is the agreed path); **US Bank checking** (the other
+   leg of the 17 payments + the actual income/paychecks) and **Discover** exports; confirm
+   **Discover's sign** against its real file; **Visa in/out** decision. The backfill seeds the
+   rules engine's medians (cold start §5) and is the precondition for Wave 2's AI being worth
+   anything. _(Nice-to-have surfaced: a per-transaction "tag" for the Christian/Elizabeth
+   cardholder split — a small future feature, not blocking.)_
 3. **[H] Anchor checkpoints and drive every account to "Reconciled"** — then the
    **statement-parity clock starts**: two consecutive to-the-penny months (§9, the v1
    acceptance gate). Mostly elapsed time plus a monthly reconciliation habit.
