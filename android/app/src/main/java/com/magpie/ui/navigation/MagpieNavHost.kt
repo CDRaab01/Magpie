@@ -26,6 +26,7 @@ import com.magpie.ui.reviewqueue.ReviewQueueScreen
 import com.magpie.ui.rules.RulesScreen
 import com.magpie.ui.settings.SettingsScreen
 import com.magpie.ui.signin.SignInScreen
+import com.magpie.ui.merchant.MerchantDetailScreen
 import com.magpie.ui.transactions.TransactionsScreen
 import com.magpie.ui.trends.TrendsScreen
 
@@ -122,6 +123,12 @@ private fun SignedInGraph(deepLinkHost: StateFlow<String?> = MutableStateFlow(nu
             composable(Routes.BUDGETS) { BudgetsScreen(navController) }
             composable(Routes.RULES) { RulesScreen(navController) }
             composable(Routes.TRENDS) { TrendsScreen(navController) }
+            composable(Routes.MERCHANT_DETAIL) { entry ->
+                val merchant = entry.arguments?.getString("merchant")
+                    ?.let { java.net.URLDecoder.decode(it, "UTF-8") }
+                    .orEmpty()
+                MerchantDetailScreen(navController, merchant)
+            }
             composable(Routes.SETTINGS) { SettingsScreen(navController) }
         }
     }

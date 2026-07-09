@@ -144,8 +144,13 @@ exact components and idioms; invent nothing new.
     $950 · $243 left"), teal normally and red only when the household is genuinely over its combined
     budget (#31 grammar — the ring carries the alarm, not every row). Rows keep their linear bars.
     Baselines re-recorded + eyeballed.
-16. **Merchant view:** tap a merchant anywhere → its history, total, average, and cadence if
-    a rule knows it. Cheap — the search/filter plumbing from Tier 4 #32 already exists.
+16. **Merchant view — DONE 2026-07-09.** `ui/merchant/` (`MerchantDetailScreen` + pure
+    `MerchantDetailContent` + `MerchantDetailViewModel`): tap a merchant in Trends → its full
+    history, with a summary card (total spent, transaction count, average ticket) over the row
+    list. Loads via the existing `q` merchant search (Tier 4 #32 plumbing — no new endpoint),
+    filtered to spend/refund so a same-named income row can't skew the average; light+dark
+    Roborazzi baselines. **Deferred:** tapping a *category* → its merchants (the category→merchant
+    hop); showing a merchant's rule cadence when one exists.
 
 ## Wave 2 — The AI wakes up (needs Wave 0's backfill to be worth anything)
 

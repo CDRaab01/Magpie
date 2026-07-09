@@ -12,4 +12,9 @@ object Routes {
     const val RULES = "rules"
     const val TRENDS = "trends"
     const val SETTINGS = "settings"
+
+    // Merchant drill-down (#16) — the merchant name is URL-encoded into a single path segment.
+    const val MERCHANT_DETAIL = "merchant/{merchant}"
+    fun merchantDetail(merchant: String): String =
+        "merchant/" + java.net.URLEncoder.encode(merchant, "UTF-8")
 }

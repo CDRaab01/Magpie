@@ -42,6 +42,8 @@ import com.magpie.data.remote.MerchantSummaryItem
 import com.magpie.data.remote.MonthSummaryOut
 import com.magpie.ui.trends.TrendsContent
 import com.magpie.ui.trends.TrendsUiState
+import com.magpie.ui.merchant.MerchantDetailContent
+import com.magpie.ui.merchant.MerchantDetailUiState
 import com.magpie.ui.rules.RuleRow
 import com.magpie.ui.rules.RulesContent
 import com.magpie.ui.rules.RulesUiState
@@ -229,6 +231,39 @@ class ScreenshotTest {
 
     @Test
     fun trends_dark() = capture("trends_dark", dark = true) { TrendsScene() }
+
+    @Test
+    fun merchant_detail_light() = capture("merchant_detail_light", dark = false) { MerchantDetailScene() }
+
+    @Test
+    fun merchant_detail_dark() = capture("merchant_detail_dark", dark = true) { MerchantDetailScene() }
+}
+
+@Composable
+private fun MerchantDetailScene() {
+    fun txn(id: String, amount: Long, date: String) = TransactionOut(
+        id = id, accountId = "a", amount = amount, currency = "USD", date = date,
+        status = "posted", merchantRaw = "MEIJER", merchantNorm = "MEIJER", categoryId = "cat-groc",
+        kind = "spend", transferGroup = null, reviewState = "confirmed", source = "csv",
+        matchedRuleId = null, ruleNote = null, aiSuggestedCategoryId = null,
+        createdAt = "2026-07-15T00:00:00Z",
+    )
+    MerchantDetailContent(
+        state = MerchantDetailUiState(
+            merchant = "MEIJER",
+            transactions = listOf(
+                txn("1", -8200, "2026-07-14"),
+                txn("2", -9100, "2026-07-08"),
+                txn("3", -7600, "2026-07-02"),
+                txn("4", -7100, "2026-06-26"),
+            ),
+            totalCents = -32000,
+            count = 4,
+            averageCents = -8000,
+            loading = false,
+        ),
+        onBack = {},
+    )
 }
 
 @Composable

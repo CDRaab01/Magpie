@@ -58,12 +58,20 @@ fun TrendsScreen(navController: NavController) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     RefreshOnResume { viewModel.load() }
 
-    TrendsContent(state = state, onBack = { navController.popBackStack() })
+    TrendsContent(
+        state = state,
+        onBack = { navController.popBackStack() },
+        onMerchantClick = { navController.navigate(com.magpie.ui.navigation.Routes.merchantDetail(it)) },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun TrendsContent(state: TrendsUiState, onBack: () -> Unit) {
+internal fun TrendsContent(
+    state: TrendsUiState,
+    onBack: () -> Unit,
+    onMerchantClick: (String) -> Unit = {},
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -95,13 +103,17 @@ internal fun TrendsContent(state: TrendsUiState, onBack: () -> Unit) {
                     subtitle = "Once transactions land, your monthly trends show up here.",
                 )
             }
-            else -> TrendsBody(state, Modifier.padding(padding))
+            else -> TrendsBody(state, onMerchantClick, Modifier.padding(padding))
         }
     }
 }
 
 @Composable
-private fun TrendsBody(state: TrendsUiState, modifier: Modifier = Modifier) {
+private fun TrendsBody(
+    state: TrendsUiState,
+    onMerchantClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     LazyColumn(
         modifier = modifier.fillMaxSize().padding(MagpieTheme.spacing.md),
         verticalArrangement = Arrangement.spacedBy(MagpieTheme.spacing.sm),
@@ -118,7 +130,9 @@ private fun TrendsBody(state: TrendsUiState, modifier: Modifier = Modifier) {
         }
         if (state.merchants.isNotEmpty()) {
             item { SectionHeader(label = "Top merchants", channel = MagpieTheme.colors.money.base) }
-            items(state.merchants) { merchant -> MerchantRow(merchant) }
+            items(state.merchants) { merchant ->
+                MerchantRow(merchant, onClick = { onMerchantClick(merchant.merchant) })
+            }
         }
     }
 }
@@ -205,8 +219,8 @@ private fun CategoryRow(category: CategorySummaryItem, maxSpend: Long) {
 }
 
 @Composable
-private fun MerchantRow(merchant: MerchantSummaryItem) {
-    PanelCard(modifier = Modifier.fillMaxWidth()) {
+private fun MerchantRow(merchant: MerchantSummaryItem, onClick: () -> Unit) {
+    PanelCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
