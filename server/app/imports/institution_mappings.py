@@ -70,6 +70,7 @@ _INTERNAL_TRANSFER_MARKERS = (
     "mobile banking transfer",
     "online banking transfer",
     "banking transfer",
+    "telephone transfer",  # US Bank's phone/rep-initiated internal transfer (real export, 2026-07-09)
 )
 
 

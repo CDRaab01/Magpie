@@ -62,6 +62,7 @@ def test_internal_transfer_between_own_depository_accounts_is_a_transfer():
     # spend on either side, and depository<->depository can't auto-pair, so detect by description.
     assert looks_like_internal_transfer("MOBILE BANKING TRANSFER WITHDRAWAL 6340") is True
     assert looks_like_internal_transfer("MOBILE BANKING TRANSFER DEPOSIT 7197") is True
+    assert looks_like_internal_transfer("TELEPHONE TRANSFER 7197") is True  # phone-initiated variant
     assert looks_like_internal_transfer("ELECTRONIC DEPOSIT BAE SYSTEMS") is False
     # Applies on either sign / account type (transfer allows any sign).
     assert (
