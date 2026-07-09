@@ -61,6 +61,25 @@ def looks_like_card_payment(description: str | None) -> bool:
     return any(m in d for m in _CARD_PAYMENT_MARKERS)
 
 
+# An internal move between the owner's OWN accounts (checking <-> savings) is neither income nor
+# spend on either side. The cross-account transfer *pairing* only pairs a card leg with a
+# depository leg (the F3 payment-shape guard, which deliberately won't fuse two depository
+# accounts), so a checking<->savings move can't auto-pair — detect it by description instead.
+# Confirmed against the real US Bank export ("MOBILE BANKING TRANSFER WITHDRAWAL/DEPOSIT <acct#>").
+_INTERNAL_TRANSFER_MARKERS = (
+    "mobile banking transfer",
+    "online banking transfer",
+    "banking transfer",
+)
+
+
+def looks_like_internal_transfer(description: str | None) -> bool:
+    if not description:
+        return False
+    d = description.lower()
+    return any(m in d for m in _INTERNAL_TRANSFER_MARKERS)
+
+
 def default_kind_for(account_type: str, amount_cents: int, description: str | None) -> str:
     """Derive a transaction's kind from its (already sign-normalized) amount and account type.
 
@@ -73,6 +92,11 @@ def default_kind_for(account_type: str, amount_cents: int, description: str | No
     refines the checking-side leg separately (rule_service stage 1); this fixes the card side,
     which is what a card-only backfill needs to keep its rollups honest.
     """
+    # Internal checking<->savings moves are transfers on both legs (own money, not income/spend);
+    # they can't auto-pair (depository<->depository), so catch them by description regardless of
+    # sign. Card payments TO a *tracked* card still pair cross-account (rule_service stage 1).
+    if looks_like_internal_transfer(description):
+        return "transfer"
     if amount_cents < 0:
         return "spend"
     if amount_cents > 0 and account_type == "card":

@@ -4,6 +4,7 @@ from app.imports.institution_mappings import (
     default_kind_for,
     institution_flips_sign,
     looks_like_card_payment,
+    looks_like_internal_transfer,
     resolve_sign_flip,
 )
 
@@ -54,3 +55,21 @@ def test_card_payment_markers():
     assert looks_like_card_payment("ONLINE PAYMENT THANK YOU") is True
     assert looks_like_card_payment("AMAZON MARKETPLACE") is False
     assert looks_like_card_payment(None) is False
+
+
+def test_internal_transfer_between_own_depository_accounts_is_a_transfer():
+    # Confirmed against the real US Bank export — a checking<->savings move is neither income nor
+    # spend on either side, and depository<->depository can't auto-pair, so detect by description.
+    assert looks_like_internal_transfer("MOBILE BANKING TRANSFER WITHDRAWAL 6340") is True
+    assert looks_like_internal_transfer("MOBILE BANKING TRANSFER DEPOSIT 7197") is True
+    assert looks_like_internal_transfer("ELECTRONIC DEPOSIT BAE SYSTEMS") is False
+    # Applies on either sign / account type (transfer allows any sign).
+    assert (
+        default_kind_for("depository", -500000, "MOBILE BANKING TRANSFER WITHDRAWAL 6340")
+        == "transfer"
+    )
+    assert (
+        default_kind_for("depository", 500000, "MOBILE BANKING TRANSFER DEPOSIT 7197") == "transfer"
+    )
+    # A real paycheck deposit is still income, not swept up by the transfer rule.
+    assert default_kind_for("depository", 414574, "ELECTRONIC DEPOSIT BAE SYSTEMS") == "income"
