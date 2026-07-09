@@ -193,9 +193,12 @@ Pulse composite build, suite signing/release/deploy conventions.
   and six date formats. 28 tests. **`app/imports/institution_mappings.py` (F5, 2026-07-08)**
   reconciles the file's sign convention with the ledger's (negative = outflow): `resolve_sign_flip
   (institution, override)` — `import_csv` flips every row's sign when the institution default
-  (Amex = positive-is-charge) or an explicit per-import override says so, *before* the sign→kind
-  derivation. Without it an Amex backfill would book every charge as income. Discover (a card,
-  likely also positive-is-charge) is deliberately left out until a real export confirms it.
+  (Amex/Discover = positive-is-charge) or an explicit per-import override says so, *before* the
+  sign→kind derivation. Without it a card backfill would book every charge as income. **Discover
+  confirmed 2026-07-09** against a real 24-month export (positive charge, "INTERNET PAYMENT -
+  THANK YOU" negative) and added; its CSV also needed two parser fixes — `csv_parser`'s date
+  aliases gained `"trans. date"`/`"post date"` (Discover's two date columns, period and all —
+  neither matched before, so its import failed outright with "No recognizable date column").
   **`default_kind_for(account_type, amount, description)` (2026-07-09, from the real Amex
   backfill):** sign alone is wrong for a card — a credit card never receives *income*, so a
   positive (balance-reducing) amount is a **payment** (transfer, if the description matches

@@ -65,6 +65,56 @@ async def test_amex_positive_charge_imports_as_spend_not_income(auth_client):
     assert by_merchant["ONLINE PAYMENT"]["amount"] == 10000  # flipped to an inflow
 
 
+async def test_card_payment_is_transfer_and_credit_is_refund_never_income(auth_client):
+    # From the real Amex backfill: a credit card never has income. After the sign flip a positive
+    # amount is a PAYMENT (transfer) if its description looks like one, else a REFUND — never income.
+    r = await auth_client.post(
+        "/accounts", json={"name": "Amex", "institution": "American Express", "type": "card"}
+    )
+    account_id = r.json()["id"]
+    csv_text = (
+        "Date,Description,Amount\n"
+        "2026-07-01,TEST MERCHANT CO,42.00\n"  # charge -> spend
+        "2026-07-05,MOBILE PAYMENT - THANK YOU,-500.00\n"  # payment -> transfer
+        "2026-07-06,SOME STORE REFUND,-9.00\n"  # merchant credit -> refund
+    )
+    r = await auth_client.post(
+        "/imports/csv",
+        data={"account_id": account_id, "institution": "American Express"},
+        files=_csv_file(csv_text),
+    )
+    assert r.status_code == 200, r.text
+    by = {t["merchant_raw"]: t for t in (await auth_client.get("/transactions")).json()}
+    assert by["TEST MERCHANT CO"]["kind"] == "spend"
+    assert by["MOBILE PAYMENT - THANK YOU"]["kind"] == "transfer"
+    assert by["SOME STORE REFUND"]["kind"] == "refund"
+    assert all(t["kind"] != "income" for t in by.values())  # nothing booked as income
+
+
+async def test_discover_format_parses_and_classifies(auth_client):
+    # Discover: two date columns ("Trans. Date"/"Post Date") + a Category column, positive=charge,
+    # "INTERNET PAYMENT - THANK YOU" negative. Confirmed against a real 24-month export 2026-07-09.
+    r = await auth_client.post(
+        "/accounts", json={"name": "Discover", "institution": "Discover", "type": "card"}
+    )
+    account_id = r.json()["id"]
+    csv_text = (
+        "Trans. Date,Post Date,Description,Amount,Category\n"
+        "07/01/2026,07/02/2026,TEST CAFE USA,41.87,Merchandise\n"
+        "07/08/2026,07/08/2026,INTERNET PAYMENT - THANK YOU,-450.18,Payments and Credits\n"
+    )
+    r = await auth_client.post(
+        "/imports/csv",
+        data={"account_id": account_id, "institution": "Discover"},
+        files=_csv_file(csv_text),
+    )
+    assert r.status_code == 200, r.text
+    by = {t["merchant_raw"]: t for t in (await auth_client.get("/transactions")).json()}
+    assert by["TEST CAFE USA"]["amount"] == -4187 and by["TEST CAFE USA"]["kind"] == "spend"
+    payment = by["INTERNET PAYMENT - THANK YOU"]
+    assert payment["amount"] == 45018 and payment["kind"] == "transfer"
+
+
 async def test_reimporting_the_same_file_creates_zero_duplicates(auth_client):
     account_id = await _make_account(auth_client)
     csv_text = "Date,Description,Amount\n2026-07-01,Coffee Shop,-4.50\n"

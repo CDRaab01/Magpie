@@ -16,7 +16,9 @@ left out deliberately; add it once a real CSV proves it, or pass an explicit ove
 # Substrings that mark an issuer whose CSV uses "positive amount = a charge/outflow", so every
 # row's sign must be flipped. Substring (not exact) match so "Amex Gold", "American Express Card",
 # etc. all resolve. Keep this list to confirmed conventions only.
-_POSITIVE_IS_CHARGE_ALIASES = ("amex", "american express")
+# Discover confirmed 2026-07-09 against a real 24-month export: charges positive, "INTERNET
+# PAYMENT - THANK YOU" negative — same positive-is-charge convention as Amex.
+_POSITIVE_IS_CHARGE_ALIASES = ("amex", "american express", "discover")
 
 
 def _normalize(institution: str) -> str:

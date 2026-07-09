@@ -13,6 +13,7 @@ def test_amex_flips_sign():
     assert institution_flips_sign("American Express") is True
     assert institution_flips_sign("Amex") is True
     assert institution_flips_sign("amex gold") is True  # substring match on free-text institution
+    assert institution_flips_sign("Discover") is True  # confirmed positive-is-charge 2026-07-09
 
 
 def test_depository_and_unknown_default_to_no_flip():

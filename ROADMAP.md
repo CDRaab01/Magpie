@@ -50,8 +50,12 @@ else in this wave can run in parallel with it.
    income); re-verified on the corpus ($0 income, −$198k net spend, transfers excluded). **Still
    to do:** deploy the fix `[H]`, then the real prod import (needs the account created + owner
    auth — minting a session token server-side is the agreed path); **US Bank checking** (the other
-   leg of the 17 payments + the actual income/paychecks) and **Discover** exports; confirm
-   **Discover's sign** against its real file; **Visa in/out** decision. The backfill seeds the
+   leg of the card payments + the actual income/paychecks — still owed); **Visa in/out** decision.
+   **Discover IN HAND + confirmed (2026-07-09):** a real 24-month export (693 rows, 2024-07 →
+   2026-06); same positive-is-charge convention as Amex (added to the sign-flip list), and its two
+   date columns ("Trans. Date"/"Post Date") needed new parser aliases or the import failed outright.
+   Scratch-imported clean: $0 income, 23 payments excluded as transfers, −$18,867 net over 24
+   months. The backfill seeds the
    rules engine's medians (cold start §5) and is the precondition for Wave 2's AI being worth
    anything. _(Nice-to-have surfaced: a per-transaction "tag" for the Christian/Elizabeth
    cardholder split — a small future feature, not blocking.)_

@@ -16,7 +16,15 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
-DATE_HEADER_ALIASES = ("date", "transaction date", "posted date", "posting date", "trans date")
+DATE_HEADER_ALIASES = (
+    "date",
+    "transaction date",
+    "posted date",
+    "posting date",
+    "trans date",
+    "trans. date",  # Discover exports "Trans. Date" (with the period) — confirmed 2026-07-09
+    "post date",  # Discover's second date column; "Trans. Date" wins by header order (first match)
+)
 AMOUNT_HEADER_ALIASES = ("amount", "transaction amount")
 DEBIT_HEADER_ALIASES = ("debit", "withdrawal", "withdrawals", "payment")
 CREDIT_HEADER_ALIASES = ("credit", "deposit", "deposits")
