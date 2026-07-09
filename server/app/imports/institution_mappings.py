@@ -81,6 +81,21 @@ def looks_like_internal_transfer(description: str | None) -> bool:
     return any(m in d for m in _INTERNAL_TRANSFER_MARKERS)
 
 
+# Contributions to / withdrawals from the owner's own brokerage are transfers (money moving to
+# an account they own), not spend or income — otherwise a "VANGUARD BUY" reads as spend and a
+# "VANGUARD SELL" as income. Magpie deliberately doesn't track investment balances (a non-goal),
+# but it keeps these out of the cash-flow rollups so "where does the money go" stays honest.
+# Owner confirmed they actively invest (2026-07-09). Add brokerages here as real files reveal them.
+_INVESTMENT_MARKERS = ("vanguard",)
+
+
+def looks_like_investment_transfer(description: str | None) -> bool:
+    if not description:
+        return False
+    d = description.lower()
+    return any(m in d for m in _INVESTMENT_MARKERS)
+
+
 def default_kind_for(account_type: str, amount_cents: int, description: str | None) -> str:
     """Derive a transaction's kind from its (already sign-normalized) amount and account type.
 
@@ -93,10 +108,11 @@ def default_kind_for(account_type: str, amount_cents: int, description: str | No
     refines the checking-side leg separately (rule_service stage 1); this fixes the card side,
     which is what a card-only backfill needs to keep its rollups honest.
     """
-    # Internal checking<->savings moves are transfers on both legs (own money, not income/spend);
-    # they can't auto-pair (depository<->depository), so catch them by description regardless of
-    # sign. Card payments TO a *tracked* card still pair cross-account (rule_service stage 1).
-    if looks_like_internal_transfer(description):
+    # Internal checking<->savings moves and investment contributions/withdrawals are transfers on
+    # both legs (own money, not income/spend); they can't auto-pair (depository<->depository or an
+    # untracked brokerage), so catch them by description regardless of sign. Card payments TO a
+    # *tracked* card still pair cross-account (rule_service stage 1).
+    if looks_like_internal_transfer(description) or looks_like_investment_transfer(description):
         return "transfer"
     if amount_cents < 0:
         return "spend"
