@@ -208,7 +208,7 @@ private fun HomeReadyScene() {
         onViewReviewQueue = {},
         onViewCashflow = {},
         onViewRules = {},
-        onCreateFirstAccount = { _, _, _ -> },
+        onCreateFirstAccount = { _, _, _, _ -> },
     )
 }
 
@@ -221,7 +221,7 @@ private fun HomeNeedsAccountScene() {
         onViewReviewQueue = {},
         onViewCashflow = {},
         onViewRules = {},
-        onCreateFirstAccount = { _, _, _ -> },
+        onCreateFirstAccount = { _, _, _, _ -> },
     )
 }
 
@@ -256,6 +256,7 @@ private fun AccountsScene() {
         onBack = {},
         onStartImport = {},
         onDismissImportResult = {},
+        onAddAccount = { _, _, _, _ -> },
     )
 }
 

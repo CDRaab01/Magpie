@@ -75,10 +75,12 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun createFirstAccount(name: String, institution: String, type: String) {
+    fun createFirstAccount(name: String, institution: String, type: String, last4: String?) {
         viewModelScope.launch {
             try {
-                api.createAccount(AccountCreate(name = name, institution = institution, type = type))
+                api.createAccount(
+                    AccountCreate(name = name, institution = institution, type = type, last4 = last4),
+                )
                 load()
             } catch (e: Exception) {
                 _state.value = HomeUiState.Error(e.message ?: "Couldn't create the account")

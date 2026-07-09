@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,7 +71,7 @@ internal fun HomeContent(
     onViewReviewQueue: () -> Unit,
     onViewCashflow: () -> Unit,
     onViewRules: () -> Unit,
-    onCreateFirstAccount: (name: String, institution: String, type: String) -> Unit,
+    onCreateFirstAccount: (name: String, institution: String, type: String, last4: String?) -> Unit,
 ) {
     Scaffold(
         floatingActionButton = {
@@ -273,10 +275,13 @@ private fun formatShortDate(iso: String): String = runCatching {
 }.getOrDefault(iso)
 
 @Composable
-private fun CreateFirstAccountForm(onCreate: (name: String, institution: String, type: String) -> Unit) {
+private fun CreateFirstAccountForm(
+    onCreate: (name: String, institution: String, type: String, last4: String?) -> Unit,
+) {
     var name by remember { mutableStateOf("") }
     var institution by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("depository") }
+    var last4 by remember { mutableStateOf("") }
 
     PanelCard(channel = MagpieTheme.colors.money.base) {
         SectionHeader(label = "Add your first account", channel = MagpieTheme.colors.money.base)
@@ -292,6 +297,15 @@ private fun CreateFirstAccountForm(onCreate: (name: String, institution: String,
             value = institution,
             onValueChange = { institution = it },
             label = { Text("Institution (e.g. US Bank)") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        TextField(
+            value = last4,
+            onValueChange = { if (it.length <= 4 && it.all(Char::isDigit)) last4 = it },
+            label = { Text("Last 4 (from card — how alerts match)") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
@@ -315,7 +329,7 @@ private fun CreateFirstAccountForm(onCreate: (name: String, institution: String,
         PulseButton(
             text = "Create account",
             enabled = name.isNotBlank() && institution.isNotBlank(),
-            onClick = { onCreate(name, institution, type) },
+            onClick = { onCreate(name, institution, type, last4.ifBlank { null }) },
         )
     }
 }

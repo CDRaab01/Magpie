@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
@@ -36,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -74,6 +77,7 @@ fun AccountsScreen(navController: NavController) {
             showImportDialog = true
         },
         onDismissImportResult = viewModel::dismissImportResult,
+        onAddAccount = viewModel::createAccount,
     )
 
     if (showImportDialog) {
@@ -133,7 +137,9 @@ internal fun AccountsContent(
     onBack: () -> Unit,
     onStartImport: (accountId: String) -> Unit,
     onDismissImportResult: () -> Unit,
+    onAddAccount: (name: String, institution: String, type: String, last4: String?) -> Unit,
 ) {
+    var showAddDialog by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -144,6 +150,11 @@ internal fun AccountsContent(
                     }
                 },
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showAddDialog = true }) {
+                Icon(Icons.Default.Add, contentDescription = "Add account")
+            }
         },
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
@@ -190,6 +201,78 @@ internal fun AccountsContent(
             confirmButton = { PulseButton(text = "OK", compact = true, onClick = onDismissImportResult) },
         )
     }
+
+    if (showAddDialog) {
+        AddAccountDialog(
+            onDismiss = { showAddDialog = false },
+            onConfirm = { name, institution, type, last4 ->
+                onAddAccount(name, institution, type, last4)
+                showAddDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun AddAccountDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, institution: String, type: String, last4: String?) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var institution by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf("card") }
+    var last4 by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add account") },
+        text = {
+            Column {
+                TextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name (e.g. Amex)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                TextField(
+                    value = institution,
+                    onValueChange = { institution = it },
+                    label = { Text("Institution") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                TextField(
+                    value = last4,
+                    onValueChange = { if (it.length <= 4 && it.all(Char::isDigit)) last4 = it },
+                    label = { Text("Last 4 (from card — how alerts match)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PulseButton("Card", tonal = type != "card", compact = true, onClick = { type = "card" })
+                    PulseButton(
+                        "Depository", tonal = type != "depository", compact = true,
+                        onClick = { type = "depository" },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            PulseButton(
+                text = "Add",
+                enabled = name.isNotBlank() && institution.isNotBlank(),
+                compact = true,
+                onClick = { onConfirm(name, institution, type, last4.ifBlank { null }) },
+            )
+        },
+        dismissButton = {
+            PulseButton(text = "Cancel", tonal = true, compact = true, onClick = onDismiss)
+        },
+    )
 }
 
 @Composable

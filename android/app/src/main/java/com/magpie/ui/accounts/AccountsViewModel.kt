@@ -2,6 +2,7 @@ package com.magpie.ui.accounts
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.magpie.data.remote.AccountCreate
 import com.magpie.data.remote.AccountOut
 import com.magpie.data.remote.ApiService
 import com.magpie.data.remote.ImportSummaryOut
@@ -62,6 +63,20 @@ class AccountsViewModel @Inject constructor(
                     importing = false,
                     error = e.message ?: "Import failed",
                 )
+            }
+        }
+    }
+
+    fun createAccount(name: String, institution: String, type: String, last4: String?) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(error = null)
+            try {
+                api.createAccount(
+                    AccountCreate(name = name, institution = institution, type = type, last4 = last4),
+                )
+                load()
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(error = e.message ?: "Couldn't add account")
             }
         }
     }
