@@ -137,6 +137,7 @@ dependencies {
     implementation(libs.retrofit.kotlinx.serialization)
 
     implementation(libs.datastore.preferences)
+    implementation(libs.security.crypto)
 
     // Suite SSO: OpenID Connect authorization-code + PKCE via AppAuth (CLAUDE.md §2, §8 —
     // the BROKER 2e pilot: this is Magpie's ONLY auth path, no password fallback).
