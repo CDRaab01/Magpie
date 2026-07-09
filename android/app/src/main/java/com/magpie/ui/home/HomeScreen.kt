@@ -146,16 +146,18 @@ private fun MagpieHero(state: HomeUiState.Ready) {
             .padding(20.dp),
     ) {
         Column {
+            // Sizes match Spotter's GreetingPanel — headlineMedium greeting, and a full-white
+            // (not alpha'd) status line so the subtitle clears AA contrast on the hero gradient.
             Text(
                 state.greeting,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.headlineMedium,
                 color = androidx.compose.ui.graphics.Color.White,
             )
             Spacer(Modifier.height(6.dp))
             Text(
                 heroStatusLine(state),
                 style = MaterialTheme.typography.bodyLarge,
-                color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f),
+                color = androidx.compose.ui.graphics.Color.White,
             )
         }
     }
