@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     ntfy_base_url: str | None = None
     ntfy_topic: str = "magpie-alerts"
     sweep_interval_minutes: int = 15
+    # Per-account freshness sweep (CLAUDE.md §5): an account that *was* receiving email alerts but
+    # hasn't in this many days may have had its alerts silently turned off — page once (F: silent
+    # alert-decay is the failure mode this catches). Generous, since a rarely-used card is normal.
+    account_freshness_days: int = 14
 
     # AI category drafts (CLAUDE.md §6/Phase 7). Local LM Studio only — never a hosted model,
     # this data never leaves the host. Unset ⇒ the AI stage never runs (rule evaluation just

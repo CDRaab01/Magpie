@@ -1,8 +1,9 @@
 """Sweep pass (CLAUDE.md §5/§10): latched ntfy alerts for silent-failure conditions. Built:
-unparsed-email backlog and **missing-bill** (the 'a simulated missing bill pages the phone' exit,
-CLAUDE.md Phase 6). Latch state is persisted (F11) via `alert_latch_service`, so a redeploy never
-re-pages an already-open condition. Not yet built (same latched pattern, follow-ups): paycheck
-late/short, per-account freshness, auth-hold expiry.
+unparsed-email backlog, **missing-bill** (the 'a simulated missing bill pages the phone' exit,
+CLAUDE.md Phase 6), **paycheck-late**, and **per-account freshness**. Latch state is persisted
+(F11) via `alert_latch_service`, so a redeploy never re-pages an already-open condition. Not yet
+built (same latched pattern): paycheck-*short* (band-based, better at ingestion) and auth-hold
+expiry (a data-mutation sweep).
 """
 
 import asyncio
@@ -18,7 +19,9 @@ from app.database import AsyncSessionLocal
 from app.models.account import Account
 from app.models.bill_statement import BillStatement
 from app.models.ingest_event import IngestEvent
+from app.models.rule import Rule
 from app.models.user import User
+from app.rules.recurrence import InvalidCadence, expected_next_date
 from app.services.alert_latch_service import latched_should_alert
 from app.services.ntfy_client import HttpNtfyPublisher, NtfyPublisher
 from app.time_util import owner_local_date
@@ -81,6 +84,62 @@ async def run_missing_bill_sweep(
             )
 
 
+async def run_paycheck_late_sweep(
+    db: AsyncSession, user_id: uuid.UUID, publisher: NtfyPublisher, *, now: datetime.datetime
+) -> None:
+    """A recurring-income rule whose next expected paycheck is overdue (past the cadence's
+    expected date + slack, owner-local) pages once. When the paycheck lands, F6 advances the
+    rule's `last_matched_at`, the expected date rolls forward, the condition goes false, and the
+    latch clears — so a *later* miss is a fresh episode."""
+    today = owner_local_date(now, settings.owner_timezone)
+    result = await db.execute(
+        select(Rule).where(
+            Rule.user_id == user_id,
+            Rule.type == "recurring_income",
+            Rule.enabled.is_(True),
+            Rule.last_matched_at.is_not(None),
+        )
+    )
+    for rule in result.scalars().all():
+        cadence = rule.cadence or {}
+        try:
+            expected = expected_next_date(rule.last_matched_at.date(), cadence)
+        except InvalidCadence:
+            continue  # a malformed cadence is a rule-editor problem, not a sweep alert
+        slack = datetime.timedelta(days=cadence.get("slack_days", 0))
+        late = today > expected + slack
+        if await latched_should_alert(db, user_id, f"paycheck_late:{rule.id}", late, now):
+            await publisher.publish(
+                f"Expected income '{rule.matcher}' hasn't arrived — it was due around {expected}.",
+                title="Magpie: paycheck late",
+            )
+
+
+async def run_account_freshness_sweep(
+    db: AsyncSession, user_id: uuid.UUID, publisher: NtfyPublisher, *, now: datetime.datetime
+) -> None:
+    """An account that *had* email-alert activity but none in `account_freshness_days` may have
+    had its bank alerts silently turned off (the alert-decay failure mode). Keys off
+    `ingest_events` — an account with no prior activity has no baseline and is skipped, so a new
+    or manual-only account never false-alarms."""
+    threshold = now - datetime.timedelta(days=settings.account_freshness_days)
+    accounts = await db.execute(
+        select(Account).where(Account.user_id == user_id, Account.active.is_(True))
+    )
+    for account in accounts.scalars().all():
+        latest = await db.execute(
+            select(func.max(IngestEvent.received_at)).where(IngestEvent.account_id == account.id)
+        )
+        latest_at = latest.scalar_one()
+        stale = latest_at is not None and latest_at < threshold
+        if await latched_should_alert(db, user_id, f"account_stale:{account.id}", stale, now):
+            await publisher.publish(
+                f"No new alerts from {account.name} ({account.institution}) in "
+                f"{settings.account_freshness_days}+ days — its email alerts may have stopped.",
+                title="Magpie: account stale",
+            )
+
+
 async def _resolve_sweep_user_id() -> uuid.UUID | None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(User).where(User.email == settings.ingest_user_email))
@@ -106,6 +165,8 @@ async def sweep_loop() -> None:
                 async with AsyncSessionLocal() as db:
                     await run_unparsed_backlog_sweep(db, user_id, publisher, now=now)
                     await run_missing_bill_sweep(db, user_id, publisher, now=now)
+                    await run_paycheck_late_sweep(db, user_id, publisher, now=now)
+                    await run_account_freshness_sweep(db, user_id, publisher, now=now)
                     await db.commit()  # persist the alert latches (F11)
         except Exception:
             logger.exception("Sweep failed")

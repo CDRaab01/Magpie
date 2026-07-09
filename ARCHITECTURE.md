@@ -401,12 +401,16 @@ edge, stays silent while a condition persists, fires again if it resolves and re
 re-pages a still-open condition (the old sweep held it in process memory and reset on every
 container recreate). **`app/services/ntfy_client.py`** is the fourth injected seam
 (`FakeNtfyPublisher` records, `HttpNtfyPublisher` POSTs). **Built + wired into the lifespan sweep
-loop: two latched alerts** — the unparsed-email backlog and **missing-bill** (an overdue unmatched
+loop: four latched alerts** — unparsed-email backlog, **missing-bill** (an overdue unmatched
 `BillStatement` past an owner-local due-date grace, F18 — the "a simulated missing bill pages the
-phone" exit), checked every `sweep_interval_minutes`; 8 time-travel tests in
-`test_sweep_service.py`. **Remaining three (same latched pattern):** paycheck late/short,
-per-account freshness, auth-hold expiry. **Cash rule** (the ATM withdrawal *is* the spend) is still
-target design, not built.
+phone" exit), **paycheck-late** (a `recurring_income` rule whose expected paycheck — cadence +
+`last_matched_at` — is overdue past its slack; clears when F6 advances the rule on arrival), and
+**per-account freshness** (an account with prior `ingest_events` activity but none in
+`account_freshness_days`, so alert-decay is caught; no-history accounts skipped so nothing
+false-alarms). Checked every `sweep_interval_minutes`; 12 time-travel tests in
+`test_sweep_service.py`. **Remaining:** **auth-hold expiry** (a data-*mutation* sweep — drop stale
+pendings) and paycheck-*short* (band-based, better at ingestion). **Cash rule** (the ATM withdrawal
+*is* the spend) is still target design, not built.
 
 ### Domain map
 
@@ -615,8 +619,8 @@ forward once someone wants to actually test the sign-in flow on a phone.
    unmatched pendings after ~7 days with an audit note (not built — `app/rules/clock.py`'s
    seam exists, nothing schedules this sweep yet).
 5. **Alert-coverage illusion** (an account quietly stops alerting) → per-account "last event
-   seen" freshness + a staleness alert via ntfy — **not built**; the one alert that exists
-   today (Phase 6) is the unparsed-email backlog, not per-account freshness.
+   seen" freshness + a latched staleness alert via ntfy — **built (2026-07-08)**,
+   `run_account_freshness_sweep` (`account_freshness_days`, default 14).
 6. **Tailscale outage** → app degrades to cached reads; ingestion pauses and catches up
    (IMAP is pull — nothing is lost, the label retains the mail).
 
