@@ -11,6 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -30,6 +34,7 @@ import com.magpie.data.remote.TransactionOut
 import com.magpie.ui.theme.MagpieTheme
 import com.magpie.ui.util.RefreshOnResume
 import com.magpie.util.formatCents
+import design.pulse.ui.components.EmptyState
 import design.pulse.ui.components.PanelCard
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,20 +58,26 @@ internal fun TransactionsContent(
                 Modifier.fillMaxSize().padding(padding), Alignment.Center,
             ) { CircularProgressIndicator() }
 
-            is TransactionsUiState.Error -> Box(
-                Modifier.fillMaxSize().padding(padding), Alignment.Center,
-            ) { Text(s.message, color = MaterialTheme.colorScheme.error) }
+            is TransactionsUiState.Error -> EmptyState(
+                icon = Icons.Default.Refresh,
+                title = "Couldn't load",
+                subtitle = s.message,
+                modifier = Modifier.padding(padding),
+            )
 
             is TransactionsUiState.Ready -> Column(Modifier.padding(padding).fillMaxSize()) {
                 FilterRow(selected = s.filter, onSelect = onSetFilter)
                 val visible = s.visible
                 when {
-                    s.all.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                        Text("No transactions yet.")
-                    }
-                    visible.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                        Text("Nothing matches “${s.filter.label}”.")
-                    }
+                    s.all.isEmpty() -> EmptyState(
+                        icon = Icons.AutoMirrored.Filled.ReceiptLong,
+                        title = "No transactions yet",
+                        subtitle = "Alert emails file here automatically once your accounts are set up.",
+                    )
+                    visible.isEmpty() -> EmptyState(
+                        icon = Icons.Default.SearchOff,
+                        title = "Nothing matches “${s.filter.label}”",
+                    )
                     else -> LazyColumn(
                         modifier = Modifier.padding(horizontal = MagpieTheme.spacing.md),
                     ) {

@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -48,6 +49,7 @@ import com.magpie.data.remote.AccountOut
 import com.magpie.ui.util.RefreshOnResume
 import com.magpie.ui.theme.MagpieTheme
 import com.magpie.util.formatCents
+import design.pulse.ui.components.EmptyState
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
@@ -176,9 +178,11 @@ internal fun AccountsContent(
                     state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                         CircularProgressIndicator()
                     }
-                    state.accounts.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                        Text("No accounts yet.")
-                    }
+                    state.accounts.isEmpty() -> EmptyState(
+                        icon = Icons.Default.AccountBalanceWallet,
+                        title = "No accounts yet",
+                        subtitle = "Tap + to add your cards and checking accounts.",
+                    )
                     else -> LazyColumn(modifier = Modifier.padding(MagpieTheme.spacing.md)) {
                         items(state.accounts, key = { it.id }) { account ->
                             AccountRow(

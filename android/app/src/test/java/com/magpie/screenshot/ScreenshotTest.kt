@@ -147,6 +147,22 @@ class ScreenshotTest {
 
     @Test
     fun transactions_dark() = capture("transactions_dark", dark = true) { TransactionsScene() }
+
+    @Test
+    fun transactions_empty_light() = capture("transactions_empty_light", dark = false) {
+        TransactionsContent(
+            state = TransactionsUiState.Ready(emptyList(), emptyMap(), TxnFilter.ALL),
+            onSetFilter = {},
+        )
+    }
+
+    @Test
+    fun transactions_empty_dark() = capture("transactions_empty_dark", dark = true) {
+        TransactionsContent(
+            state = TransactionsUiState.Ready(emptyList(), emptyMap(), TxnFilter.ALL),
+            onSetFilter = {},
+        )
+    }
 }
 
 @Composable

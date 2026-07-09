@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +46,7 @@ import com.magpie.ui.util.RefreshOnResume
 import com.magpie.data.remote.TransactionOut
 import com.magpie.ui.theme.MagpieTheme
 import com.magpie.util.formatCents
+import design.pulse.ui.components.EmptyState
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
@@ -109,9 +111,11 @@ internal fun ReviewQueueContent(
                 state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     CircularProgressIndicator()
                 }
-                state.transactions.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Text("Nothing needs review right now.")
-                }
+                state.transactions.isEmpty() -> EmptyState(
+                    icon = Icons.Default.CheckCircle,
+                    title = "All caught up",
+                    subtitle = "Nothing needs review right now.",
+                )
                 else -> LazyColumn(modifier = Modifier.padding(MagpieTheme.spacing.md)) {
                     items(state.transactions, key = { it.id }) { txn ->
                         ReviewQueueRow(
