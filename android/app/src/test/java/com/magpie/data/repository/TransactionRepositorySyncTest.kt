@@ -6,6 +6,7 @@ import com.magpie.data.remote.AccountCreate
 import com.magpie.data.remote.AccountOut
 import com.magpie.data.remote.ApiService
 import com.magpie.data.remote.BillOut
+import com.magpie.data.remote.CashflowCalendarOut
 import com.magpie.data.remote.CategoryCreate
 import com.magpie.data.remote.CategoryOut
 import com.magpie.data.remote.CategoryUpdate
@@ -113,6 +114,8 @@ private class FakeApi : ApiService {
         institution: okhttp3.RequestBody,
         file: okhttp3.MultipartBody.Part,
     ): ImportSummaryOut = error("unused")
+
+    override suspend fun getCashflow(): CashflowCalendarOut = error("unused")
 
     override suspend fun getVersion(): VersionOut = error("unused")
 }

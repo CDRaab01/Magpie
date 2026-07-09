@@ -83,6 +83,10 @@ interface ApiService {
         @Part file: MultipartBody.Part,
     ): ImportSummaryOut
 
+    // --- Cash-flow calendar ---
+    @GET("cashflow")
+    suspend fun getCashflow(): CashflowCalendarOut
+
     // --- Ops ---
     @GET("version")
     suspend fun getVersion(): VersionOut

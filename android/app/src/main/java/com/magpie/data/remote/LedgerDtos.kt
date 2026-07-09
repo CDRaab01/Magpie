@@ -111,3 +111,20 @@ data class MonthlySummaryOut(
     @SerialName("spend_cents") val spendCents: Long,
     @SerialName("net_cents") val netCents: Long,
 )
+
+@Serializable
+data class UpcomingBillOut(
+    val biller: String,
+    @SerialName("amount_due_cents") val amountDueCents: Long,
+    @SerialName("due_date") val dueDate: String,
+    @SerialName("account_name") val accountName: String,
+    @SerialName("is_overdue") val isOverdue: Boolean,
+    @SerialName("before_next_paycheck") val beforeNextPaycheck: Boolean,
+)
+
+@Serializable
+data class CashflowCalendarOut(
+    @SerialName("next_paycheck_date") val nextPaycheckDate: String?,
+    @SerialName("total_due_before_paycheck_cents") val totalDueBeforePaycheckCents: Long,
+    val bills: List<UpcomingBillOut>,
+)

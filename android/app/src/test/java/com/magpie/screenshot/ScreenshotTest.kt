@@ -17,10 +17,14 @@ import com.magpie.data.remote.CategoryOut
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.data.remote.TransactionOut
 import com.magpie.data.remote.BillOut
+import com.magpie.data.remote.CashflowCalendarOut
+import com.magpie.data.remote.UpcomingBillOut
 import com.magpie.ui.accounts.AccountsContent
 import com.magpie.ui.accounts.AccountsUiState
 import com.magpie.ui.bills.BillsContent
 import com.magpie.ui.bills.BillsUiState
+import com.magpie.ui.cashflow.CashflowContent
+import com.magpie.ui.cashflow.CashflowUiState
 import com.magpie.ui.home.HomeContent
 import com.magpie.ui.home.HomeUiState
 import com.magpie.ui.reviewqueue.ReviewQueueContent
@@ -102,6 +106,12 @@ class ScreenshotTest {
 
     @Test
     fun settings_dark() = capture("settings_dark", dark = true) { SettingsScene() }
+
+    @Test
+    fun cashflow_light() = capture("cashflow_light", dark = false) { CashflowScene() }
+
+    @Test
+    fun cashflow_dark() = capture("cashflow_dark", dark = true) { CashflowScene() }
 }
 
 @Composable
@@ -122,6 +132,7 @@ private fun HomeReadyScene() {
         onViewAccounts = {},
         onViewReviewQueue = {},
         onViewBills = {},
+        onViewCashflow = {},
         onViewSettings = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
@@ -136,6 +147,7 @@ private fun HomeNeedsAccountScene() {
         onViewAccounts = {},
         onViewReviewQueue = {},
         onViewBills = {},
+        onViewCashflow = {},
         onViewSettings = {},
         onCreateFirstAccount = { _, _, _ -> },
     )
@@ -267,6 +279,46 @@ private fun SettingsScene() {
         onAddCategory = {},
         onRenameCategory = { _, _ -> },
         onDeleteCategory = {},
+    )
+}
+
+@Composable
+private fun CashflowScene() {
+    CashflowContent(
+        state = CashflowUiState(
+            calendar = CashflowCalendarOut(
+                nextPaycheckDate = "2026-07-31",
+                totalDueBeforePaycheckCents = 10500,
+                bills = listOf(
+                    UpcomingBillOut(
+                        biller = "SAMPLE INTERNET CO",
+                        amountDueCents = 6000,
+                        dueDate = "2026-07-18",
+                        accountName = "Checking",
+                        isOverdue = false,
+                        beforeNextPaycheck = true,
+                    ),
+                    UpcomingBillOut(
+                        biller = "XCEL ENERGY",
+                        amountDueCents = 4500,
+                        dueDate = "2026-07-10",
+                        accountName = "Checking",
+                        isOverdue = true,
+                        beforeNextPaycheck = true,
+                    ),
+                    UpcomingBillOut(
+                        biller = "SAMPLE RENT",
+                        amountDueCents = 150000,
+                        dueDate = "2026-08-05",
+                        accountName = "Checking",
+                        isOverdue = false,
+                        beforeNextPaycheck = false,
+                    ),
+                ),
+            ),
+            loading = false,
+        ),
+        onBack = {},
     )
 }
 

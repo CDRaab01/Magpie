@@ -472,8 +472,8 @@ from `category_id` so an AI suggestion can never be mistaken for a human/rule de
 `GET /cashflow` (`app/routers/cashflow.py` → `cashflow_service` → pure `app/rules/cashflow.py`,
 Tier 3 #23, 2026-07-08) is the "due before next paycheck" projection: the next paycheck (soonest
 `expected_next_date` across recurring-income rules) + the account's unmatched upcoming bills, each
-flagged `is_overdue`/`before_next_paycheck`. Backend only so far — the Android calendar screen that
-consumes it is the follow-up.
+flagged `is_overdue`/`before_next_paycheck`. Consumed by the Android `ui/cashflow/` screen (see the
+Android section).
 
 **Planned (Phase 8):** suite membership + release + operational fit — see CLAUDE.md §10.
 No further domains are planned beyond that; Phase 7 was the last content phase.
@@ -547,8 +547,12 @@ paths — accept-as-is, accept/pick a category, correct the kind — go through 
 (`review_state=confirmed`, null = leave untouched); a bad kind change surfaces the server's sign
 re-validation error and leaves the row in the queue.) · `ui/bills/BillsScreen` (**Phase 6** — `GET
 /bills`; each row shows the biller, due date, and a Paid/Missing/Awaiting-payment status
-derived from `matched_transaction_id`/`is_missing`, not a full "due before next paycheck"
-calendar view yet — that cross-reference against a paycheck rule's cadence isn't built).
+derived from `matched_transaction_id`/`is_missing`; the flat bills list, now the detail view
+behind the calendar) · `ui/cashflow/CashflowScreen` (**Tier 3 #23, 2026-07-08** — the "due before
+next paycheck" headline: a paycheck header from `GET /cashflow` (`next_paycheck_date` + total due
+before it) over the upcoming bills split into "Due before next paycheck" / "After payday" sections,
+each row colored by the corrected grammar — red only when overdue, amber for the before-payday set,
+teal otherwise; linked from Home; light+dark Roborazzi baselines).
 `ui/navigation/MagpieNavHost` gates the whole graph on `AuthGateViewModel.isSignedIn` (a
 `TokenStore` Flow) — no explicit post-sign-in navigation call is needed, since saving a
 session makes the Flow re-emit. **No Budgets screen yet** (server-side `GET/POST /budgets`
