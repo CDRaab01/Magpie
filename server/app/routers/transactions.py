@@ -39,6 +39,8 @@ async def all_transactions(
     start: datetime.date | None = Query(default=None),
     end: datetime.date | None = Query(default=None),
     review_state: str | None = Query(default=None),
+    account_id: uuid.UUID | None = Query(default=None),  # #32: account filter
+    q: str | None = Query(default=None, max_length=100),  # #32: merchant text search
     limit: int | None = Query(default=None, ge=1, le=500),  # F14: opt-in pagination (cap 500)
     offset: int = Query(default=0, ge=0),
 ):
@@ -48,6 +50,8 @@ async def all_transactions(
         start=start,
         end=end,
         review_state=review_state,
+        account_id=account_id,
+        q=q,
         limit=limit,
         offset=offset,
     )

@@ -369,7 +369,11 @@ observations"), not just that it needs a look. **F14:** that observation lookup 
 merchant substring in SQL (`merchant_norm ILIKE %matcher%`, both stored already-normalized)
 instead of loading + Python-normalizing the whole account table per evaluated row; the exact
 one-way `matches()` stays the Python authority. `GET /transactions` also gains opt-in `limit`
-(≤500)/`offset` (default unbounded — review queue unchanged); the Android infinite-scroll is Tier 4.
+(≤500)/`offset` (default unbounded — review queue unchanged). **Tier 4 #32 (2026-07-09):** it
+further gains `account_id` and `q` (case-insensitive merchant search over `merchant_raw`/
+`merchant_norm`), so the Android Transactions screen's filter chips + search box translate to
+server queries that stay correct under offset pagination (the infinite-scroll client now consumes
+`limit`/`offset`).
 
 **The AI guardrail (built, Phase 7):** `app/services/ai/llm_client.py` is the fourth and
 final injected seam (clock, IMAP fetcher, ntfy publisher, now the LLM client) —
@@ -408,9 +412,14 @@ phone" exit), **paycheck-late** (a `recurring_income` rule whose expected payche
 **per-account freshness** (an account with prior `ingest_events` activity but none in
 `account_freshness_days`, so alert-decay is caught; no-history accounts skipped so nothing
 false-alarms). Checked every `sweep_interval_minutes`; 12 time-travel tests in
-`test_sweep_service.py`. **Remaining:** **auth-hold expiry** (a data-*mutation* sweep — drop stale
-pendings) and paycheck-*short* (band-based, better at ingestion). **Cash rule** (the ATM withdrawal
-*is* the spend) is still target design, not built.
+`test_sweep_service.py`. **Tier 4 #34 (2026-07-09) — alert deep links:** each `publish()` now
+carries a `click` (an ntfy `Click` header) with a `magpie://` deep link, so tapping the phone
+notification opens the screen that lets the owner act — missing-bill→`magpie://bills`,
+paycheck-late→`magpie://cashflow`, account-stale→`magpie://accounts`, unparsed-backlog→
+`magpie://home`. The Android app registers the `magpie://` scheme and `MagpieNavHost` routes each
+host; keep the two lists in sync. **Remaining:** **auth-hold expiry** (a data-*mutation* sweep —
+drop stale pendings) and paycheck-*short* (band-based, better at ingestion). **Cash rule** (the ATM
+withdrawal *is* the spend) is still target design, not built.
 
 ### Domain map
 

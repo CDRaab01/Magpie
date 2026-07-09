@@ -105,6 +105,56 @@ async def test_list_filters_by_date_range(auth_client):
     assert dates == {"2026-07-01", "2026-07-15"}
 
 
+async def test_list_filters_by_account_and_merchant_search(auth_client):
+    # #32: account filter + case-insensitive merchant search, so the Transactions screen's
+    # filter chips + search box translate to server queries (and stay correct under pagination).
+    checking = await _make_account(auth_client)
+    card = await _make_account(auth_client, name="Amex", type="card")
+    await auth_client.post(
+        "/transactions",
+        json={
+            "account_id": checking,
+            "amount": -100,
+            "date": "2026-07-01",
+            "kind": "spend",
+            "merchant_raw": "MEIJER GROCERY",
+        },
+    )
+    await auth_client.post(
+        "/transactions",
+        json={
+            "account_id": card,
+            "amount": -200,
+            "date": "2026-07-02",
+            "kind": "spend",
+            "merchant_raw": "SHELL FUEL",
+        },
+    )
+
+    by_account = (await auth_client.get("/transactions", params={"account_id": card})).json()
+    assert [t["merchant_raw"] for t in by_account] == ["SHELL FUEL"]
+
+    by_search = (await auth_client.get("/transactions", params={"q": "meijer"})).json()
+    assert [t["merchant_raw"] for t in by_search] == ["MEIJER GROCERY"]
+
+    combined = await auth_client.get("/transactions", params={"account_id": checking, "q": "shell"})
+    assert combined.json() == []  # SHELL is on the card, not checking
+
+
+async def test_list_paginates_with_limit_offset(auth_client):
+    # #32 infinite scroll: stable date-desc order + limit/offset yields non-overlapping pages.
+    account_id = await _make_account(auth_client)
+    for d in ("2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04", "2026-07-05"):
+        await auth_client.post(
+            "/transactions",
+            json={"account_id": account_id, "amount": -100, "date": d, "kind": "spend"},
+        )
+    page1 = (await auth_client.get("/transactions", params={"limit": 2, "offset": 0})).json()
+    page2 = (await auth_client.get("/transactions", params={"limit": 2, "offset": 2})).json()
+    assert [t["date"] for t in page1] == ["2026-07-05", "2026-07-04"]
+    assert [t["date"] for t in page2] == ["2026-07-03", "2026-07-02"]
+
+
 async def test_update_and_delete_transaction(auth_client):
     account_id = await _make_account(auth_client)
     category = await auth_client.post("/categories", json={"name": "Dining"})

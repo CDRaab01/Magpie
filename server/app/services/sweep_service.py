@@ -30,6 +30,14 @@ logger = logging.getLogger("magpie.sweeps")
 
 MISSING_BILL_GRACE_DAYS = 3
 
+# #34: deep links carried on each alert's ntfy `Click` header. The Android app registers the
+# `magpie://` scheme and routes each host to the screen that lets the owner act on the alert.
+# Keep these hosts in sync with the client's MagpieNavHost deep-link routing.
+LINK_BILLS = "magpie://bills"
+LINK_CASHFLOW = "magpie://cashflow"
+LINK_ACCOUNTS = "magpie://accounts"
+LINK_HOME = "magpie://home"
+
 
 async def count_unparsed_events(db: AsyncSession, user_id: uuid.UUID) -> int:
     result = await db.execute(
@@ -50,6 +58,7 @@ async def run_unparsed_backlog_sweep(
         await publisher.publish(
             f"{count} email(s) couldn't be parsed and need a look.",
             title="Magpie: unparsed email backlog",
+            click=LINK_HOME,
         )
 
 
@@ -81,6 +90,7 @@ async def run_missing_bill_sweep(
             await publisher.publish(
                 f"{bill.biller}: {amount} was due {bill.due_date} and hasn't been paid.",
                 title="Magpie: bill missing",
+                click=LINK_BILLS,
             )
 
 
@@ -112,6 +122,7 @@ async def run_paycheck_late_sweep(
             await publisher.publish(
                 f"Expected income '{rule.matcher}' hasn't arrived — it was due around {expected}.",
                 title="Magpie: paycheck late",
+                click=LINK_CASHFLOW,
             )
 
 
@@ -137,6 +148,7 @@ async def run_account_freshness_sweep(
                 f"No new alerts from {account.name} ({account.institution}) in "
                 f"{settings.account_freshness_days}+ days — its email alerts may have stopped.",
                 title="Magpie: account stale",
+                click=LINK_ACCOUNTS,
             )
 
 

@@ -61,6 +61,8 @@ async def list_transactions(
     start: datetime.date | None = None,
     end: datetime.date | None = None,
     review_state: str | None = None,
+    account_id: uuid.UUID | None = None,
+    q: str | None = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> list[Transaction]:
@@ -78,6 +80,14 @@ async def list_transactions(
         query = query.where(Transaction.date <= end)
     if review_state is not None:
         query = query.where(Transaction.review_state == review_state)
+    if account_id is not None:
+        query = query.where(Transaction.account_id == account_id)
+    if q:
+        # #32: case-insensitive merchant search across the raw + normalized names.
+        like = f"%{q.strip()}%"
+        query = query.where(
+            Transaction.merchant_raw.ilike(like) | Transaction.merchant_norm.ilike(like)
+        )
     # F14: optional pagination for the Transactions screen once a 12-month backfill makes an
     # unbounded list heavy. Default (limit=None) is unchanged — return everything — so existing
     # callers (e.g. the review queue) and tests keep their current behavior. A stable ORDER BY

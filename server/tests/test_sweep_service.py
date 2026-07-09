@@ -130,6 +130,7 @@ async def test_new_backlog_publishes_once():
     await _sweep_unparsed(user_id, publisher)
     assert len(publisher.published) == 1
     assert "1 email" in publisher.published[0][0]
+    assert publisher.published[0][2] == "magpie://home"  # #34 deep link
 
 
 async def test_repeated_sweeps_stay_silent_while_backlog_persists():
@@ -180,6 +181,7 @@ async def test_overdue_unmatched_bill_pages_once():
     assert len(publisher.published) == 1
     assert "XCEL ENERGY" in publisher.published[0][0]
     assert "$45.00" in publisher.published[0][0]
+    assert publisher.published[0][2] == "magpie://bills"  # #34 deep link
 
     await _sweep_bills(user_id, publisher)  # latched — no re-page
     assert len(publisher.published) == 1
@@ -279,6 +281,7 @@ async def test_overdue_paycheck_pages_once():
     await _sweep_paycheck(user_id, publisher)
     assert len(publisher.published) == 1
     assert "EMPLOYER" in publisher.published[0][0]
+    assert publisher.published[0][2] == "magpie://cashflow"  # #34 deep link
     await _sweep_paycheck(user_id, publisher)  # latched
     assert len(publisher.published) == 1
 
@@ -308,6 +311,7 @@ async def test_stale_account_pages_once():
     await _sweep_freshness(user_id, publisher)
     assert len(publisher.published) == 1
     assert "Checking" in publisher.published[0][0]
+    assert publisher.published[0][2] == "magpie://accounts"  # #34 deep link
     await _sweep_freshness(user_id, publisher)  # latched
     assert len(publisher.published) == 1
 
