@@ -83,7 +83,10 @@ async def test_llm_transport_failure_yields_no_draft_not_an_exception():
             raise ConnectionError("LM Studio is down")
 
     result = await suggest_category(
-        ExplodingClient(), merchant="Trader Joe's", amount_cents=-4500, kind="spend",
+        ExplodingClient(),
+        merchant="Trader Joe's",
+        amount_cents=-4500,
+        kind="spend",
         categories=CATEGORIES,
     )
     assert result is None
