@@ -42,3 +42,19 @@ class RuleOut(BaseModel):
     category_id: uuid.UUID | None
     last_matched_at: datetime.datetime | None
     enabled: bool
+
+
+class RuleApplicationOut(BaseModel):
+    rule_id: uuid.UUID
+    matcher: str
+    category_name: str
+    matched: int
+    skipped_confirmed: int
+
+
+class PromotionResultOut(BaseModel):
+    dry_run: bool
+    rules_created: int
+    transactions_filed: int
+    merchants_skipped: int
+    applications: list[RuleApplicationOut]

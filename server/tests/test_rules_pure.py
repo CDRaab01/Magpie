@@ -244,7 +244,9 @@ def test_widened_window_still_refuses_a_non_payment_shape():
 
 
 def test_zelle_reference_is_stripped_leaving_the_counterparty():
-    assert normalize_merchant("ZELLE INSTANT PMT TO Jose Handyman   USBLFdcrDsRt") == "JOSE HANDYMAN"
+    assert (
+        normalize_merchant("ZELLE INSTANT PMT TO Jose Handyman   USBLFdcrDsRt") == "JOSE HANDYMAN"
+    )
     assert normalize_merchant("ZELLE INSTANT PMT FROM AARON S WILLIAMS JPM99AK69Y2V") == (
         "AARON S WILLIAMS"
     )
