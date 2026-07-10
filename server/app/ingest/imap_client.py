@@ -88,6 +88,22 @@ def _strip_html(html: str) -> str:
     return text.strip()
 
 
+def message_parts(raw: str) -> tuple[str, str, str]:
+    """(sender, subject, body) from a raw RFC822 message — the fetch's decode step, factored out.
+
+    The live poll and the replay path (`services/replay_service.py`, re-parsing
+    `ingest_events.raw_payload`) both go through here, so a replayed parse sees byte-identical
+    inputs to the parse that originally ran. Any divergence between the two would make replay
+    lie about what a parser fix actually does to history.
+    """
+    msg = email.message_from_string(raw)
+    return (
+        email.utils.parseaddr(msg.get("From", ""))[1],
+        _decode(msg.get("Subject")),
+        _plaintext_body(msg),
+    )
+
+
 class RealImapFetcher:
     def __init__(
         self, host: str, port: int, user: str, password: str, label: str, since_days: int = 3
@@ -117,8 +133,10 @@ class RealImapFetcher:
                 if status != "OK" or not msg_data or msg_data[0] is None:
                     continue
                 raw_bytes = msg_data[0][1]
+                # Decode once and derive everything from that string: `raw_text` is exactly what
+                # lands in `ingest_events.raw_payload`, so parsing it here is what replay reruns.
                 raw_text = raw_bytes.decode("utf-8", errors="replace")
-                msg = email.message_from_bytes(raw_bytes)
+                msg = email.message_from_string(raw_text)
                 message_id = msg.get("Message-ID", "").strip()
                 if not message_id:
                     continue
@@ -128,12 +146,13 @@ class RealImapFetcher:
                     if date_header
                     else datetime.now(timezone.utc)
                 )
+                sender, subject, body = message_parts(raw_text)
                 results.append(
                     FetchedEmail(
                         message_id=message_id,
-                        sender=email.utils.parseaddr(msg.get("From", ""))[1],
-                        subject=_decode(msg.get("Subject")),
-                        body=_plaintext_body(msg),
+                        sender=sender,
+                        subject=subject,
+                        body=body,
                         raw=raw_text,
                         received_at=received_at,
                     )

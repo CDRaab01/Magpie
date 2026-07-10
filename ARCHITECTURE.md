@@ -319,10 +319,35 @@ direction, ±3 days, exact or tip-settled amount; `import_service.py` promotes t
 in place, keeping its email provenance and any human/rule decision). This closes the F4
 double-count. **Not built yet, called out rather than silently skipped:** the
 auth-hold-expiry sweep (the freshness and unparsed-backlog sweeps are built and latched —
-see "Alert latching") and the F15 parser-replay tool. **The live proof happened
+see "Alert latching"). **The live proof happened
 2026-07-08:** the first real poll connected to Gmail and parsed 22 real Amex alerts
 (`parser=amex`); they sit `outcome=unparsed` pending the owner's real accounts
-(ROADMAP.md Wave 0 #1) and the replay tool to retro-file them.
+(ROADMAP.md Wave 0 #1), which the replay tool below then retro-files.
+
+**Parser replay is built (F15, 2026-07-09) — `app/services/replay_service.py`,
+`POST /ingest/replay`.** Because every email is kept whole in `ingest_events.raw_payload`
+with the `parse_version` that read it, a parser fix (or, in the 22-Amex case, a *newly created
+account*) can be replayed over history: the endpoint re-parses the `unparsed` backlog with
+today's parsers and files what now fits, through the same `evaluate_transaction` path a live
+poll uses — so a retro-filed alert lands identically to one caught live (`imap_client.
+message_parts()` is shared by both, so replay parses byte-identical inputs). Four properties
+make it safe to point at real money:
+
+- **`dry_run=true` is the default** — it runs the identical code path and rolls the
+  transaction back, so the report describes what a real run *would* do because it did it.
+- **Idempotent**: a filed event leaves the `unparsed` backlog, and an event that already has a
+  transaction is skipped outright. Replaying twice files once.
+- **Never double-counts the backfill.** A replayed alert can predate the CSV import that
+  already posted its swipe (the 22 Amex alerts sit inside the 18-month Amex import), so each
+  candidate is checked against posted rows via `pending_match.find_posted_duplicate()` — the
+  *inverse* of the F4 matcher, sharing its one "same swipe" tolerance definition. A match
+  records the event as `duplicate` instead of filing a second, pending copy.
+- **Scoped to `unparsed`.** Re-parsing a `created` event would mutate live financial history;
+  that belongs behind its own review surface (ROADMAP Wave 3 #25), not a bulk button.
+
+Each event comes back with an operator-readable `action` + `reason` ("Parsed by amex, but no
+unique account matches last4 0000"), because explaining why history did or didn't move is the
+tool's whole value.
 
 Design rules: parsers are one module per issuer with **committed sanitized `.eml` fixtures**
 (public repo — nothing real in git); an email that parses to nothing becomes an `unparsed`

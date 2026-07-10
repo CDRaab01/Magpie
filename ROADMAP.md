@@ -79,9 +79,17 @@ Code items, all unblocked now:
    recurring-income match lands under band; pages with median context.
 6. **Bill-matching guards (F13).** Filter the candidate pool by sign/kind so a same-magnitude
    deposit can't "pay" a bill; enforce one bill per matched transaction.
-7. **Parser replay tool (F15), then the `bill_issued` parser.** The replay script over
-   `ingest_events.raw_payload` + `parse_version` finally has a real customer — the 22
-   pre-account alerts — and every future parser fix needs it. Build it first. The Discover
+7. **Parser replay tool (F15) — DONE 2026-07-09**, then the `bill_issued` parser.
+   `app/services/replay_service.py` + `POST /ingest/replay` re-parse the `unparsed` backlog with
+   today's parsers and file what now fits, through the same `evaluate_transaction` path a live poll
+   uses. `dry_run=true` is the default (it runs the real path and rolls back, so the report is
+   honest); replay is idempotent; and it will not double-count the backfill — a replayed alert
+   whose swipe the CSV already posted is recorded `duplicate` via `find_posted_duplicate()`, the
+   inverse of the F4 matcher, reusing its one "same swipe" tolerance. Scoped to `unparsed` events
+   on purpose: re-parsing a `created` one mutates live history and belongs with #25. 11 tests
+   (service + endpoint) and 7 more on the pure matcher. **Its customer is still waiting on #1** —
+   the 22 Amex alerts retro-file the moment the real Amex account exists `[H]`; until then replay
+   correctly reports them as "no unique account matches last4 …". The Discover
    statement-ready parser follows **[H]** once the owner confirms the real sender address
    (browser flakiness blocked that confirmation last time; don't guess).
 8. **Small UI debts from Tier 4:** AI-suggestion text gets its own violet voice and teal is
@@ -95,9 +103,23 @@ Code items, all unblocked now:
     feedback on v0.1.65 suggests it works — mark it), split-sheet interaction, encrypted
     token store (F17), tap one real alert deep link, font-scale/TalkBack pass, and one human
     eyeball over the ~28 Roborazzi baselines (the wrapped-money lesson).
-11. **Ops loose ends:** verify the uptime-kuma monitor exists and pages; clean/document the
-    smoke user's prod residue; update host `C:\Code\CLAUDE.md` + ROADMAP2's Magpie rows from
-    "planned" to live; backup passphrase → password manager + offsite copy **[H]**.
+11. **Ops loose ends:** verify the uptime-kuma monitor exists and pages; update host
+    `C:\Code\CLAUDE.md` + ROADMAP2's Magpie rows from "planned" to live; backup passphrase →
+    password manager + offsite copy **[H]**.
+11a. **`pytest` wrote into the production database — fixed at the source 2026-07-09, prod
+    cleanup still owed `[H]`.** `app/config.py` falls back to `server/.env` when `DATABASE_URL`
+    is unset, and on this host that file points at the live `magpie` DB on :5436. CI was safe
+    only by accident (its workflow exports `.../magpie_test`); a bare local `pytest` resolved to
+    prod. This is the real, much larger story behind the old "smoke user's prod residue" line:
+    **456 of 458 users, ~402 of 408 accounts and 464 transactions in prod are test residue**
+    (last4 `0000`/`9999`, `@magpie.test` emails), accumulated over the build. *Fixed:* `tests/
+    conftest.py` now pins the database name to `*_test` before `app.*` is imported, with a
+    tripwire that refuses a non-`_test` target; verified by running the full suite and watching
+    the prod user count hold at 458. **The real financial data was never corrupted** — the 2 real
+    users, 6 real accounts and 4,745 real transactions are untouched (every service is
+    user-scoped, so test rows never mingled). *Owed:* a one-shot cleanup deleting the test users
+    and cascading their accounts/transactions/ingest_events out of prod, taken against a fresh
+    `pg_dump` and diffed before/after.
 
 **v1 is done when:** parity holds for two consecutive months, the owner runs the daily review
 from the phone, a simulated missing bill and a short paycheck both page it, and the on-device

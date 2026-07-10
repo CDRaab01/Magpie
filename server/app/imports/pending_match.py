@@ -56,3 +56,39 @@ def find_pending_match(
         if best is None or key < best_key:
             best, best_key = c, key
     return best
+
+
+def find_posted_duplicate(
+    amount_cents: int,
+    txn_date: date_,
+    posted_candidates: list[PendingCandidate],
+    *,
+    window_days: int = 3,
+    tip_pct: float = 0.30,
+) -> PendingCandidate | None:
+    """The already-posted transaction that is the same swipe as a *would-be* pending email row.
+
+    The mirror image of `find_pending_match`, for the replay path. A replayed alert can be older
+    than the CSV backfill that already posted the same swipe (the 22 pre-account Amex alerts sit
+    squarely inside the 18-month Amex import), so filing it blindly would double-count exactly
+    the swipes reconciliation was built to merge. Same "same swipe" definition — this asks it
+    from the other side, so the tolerance lives in one place and cannot drift.
+
+    `posted_candidates` reuses `PendingCandidate`'s (id, signed amount, date) shape; only the
+    role differs.
+    """
+    me = PendingCandidate(id="replay", amount_cents=amount_cents, date=txn_date)
+    best: PendingCandidate | None = None
+    best_key: tuple[int, int] | None = None
+    for c in posted_candidates:
+        if (
+            find_pending_match(
+                c.amount_cents, c.date, [me], window_days=window_days, tip_pct=tip_pct
+            )
+            is None
+        ):
+            continue
+        key = (abs((c.date - txn_date).days), abs(c.amount_cents) - abs(amount_cents))
+        if best is None or key < best_key:
+            best, best_key = c, key
+    return best

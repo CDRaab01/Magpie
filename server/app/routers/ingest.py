@@ -1,3 +1,4 @@
+import dataclasses
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,9 +9,10 @@ from app.config import settings
 from app.database import get_db
 from app.ingest.imap_client import RealImapFetcher
 from app.models.ingest_event import INGEST_OUTCOMES, IngestEvent
-from app.schemas.ingest import IngestEventOut, IngestPollResultOut
+from app.schemas.ingest import IngestEventOut, IngestPollResultOut, ReplayResultOut
 from app.security import CurrentUser
 from app.services.ingest_service import run_ingest_poll
+from app.services.replay_service import replay_unparsed_events
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -55,3 +57,19 @@ async def trigger_poll(current_user: CurrentUser, db: DbSession):
         duplicate=summary.duplicate,
         unparsed=summary.unparsed,
     )
+
+
+@router.post("/replay", response_model=ReplayResultOut)
+async def replay_unparsed(
+    current_user: CurrentUser,
+    db: DbSession,
+    dry_run: Annotated[bool, Query()] = True,
+):
+    """Re-parse the unparsed backlog with today's parsers and file whatever now fits (F15).
+
+    `dry_run=true` (the default) reports exactly what a real run would do and writes nothing —
+    this endpoint creates transactions, so the safe call is the one you get by forgetting the
+    parameter. Pass `dry_run=false` to commit.
+    """
+    summary = await replay_unparsed_events(db, current_user.id, dry_run=dry_run)
+    return ReplayResultOut(**dataclasses.asdict(summary))

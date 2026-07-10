@@ -19,3 +19,23 @@ class IngestPollResultOut(BaseModel):
     created: int
     duplicate: int
     unparsed: int
+
+
+class ReplayEventOut(BaseModel):
+    event_id: uuid.UUID
+    message_id: str
+    action: str  # "filed" | "duplicate" | "still_unparsed" | "skipped"
+    reason: str
+    amount_cents: int | None = None
+    merchant: str | None = None
+    txn_date: datetime.date | None = None
+
+
+class ReplayResultOut(BaseModel):
+    dry_run: bool
+    examined: int
+    filed: int
+    duplicate: int
+    still_unparsed: int
+    skipped: int
+    events: list[ReplayEventOut]

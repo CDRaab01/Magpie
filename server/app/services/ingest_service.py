@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.ingest.imap_client import ImapFetcher
-from app.ingest.parsers import UnparsedEmail, parse_email
+from app.ingest.parsers import ParsedEmailEvent, UnparsedEmail, parse_email
 from app.models.account import Account
 from app.models.ingest_event import IngestEvent
 from app.models.transaction import Transaction
@@ -35,7 +35,68 @@ class IngestPollSummary:
     unparsed: int
 
 
-async def _match_account(
+def make_llm_client() -> LmStudioClient | None:
+    """None when `llm_base_url` is unset — the AI stage then silently skips (CLAUDE.md §5:
+    deterministic rules first, the LLM only proposes)."""
+    return (
+        LmStudioClient(settings.llm_base_url, settings.llm_model) if settings.llm_base_url else None
+    )
+
+
+def resolve_txn_date(parsed: ParsedEmailEvent, received_at: datetime.datetime) -> datetime.date:
+    """F18: when the parser has no explicit date, the email's receipt timestamp stands in — taken
+    in the OWNER's timezone so a late-evening month-end swipe files under the right month rather
+    than UTC's next day."""
+    return parsed.event_date or owner_local_date(received_at, settings.owner_timezone)
+
+
+async def build_transaction_for_event(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    account_id: uuid.UUID,
+    parsed: ParsedEmailEvent,
+    txn_date: datetime.date,
+    event_id: uuid.UUID,
+    now: datetime.datetime,
+    llm_client: LmStudioClient | None,
+) -> Transaction:
+    """Run the §5 evaluation order over a parsed alert and build its pending transaction.
+
+    Shared by the live poll and the replay path so a retro-filed alert lands identically to one
+    caught live — same rules, same transfer pairing, same AI draft.
+    """
+    evaluation = await evaluate_transaction(
+        db,
+        user_id,
+        account_id=account_id,
+        amount_cents=parsed.amount_cents,
+        txn_date=txn_date,
+        merchant_raw=parsed.merchant,
+        default_kind=parsed.kind,
+        now=now,
+        llm_client=llm_client,
+    )
+    return Transaction(
+        account_id=account_id,
+        amount=parsed.amount_cents,
+        date=txn_date,
+        status="pending",
+        merchant_raw=parsed.merchant,
+        merchant_norm=normalize_merchant(parsed.merchant) if parsed.merchant else None,
+        kind=evaluation.kind,
+        review_state=evaluation.review_state,
+        category_id=evaluation.category_id,
+        matched_rule_id=evaluation.matched_rule_id,
+        rule_note=evaluation.rule_note,
+        ai_suggested_category_id=evaluation.ai_suggested_category_id,
+        transfer_group=evaluation.transfer_group,
+        source="email",
+        ingest_event_id=event_id,
+    )
+
+
+async def match_account(
     db: AsyncSession, user_id: uuid.UUID, last4_hint: str | None
 ) -> Account | None:
     if last4_hint is None:
@@ -61,9 +122,7 @@ async def run_ingest_poll(
     now = now or datetime.datetime.now(datetime.timezone.utc)
     fetched = fetcher.fetch_recent()
     created = duplicate = unparsed = 0
-    llm_client = (
-        LmStudioClient(settings.llm_base_url, settings.llm_model) if settings.llm_base_url else None
-    )
+    llm_client = make_llm_client()
 
     for item in fetched:
         existing = await db.execute(
@@ -94,7 +153,7 @@ async def run_ingest_poll(
             unparsed += 1
             continue
 
-        account = await _match_account(db, user_id, parsed.last4_hint)
+        account = await match_account(db, user_id, parsed.last4_hint)
 
         event = IngestEvent(
             user_id=user_id,
@@ -116,38 +175,17 @@ async def run_ingest_poll(
             unparsed += 1
             continue
 
-        # F18: when the parser has no explicit date, the email's receipt timestamp stands in —
-        # taken in the OWNER's timezone so a late-evening month-end swipe files under the right
-        # month rather than UTC's next day.
-        txn_date = parsed.event_date or owner_local_date(item.received_at, settings.owner_timezone)
-        evaluation = await evaluate_transaction(
-            db,
-            user_id,
-            account_id=account.id,
-            amount_cents=parsed.amount_cents,
-            txn_date=txn_date,
-            merchant_raw=parsed.merchant,
-            default_kind=parsed.kind,
-            now=now,
-            llm_client=llm_client,
-        )
+        txn_date = resolve_txn_date(parsed, item.received_at)
         db.add(
-            Transaction(
+            await build_transaction_for_event(
+                db,
+                user_id,
                 account_id=account.id,
-                amount=parsed.amount_cents,
-                date=txn_date,
-                status="pending",
-                merchant_raw=parsed.merchant,
-                merchant_norm=normalize_merchant(parsed.merchant) if parsed.merchant else None,
-                kind=evaluation.kind,
-                review_state=evaluation.review_state,
-                category_id=evaluation.category_id,
-                matched_rule_id=evaluation.matched_rule_id,
-                rule_note=evaluation.rule_note,
-                ai_suggested_category_id=evaluation.ai_suggested_category_id,
-                transfer_group=evaluation.transfer_group,
-                source="email",
-                ingest_event_id=event.id,
+                parsed=parsed,
+                txn_date=txn_date,
+                event_id=event.id,
+                now=now,
+                llm_client=llm_client,
             )
         )
         await db.flush()
