@@ -299,13 +299,20 @@ Pydantic-validated, drafts never auto-commit, descriptive never advisory.
 19. **Alert narration:** deviation alerts optionally carry one LLM-drafted context line
     ("XCEL is $31 over its 12-month median; the last outlier was January") appended to the
     ntfy body — never replacing the deterministic fact, which stays first.
-19a. **Spending-anomaly alerts** — the *proactive* half of "AI monitoring" the current sweeps
-    miss. Today's sweeps catch known deviations (bill missing, paycheck late, account stale);
-    nothing catches the novel one — a large charge at a never-seen merchant, or a category
-    running well over its trailing median mid-month. New latched sweep(s) on Wave 1's read
-    models: same `alert_latches` + fake-clock machinery, deterministic thresholds first
-    (an LLM narration line is optional per #19, never the trigger). This is what people
-    actually mean by "watch my spending."
+19a. **Spending-anomaly alerts — DONE 2026-07-10** (`run_large_charge_sweep` +
+    `run_category_overspend_sweep`). Two deterministic triggers, both latched, both fake-clock
+    tested: (1) a large charge (≥$500) at a merchant *never seen before*, recency-windowed so a
+    backfill doesn't storm the phone; (2) a category whose month-to-date spend runs over 1.5× its
+    trailing full-month median (with an absolute floor and a ≥3-prior-month bar). The numeric
+    judgments are pure (`app/rules/anomaly.py`); the SQL aggregates per (category, month) rather
+    than loading rows (F14). **Tuned against the live ledger before trusting it:** a read-only
+    pass caught two would-be false positives — a $232 Meijer grocery run flagged "new" only
+    because `MEIJER FORT WAYNE IN`/`MEIJER STORE 138…` normalize apart (raised the bar $200→$500),
+    and a nameless US Bank "transaction complete" debit (skip empty merchant names). Category-
+    overspend was already quiet (mid-month, everything under median). LLM narration (#19) is still
+    optional and never the trigger. **Watch item:** merchant-string variants (the Meijer case) can
+    still trip trigger 1 above $500 — the deeper fix is better `merchant_norm` collapsing, not a
+    higher threshold.
 20. **Auto-budget proposals — deterministic, not AI:** "Set budgets from your history" offers
     the trailing-3-month median per category as drafts the user confirms one by one. Genre
     table stakes, and it's the review-not-enter law applied to budgets.
