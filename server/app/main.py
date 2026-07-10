@@ -18,6 +18,7 @@ from app.routers import (
     auth,
     bills,
     budgets,
+    export,
     cashflow,
     categories,
     imports,
@@ -131,6 +132,7 @@ app.include_router(cashflow.router)
 app.include_router(summary.router)
 app.include_router(insights.router)
 app.include_router(admin.router)
+app.include_router(export.router)
 
 
 @app.get("/health", tags=["health"])
