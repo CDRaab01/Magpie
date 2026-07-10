@@ -246,6 +246,25 @@ data class MonthlyInsightOut(
     @SerialName("narrative_source") val narrativeSource: String = "unavailable",
 )
 
+// --- Rule promotion (#25) ---
+@Serializable
+data class RuleApplicationOut(
+    @SerialName("rule_id") val ruleId: String,
+    val matcher: String,
+    @SerialName("category_name") val categoryName: String,
+    val matched: Int,
+    @SerialName("skipped_confirmed") val skippedConfirmed: Int,
+)
+
+@Serializable
+data class PromotionResultOut(
+    @SerialName("dry_run") val dryRun: Boolean,
+    @SerialName("rules_created") val rulesCreated: Int,
+    @SerialName("transactions_filed") val transactionsFiled: Int,
+    @SerialName("merchants_skipped") val merchantsSkipped: Int,
+    val applications: List<RuleApplicationOut>,
+)
+
 @Serializable
 data class RuleCadence(
     val kind: String? = null,

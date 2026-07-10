@@ -52,6 +52,7 @@ fun RulesScreen(navController: NavController) {
         onBack = { navController.popBackStack() },
         onSetEnabled = viewModel::setEnabled,
         onDelete = viewModel::delete,
+        onCreateSuggested = viewModel::createSuggestedRules,
     )
 }
 
@@ -62,6 +63,7 @@ internal fun RulesContent(
     onBack: () -> Unit,
     onSetEnabled: (id: String, enabled: Boolean) -> Unit,
     onDelete: (id: String) -> Unit,
+    onCreateSuggested: () -> Unit = {},
 ) {
     var deleting by remember { mutableStateOf<RuleRow?>(null) }
     Scaffold(
@@ -82,6 +84,13 @@ internal fun RulesContent(
                     it,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(MagpieTheme.spacing.md),
+                )
+            }
+            if (!state.loading && state.suggestedRuleCount > 0) {
+                SuggestRulesBanner(
+                    count = state.suggestedRuleCount,
+                    creating = state.creatingRules,
+                    onCreate = onCreateSuggested,
                 )
             }
             when {
@@ -130,6 +139,44 @@ internal fun RulesContent(
                 )
             },
         )
+    }
+}
+
+/**
+ * The "turn your categorized history into rules" banner (#25). When merchants the owner has
+ * already categorized could become auto-filing rules, this offers to create them in one tap —
+ * the phone-side of `POST /rules/from-confirmed`. Money channel (this is teal-primary automation,
+ * not an AI draft), with a spinner while the create call is in flight.
+ */
+@Composable
+private fun SuggestRulesBanner(count: Int, creating: Boolean, onCreate: () -> Unit) {
+    val channel = MagpieTheme.colors.money.base
+    PanelCard(
+        channel = channel,
+        modifier = Modifier.fillMaxWidth().padding(MagpieTheme.spacing.md),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Auto-file $count more merchant${if (count == 1) "" else "s"}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = channel,
+                )
+                Text(
+                    "You've categorized these — make rules so they file themselves next time.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (creating) {
+                CircularProgressIndicator(modifier = Modifier.padding(start = 12.dp))
+            } else {
+                PulseButton(text = "Create", compact = true, onClick = onCreate)
+            }
+        }
     }
 }
 

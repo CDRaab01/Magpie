@@ -107,6 +107,14 @@ interface ApiService {
     @DELETE("rules/{id}")
     suspend fun deleteRule(@Path("id") id: String)
 
+    // Turn merchants you've already categorized into auto-filing rules (#25). dry_run=true just
+    // previews the count; the screen previews first, then calls again with dry_run=false to apply.
+    @POST("rules/from-confirmed")
+    suspend fun promoteConfirmedRules(
+        @Query("dry_run") dryRun: Boolean,
+        @Query("min_transactions") minTransactions: Int = 2,
+    ): PromotionResultOut
+
     // --- Budgets ---
     @GET("budgets")
     suspend fun listBudgets(@Query("month") month: String): List<BudgetOut>

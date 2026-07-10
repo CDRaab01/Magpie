@@ -625,10 +625,13 @@ private fun RulesScene() {
                 ),
             ),
             loading = false,
+            // The "create rules from your history" banner (#25) is part of this screen's story.
+            suggestedRuleCount = 22,
         ),
         onBack = {},
         onSetEnabled = { _, _ -> },
         onDelete = {},
+        onCreateSuggested = {},
     )
 }
 

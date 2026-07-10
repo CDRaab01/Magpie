@@ -24,6 +24,11 @@ data class RulesUiState(
     val rules: List<RuleRow> = emptyList(),
     val loading: Boolean = true,
     val error: String? = null,
+    // How many merchants you've categorized could become auto-filing rules right now (#25) — a
+    // best-effort dry-run preview. Zero (or null while unknown) hides the "create rules" banner.
+    val suggestedRuleCount: Int = 0,
+    // True while a create-rules call is in flight, so the banner shows progress and can't double-fire.
+    val creatingRules: Boolean = false,
 )
 
 private fun typeLabel(type: String): String = when (type) {
@@ -75,9 +80,34 @@ class RulesViewModel @Inject constructor(
                         )
                     }
                 _state.value = _state.value.copy(rules = rows, loading = false)
+                // Best-effort dry-run preview of how many rules could be created from merchants the
+                // owner has already categorized — surfaces the "create rules" banner. A hiccup just
+                // leaves the count at 0 (banner hidden); it never blocks the list from rendering.
+                val suggested =
+                    runCatching { api.promoteConfirmedRules(dryRun = true).rulesCreated }
+                        .getOrDefault(0)
+                _state.value = _state.value.copy(suggestedRuleCount = suggested)
             } catch (e: Exception) {
                 _state.value =
                     _state.value.copy(loading = false, error = e.message ?: "Couldn't load rules")
+            }
+        }
+    }
+
+    /** Promote every eligible confirmed merchant into a rule (the banner's action, #25). */
+    fun createSuggestedRules() {
+        if (_state.value.creatingRules) return
+        _state.value = _state.value.copy(creatingRules = true, error = null)
+        viewModelScope.launch {
+            try {
+                api.promoteConfirmedRules(dryRun = false)
+                _state.value = _state.value.copy(creatingRules = false, suggestedRuleCount = 0)
+                load() // pull in the freshly created rules
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    creatingRules = false,
+                    error = e.message ?: "Couldn't create rules",
+                )
             }
         }
     }

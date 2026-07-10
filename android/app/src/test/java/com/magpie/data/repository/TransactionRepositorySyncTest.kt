@@ -27,6 +27,7 @@ import com.magpie.data.remote.TokenResponse
 import com.magpie.data.remote.SplitRequest
 import com.magpie.data.remote.SplitResult
 import com.magpie.data.remote.MonthlyInsightOut
+import com.magpie.data.remote.PromotionResultOut
 import com.magpie.data.remote.TransactionCreate
 import com.magpie.data.remote.TransactionOut
 import com.magpie.data.remote.VersionOut
@@ -142,6 +143,9 @@ private class FakeApi : ApiService {
     override suspend fun updateRule(id: String, req: RuleUpdate): RuleOut = error("unused")
 
     override suspend fun deleteRule(id: String) = error("unused")
+
+    override suspend fun promoteConfirmedRules(dryRun: Boolean, minTransactions: Int): PromotionResultOut =
+        error("unused")
 
     override suspend fun listBudgets(month: String): List<BudgetOut> = error("unused")
 
