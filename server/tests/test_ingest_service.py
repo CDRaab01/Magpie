@@ -8,6 +8,8 @@ import uuid
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
+from sqlalchemy import select
+
 from app.database import AsyncSessionLocal
 from app.ingest.imap_client import FakeImapFetcher, FetchedEmail, _plaintext_body
 from app.models.account import Account
@@ -259,3 +261,43 @@ async def test_f4_reimporting_the_reconciled_csv_creates_no_duplicate():
             .all()
         )
     assert len(rows) == 1
+
+
+async def test_an_inactive_account_does_not_capture_alerts():
+    """A retired card (e.g. a reissued Amex whose last4 changed) must stop capturing alerts.
+    Its CSV export lands on the *current* card, so anything filed to the old account could never
+    reconcile and the eventual CSV row would double-count. The alert belongs in the unparsed
+    operator view instead — "an old card is still being charged" is worth seeing."""
+    async with AsyncSessionLocal() as db:
+        user = User(name="Inactive Test", email=_unique_email())
+        db.add(user)
+        await db.flush()
+        db.add(
+            Account(
+                user_id=user.id,
+                name="Old Card",
+                institution="Amex",
+                type="card",
+                last4="0000",
+                active=False,
+            )
+        )
+        await db.commit()
+        user_id = user.id
+
+    fetcher = FakeImapFetcher([_load_eml("amex_large_purchase.eml")])
+    async with AsyncSessionLocal() as db:
+        summary = await run_ingest_poll(db, user_id, fetcher)
+
+    assert summary.created == 0
+    assert summary.unparsed == 1
+
+    async with AsyncSessionLocal() as db:
+        events = (
+            (await db.execute(select(IngestEvent).where(IngestEvent.user_id == user_id)))
+            .scalars()
+            .all()
+        )
+    assert len(events) == 1
+    assert events[0].outcome == "unparsed"
+    assert events[0].account_id is None

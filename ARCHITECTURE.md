@@ -292,6 +292,12 @@ matching account — raises `UnparsedEmail` and becomes an `outcome="unparsed"` 
 never a crash and never silent data loss. **F16 (fixed 2026-07-08):** account resolution by
 last4 now degrades to unparsed when two accounts share a last4 (a card and a checking account,
 say) instead of raising `MultipleResultsFound` and aborting the whole poll batch.
+**Inactive accounts never match (2026-07-09):** a reissued card keeps the account but changes
+its last4, and the CSV export lands on the *current* card — so an alert filed to the retired
+account could never reconcile against it, and the eventual CSV row would double-count the
+charge. Deactivating the old account routes its alerts to the unparsed operator view, which is
+where "an old card is still being charged" belongs. (Found live: one recurring GOOGLE charge
+still alerting on a replaced Amex.)
 **Two real bugs the tests caught before deploy:** the amount regex originally matched the
 *first* dollar figure in an Amex body, which is the alert-threshold sentence ("...was more
 than $1.00"), not the real charge that appears later — fixed to anchor on the *last* match.

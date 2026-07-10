@@ -295,3 +295,20 @@ async def test_replay_endpoint_commits_when_dry_run_is_false(auth_client):
 
 async def test_replay_endpoint_requires_auth(client):
     assert (await client.post("/ingest/replay")).status_code == 401
+
+
+async def test_replay_will_not_file_onto_an_inactive_account():
+    """Replay shares `match_account`, so a retired card stays out of its reach too."""
+    user_id, account_id = await _make_user_with_account()
+    async with AsyncSessionLocal() as db:
+        account = await db.get(Account, account_id)
+        account.active = False
+        await db.commit()
+    await _make_unparsed_event(user_id, "amex_large_purchase.eml")
+
+    async with AsyncSessionLocal() as db:
+        summary = await replay_unparsed_events(db, user_id, dry_run=False)
+
+    assert summary.filed == 0
+    assert summary.still_unparsed == 1
+    assert await _transactions_for(account_id) == []

@@ -102,7 +102,17 @@ async def match_account(
     if last4_hint is None:
         return None
     result = await db.execute(
-        select(Account).where(Account.user_id == user_id, Account.last4 == last4_hint)
+        select(Account).where(
+            Account.user_id == user_id,
+            Account.last4 == last4_hint,
+            # A closed/replaced card must not keep capturing alerts. A reissued Amex keeps the
+            # account but changes its last4, and the CSV export lands on the *current* card — so
+            # an alert filed to the retired account could never reconcile against it, and the
+            # eventual CSV row would double-count the charge. Deactivating the old account now
+            # routes such alerts to the unparsed operator view, which is exactly where "an old
+            # card is still being charged" deserves to be seen.
+            Account.active.is_(True),
+        )
     )
     accounts = result.scalars().all()
     # F16: two accounts can legitimately share a last4 (a card and a checking account, or two
