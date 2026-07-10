@@ -234,3 +234,54 @@ def test_widened_window_still_refuses_a_non_payment_shape():
     card_spend = _card("spend", -5000, datetime.date(2026, 7, 10))
     pool = [_checking("deposit", 5000, datetime.date(2026, 7, 14))]
     assert find_transfer_match(card_spend, pool) is None
+
+
+# --- Peer-payment confirmation references (added 2026-07-10) ------------------------------
+#
+# Zelle puts a per-transaction reference inside the merchant string, so every payment to the
+# same person normalized to a different merchant (127 "merchants" for 27 real counterparties in
+# the live ledger) and no rule could ever match one.
+
+
+def test_zelle_reference_is_stripped_leaving_the_counterparty():
+    assert normalize_merchant("ZELLE INSTANT PMT TO Jose Handyman   USBLFdcrDsRt") == "JOSE HANDYMAN"
+    assert normalize_merchant("ZELLE INSTANT PMT FROM AARON S WILLIAMS JPM99AK69Y2V") == (
+        "AARON S WILLIAMS"
+    )
+
+
+def test_a_long_digit_laden_reference_is_stripped():
+    raw = "ZELLE INSTANT PMT TO Fence 20250621042000013P1BP2PUSBZjROnGFZQ"
+    assert normalize_merchant(raw) == "FENCE"
+
+
+def test_every_payment_to_one_person_normalizes_to_the_same_merchant():
+    """The whole point: a rule can only match if the string is stable across payments."""
+    a = normalize_merchant("ZELLE INSTANT PMT TO Jose Handyman   USBLFdcrDsRt")
+    b = normalize_merchant("ZELLE INSTANT PMT TO Jose Handyman   USBDT9vo4fxH")
+    assert a == b == "JOSE HANDYMAN"
+
+
+def test_normalization_is_idempotent_and_never_eats_a_surname():
+    """A naive 'strip any long trailing token' rule turns JOSE HANDYMAN into JOSE, and would
+    shorten the name again on every re-normalization pass."""
+    for name in ("JOSE HANDYMAN", "AARON S WILLIAMS", "BETSY GARDENER", "PAPADOPOULOS"):
+        assert normalize_merchant(name) == name
+        assert normalize_merchant(normalize_merchant(name)) == name
+
+
+def test_a_store_number_is_stripped_by_the_pre_existing_rule_not_the_peer_rule():
+    """Trailing store numbers were already stripped (that is what merges "STORE 138" across
+    cycles); the peer-ref rule must not change this behavior for ordinary merchants."""
+    assert normalize_merchant("MEIJER STORE 138") == "MEIJER STORE"
+    assert normalize_merchant("MEIJER STORE 12") == "MEIJER STORE 12"  # < 3 digits: kept
+
+
+def test_a_non_peer_merchant_keeps_a_long_trailing_token():
+    """The ref strip is scoped to peer payments; an ordinary merchant is not second-guessed."""
+    assert normalize_merchant("HALLERCOLVIN PC HALLERCOLVININ") == "HALLERCOLVIN PC HALLERCOLVININ"
+
+
+def test_bank_prefixes_still_strip():
+    assert normalize_merchant("WEB AUTHORIZED PMT VENMO") == "VENMO"
+    assert normalize_merchant("ELECTRONIC WITHDRAWAL GEICO") == "GEICO"
