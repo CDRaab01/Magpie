@@ -177,3 +177,34 @@ async def test_subscriptions_endpoint(auth_client):
         s["merchant"] == "ADOBE" and s["cadence"] == "monthly" for s in body["subscriptions"]
     )
     assert body["total_annual_cost_cents"] >= 2099 * 12
+
+
+# --- alert narration (#19) ----------------------------------------------------------------
+
+
+async def test_narrate_deviation_appends_a_line():
+    from app.services.ai.llm_client import FakeLlmClient
+    from app.services.ai.narrate import narrate_deviation
+
+    line = await narrate_deviation(
+        FakeLlmClient("The last time it ran this high was March."), "facts"
+    )
+    assert line == "The last time it ran this high was March."
+
+
+async def test_narrate_deviation_is_best_effort_on_failure():
+    from app.services.ai.narrate import narrate_deviation
+
+    class _Boom:
+        async def complete(self, prompt):
+            raise RuntimeError("model down")
+
+    assert await narrate_deviation(_Boom(), "facts") is None
+
+
+async def test_narrate_deviation_truncates_a_runaway_reply():
+    from app.services.ai.llm_client import FakeLlmClient
+    from app.services.ai.narrate import narrate_deviation
+
+    line = await narrate_deviation(FakeLlmClient("x" * 500), "facts")
+    assert line is not None and len(line) <= 140

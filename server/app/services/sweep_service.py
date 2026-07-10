@@ -33,6 +33,7 @@ from app.rules.merchant_match import matches
 from app.rules.recurrence import InvalidCadence, expected_next_date
 from app.services.alert_latch_service import latched_should_alert
 from app.services.ai.llm_client import LlmClient
+from app.services.ai.narrate import narrate_deviation
 from app.services.ingest_service import make_llm_client
 from app.services.insight_service import generate_monthly_insight
 from app.services.subscription_service import list_subscriptions
@@ -274,8 +275,22 @@ async def run_large_charge_sweep(
             )
 
 
+async def _with_narration(llm_client, body: str, *, facts: str) -> str:
+    """Append an optional LLM context line to a deviation alert body (#19). The deterministic fact
+    stays first and whole; a missing/failed model just returns `body` unchanged (§6)."""
+    if llm_client is None:
+        return body
+    line = await narrate_deviation(llm_client, facts)
+    return f"{body} {line}" if line else body
+
+
 async def run_category_overspend_sweep(
-    db: AsyncSession, user_id: uuid.UUID, publisher: NtfyPublisher, *, now: datetime.datetime
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    publisher: NtfyPublisher,
+    *,
+    now: datetime.datetime,
+    llm_client: LlmClient | None = None,
 ) -> None:
     """A category whose month-to-date spend runs well over its trailing full-month median pages
     once for the month (ROADMAP #19a) — "you've already spent more on dining this month than you
@@ -332,12 +347,20 @@ async def run_category_overspend_sweep(
         if await latched_should_alert(db, user_id, key, overage is not None, now):
             median = median_cents([abs(a) for a in priors[category_id]])
             name = names.get(category_id, "a category")
-            await publisher.publish(
+            body = (
                 f"{name}: ${mtd_spend / 100:,.2f} so far this month — about ${overage / 100:,.2f} "
-                f"over its ~${median / 100:,.2f} monthly median.",
-                title="Magpie: category over its usual",
-                click=LINK_HOME,
+                f"over its ~${median / 100:,.2f} monthly median."
             )
+            body = await _with_narration(
+                llm_client,
+                body,
+                facts=(
+                    f"Category {name} has spent ${mtd_spend / 100:,.0f} month-to-date versus a "
+                    f"${median / 100:,.0f} monthly median over the last "
+                    f"{len(priors[category_id])} months."
+                ),
+            )
+            await publisher.publish(body, title="Magpie: category over its usual", click=LINK_HOME)
 
 
 def _months_before(month_start: datetime.date, n: int) -> datetime.date:
@@ -551,7 +574,9 @@ async def sweep_loop() -> None:
                     await run_paycheck_late_sweep(db, user_id, publisher, now=now)
                     await run_paycheck_short_sweep(db, user_id, publisher, now=now)
                     await run_large_charge_sweep(db, user_id, publisher, now=now)
-                    await run_category_overspend_sweep(db, user_id, publisher, now=now)
+                    await run_category_overspend_sweep(
+                        db, user_id, publisher, now=now, llm_client=make_llm_client()
+                    )
                     await run_account_freshness_sweep(db, user_id, publisher, now=now)
                     await run_auth_hold_expiry_sweep(db, user_id, now=now)
                     await run_monthly_digest_sweep(
