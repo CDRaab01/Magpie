@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, String
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -15,6 +15,18 @@ class BillStatement(Base):
     """
 
     __tablename__ = "bill_statements"
+
+    # F13: one bill per matched transaction. Partial, because "unmatched" is the normal state
+    # and those NULLs must stay free to repeat. Declared here as well as in the migration so
+    # the tests' `create_all` schema carries the invariant too, not just a migrated database.
+    __table_args__ = (
+        Index(
+            "uq_bill_statements_matched_transaction_id",
+            "matched_transaction_id",
+            unique=True,
+            postgresql_where=text("matched_transaction_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     biller: Mapped[str] = mapped_column(String(255))

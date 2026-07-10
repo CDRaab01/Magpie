@@ -3,7 +3,7 @@
 > **Status (2026-07-09): v1 feature-complete through V1.md's tiers and live** at
 > `https://dragonfly.tail2ce561.ts.net` (tailnet-only, SSO-only; CI → Release → Deploy green;
 > the deployed `/version` tracks `main`). The 2026-07-05 deep-review findings F1–F18 are all
-> closed except the F13/F15 remnants below. Server: SSO-only auth; the full data model
+> closed (the last two, F13 and F15, on 2026-07-09). Server: SSO-only auth; the full data model
 > (eleven tables incl. `alert_latches`); the pure `app/ledger/` + `app/rules/` correctness
 > core; CSV reconciliation with per-institution sign conventions + multiplicity-aware dedupe;
 > **live email ingestion** (Amex / US Bank / Discover parsers from the real corpus, main-account
@@ -32,11 +32,11 @@
 >    compose-`environment:` change. **"First insights"** (plain-language summaries) were never
 >    built at all (ROADMAP.md Wave 2).
 > 3. **No `bill_issued` email parser** — Discover's statement-ready sender is still
->    unconfirmed (browser flakiness; don't guess) — **and no parser-replay tool (F15)**;
->    bills enter via `POST /bills` only.
+>    unconfirmed (browser flakiness; don't guess); bills enter via `POST /bills` only.
+>    The **parser-replay tool (F15) is built** (2026-07-09, `POST /ingest/replay`).
 > 4. **Two sweeps unbuilt** — auth-hold expiry (the first data-*mutation* sweep) and
->    paycheck-*short* (band-based, at ingestion) — and bill matching still lacks F13's
->    sign/kind pool filters + one-bill-per-transaction.
+>    paycheck-*short* (band-based, at ingestion). **F13's bill-matching guards are built**
+>    (2026-07-09): sign/kind pool filters + one-bill-per-transaction.
 > 5. **Data visualization is now landing** (ROADMAP.md Wave 1, 2026-07-09) — the read models,
 >    the Trends screen (`Sparkline`s: net trend + income/spend tiles + category bars), the Home
 >    hero safe-to-spend `TickerNumber`, the Home month-tile sparklines, the Budgets
@@ -436,6 +436,26 @@ still unmatched) that `app/services/bill_service.py` combines with "no match yet
 `is_missing`. `POST /bills` tries an immediate match (a backfilled historical bill
 shouldn't sit "missing" forever) and `POST /bills/{id}/rematch` re-checks after a later
 import/poll brings in the settling payment.
+
+**F13's two guards (built 2026-07-09)** — both protect the same failure: a bill that looks
+quietly settled never fires its missing-bill alert, which is strictly worse than one that
+looks unpaid.
+
+1. **Direction.** The matcher compared `abs(amount)` alone, so a same-magnitude *deposit*
+   landing near the due date "paid" the bill. A payment must now be an outflow
+   (`amount_cents < 0`) of a payment-shaped `kind` (`spend` or `transfer` — a card statement
+   paid from checking is a transfer leg, CLAUDE.md §2; `income` and `refund` are inflows).
+2. **One bill per transaction.** Two same-amount bills on one rail could both point at the
+   single payment that settled only one of them. `bill_service._find_payment` excludes
+   transactions already claimed by another bill, and a **partial unique index** on
+   `bill_statements.matched_transaction_id` (migration `a1d4c7e2b905`, `WHERE … IS NOT NULL`
+   so unmatched bills may repeat) is the durable backstop for any future caller.
+
+`_find_payment` also narrows the candidate pool in SQL — account, date window, sign, kind,
+unclaimed, non-split — rather than loading every transaction on the account into Python, so a
+backfilled account with thousands of rows stays cheap (F14 discipline). Note the SQL trap it
+documents: `NOT IN (subquery)` returns nothing at all if the subquery yields a single NULL,
+so the `IS NOT NULL` filter inside it is load-bearing.
 
 **Alert latching:** `app/rules/alerts.py::should_alert` — pure, fires only on the true rising
 edge, stays silent while a condition persists, fires again if it resolves and recurs (CLAUDE.md's

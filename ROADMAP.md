@@ -19,8 +19,8 @@
 ## Where the app actually stands (2026-07-09)
 
 Live and healthy on the host (tailnet-only, SSO-only; CI → Release → Deploy green; `/version`
-matches `main`). Every 2026-07-05 code-review finding is closed except the F13/F15 remnants
-below. Email ingestion is live against the real corpus (Amex / US Bank / Discover parsers);
+matches `main`). Every 2026-07-05 code-review finding is now closed — the last two, F13
+(bill-matching guards) and F15 (parser replay), landed 2026-07-09 (#6, #7). Email ingestion is live against the real corpus (Amex / US Bank / Discover parsers);
 rules + review queue with corrections and "make this a rule", bills, budgets, cash-flow
 calendar, transaction splits, rules editor, onboarding, deep-linked alerts, and the Tier 4
 suite-parity pass (bottom bar, hero, content Home, color grammar, ~28 Roborazzi baselines)
@@ -77,8 +77,16 @@ Code items, all unblocked now:
    match auto-drops with an audit note (§2; the first data-*mutation* sweep — same clock/latch
    seams, new shape). **Paycheck-short** — band-based, detected at ingestion when a
    recurring-income match lands under band; pages with median context.
-6. **Bill-matching guards (F13).** Filter the candidate pool by sign/kind so a same-magnitude
-   deposit can't "pay" a bill; enforce one bill per matched transaction.
+6. **Bill-matching guards (F13) — DONE 2026-07-09.** The matcher compared `abs(amount)` alone,
+   so a same-magnitude *deposit* near the due date "paid" the bill and silenced its missing-bill
+   alert — strictly worse than a bill that looks unpaid. Now a payment must be an outflow of a
+   payment-shaped kind (`spend`/`transfer`; a card statement paid from checking is a transfer
+   leg). One bill per transaction is enforced twice: `bill_service._find_payment` excludes
+   already-claimed transactions, and a partial unique index on
+   `bill_statements.matched_transaction_id` (migration `a1d4c7e2b905`) is the durable backstop.
+   The pool is now narrowed in SQL rather than loading the whole account into Python (F14).
+   13 pure + 9 service tests, including one that proves the index itself rejects a duplicate
+   claim. No violations existed in prod, so the index applies cleanly.
 7. **Parser replay tool (F15) — DONE 2026-07-09**, then the `bill_issued` parser.
    `app/services/replay_service.py` + `POST /ingest/replay` re-parse the `unparsed` backlog with
    today's parsers and file what now fits, through the same `evaluate_transaction` path a live poll
