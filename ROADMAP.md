@@ -293,8 +293,13 @@ Pydantic-validated, drafts never auto-commit, descriptive never advisory.
     `{headline, summary}`, best-effort — and a garbled/absent model degrades to aggregates-only;
     a test asserts the prompt carries rounded dollars, never raw cents. The ntfy digest fires a
     one-line recap once per completed month (latched), LLM headline when up, a deterministic
-    spend/net + biggest-mover line when not. **Still owed: the Home insight card** (client-side,
-    the violet AI voice). Earlier prototype notes retained below for context.
+    spend/net + biggest-mover line when not. **Home insight card DONE 2026-07-10** (client): a
+    violet `PanelCard` under "This month" showing the LLM headline+summary when present, else a
+    deterministic biggest-mover line ("Dining is running $400 over its usual"), hiding itself when
+    nothing's notable; taps through to Trends. A new `aiVoice` (Pulse Violet) channel makes "the
+    model said this" read at a glance. Home fetches with `narrative=false` so it never waits on the
+    LLM (the prose lane is the digest). Home baselines re-recorded + eyeballed, light+dark.
+    **#18 is now complete end-to-end.** Earlier prototype notes retained below for context.
     _Original description follows._ An LLM-written "what changed"
     (top category deltas vs the trailing median, new recurrences, budget verdicts) generated
     from Wave 1's read models — aggregates in, prose out, never raw rows. Surfaced as a Home
