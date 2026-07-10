@@ -14,11 +14,69 @@ from app.config import settings
 from app.models.account import Account
 from app.models.bill_statement import BillStatement
 from app.models.rule import Rule
+from app.rules.bands import median_cents
 from app.rules.cashflow import BillInput, classify_bills, next_paycheck_date
+from app.rules.merchant_match import matches
+from app.rules.recurrence import InvalidCadence, expected_next_date
 from app.schemas.cashflow import CashflowCalendarOut, UpcomingBillOut
+from app.services.rule_service import observation_history
 from app.time_util import owner_local_date
 
 CALENDAR_PAST_WINDOW_DAYS = 30
+# How far ahead a recurring-bill rule projects its next occurrence (#24). A month-plus covers the
+# gap to the next statement email without projecting far into speculative territory.
+CALENDAR_PROJECT_HORIZON_DAYS = 45
+
+
+async def _projected_bills(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    today: datetime.date,
+    concrete: list[BillInput],
+) -> list[BillInput]:
+    """Project each enabled recurring-bill rule's next occurrence into the upcoming window (#24),
+    so the calendar doesn't go blank between "statement ready" emails. A projection is dropped when
+    a concrete unmatched statement already covers that biller in the window (the real bill wins),
+    so the two never double-count. The projected amount is the rule's observation-history median."""
+    horizon = today + datetime.timedelta(days=CALENDAR_PROJECT_HORIZON_DAYS)
+    rule_rows = await db.execute(
+        select(Rule, Account.name)
+        .join(Account, Rule.account_id == Account.id)
+        .where(
+            Rule.user_id == user_id,
+            Rule.type == "recurring_bill",
+            Rule.enabled.is_(True),
+            Rule.last_matched_at.is_not(None),
+        )
+    )
+    projected: list[BillInput] = []
+    for rule, account_name in rule_rows.all():
+        try:
+            expected = expected_next_date(rule.last_matched_at.date(), rule.cadence or {})
+        except InvalidCadence:
+            continue
+        if not (today <= expected <= horizon):
+            continue
+        # Skip if a concrete statement already stands in for this biller near the projected date.
+        if any(
+            matches(rule.matcher, c.biller.upper()) or matches(c.biller.upper(), rule.matcher)
+            for c in concrete
+        ):
+            continue
+        history = await observation_history(db, rule.account_id, rule.matcher)
+        amounts = [abs(t.amount) for t in history if t.kind in ("spend", "transfer")]
+        if not amounts:
+            continue
+        projected.append(
+            BillInput(
+                biller=rule.matcher,
+                amount_due_cents=int(round(median_cents(amounts))),
+                due_date=expected,
+                account_name=account_name,
+                is_projected=True,
+            )
+        )
+    return projected
 
 
 async def get_cashflow_calendar(
@@ -57,6 +115,7 @@ async def get_cashflow_calendar(
         for bill, name in bill_rows.all()
     ]
 
+    bill_inputs += await _projected_bills(db, user_id, today, bill_inputs)
     classified = classify_bills(bill_inputs, paycheck, today)
     total_before = sum(u.amount_due_cents for u in classified if u.before_next_paycheck)
     return CashflowCalendarOut(

@@ -78,3 +78,97 @@ async def test_cashflow_endpoint_lists_unmatched_bills_sorted(auth_client):
     assert body["bills"][0]["is_overdue"] is True
     assert all(b["before_next_paycheck"] is False for b in body["bills"])  # no paycheck to beat
     assert body["total_due_before_paycheck_cents"] == 0
+
+
+# --- projected recurring bills (#24) ------------------------------------------------------
+
+import uuid  # noqa: E402
+
+from app.database import AsyncSessionLocal  # noqa: E402
+from app.models.account import Account  # noqa: E402
+from app.models.rule import Rule  # noqa: E402
+from app.models.transaction import Transaction  # noqa: E402
+
+
+def test_classify_carries_the_projected_flag():
+    today = datetime.date(2026, 7, 1)
+    bills = [BillInput("XCEL", 4500, datetime.date(2026, 7, 15), "Chk", is_projected=True)]
+    out = classify_bills(bills, None, today)
+    assert out[0].is_projected is True
+
+
+async def _account_id(auth_client) -> str:
+    return (
+        await auth_client.post(
+            "/accounts", json={"name": "Checking", "institution": "US Bank", "type": "depository"}
+        )
+    ).json()["id"]
+
+
+async def _recurring_bill_rule(account_id: str, matcher: str, last_matched: datetime.date):
+    async with AsyncSessionLocal() as db:
+        acct = await db.get(Account, uuid.UUID(account_id))
+        # A few observations so the projected amount has a median.
+        for d, amt in ((30, -8000), (60, -8000), (90, -8200)):
+            db.add(
+                Transaction(
+                    account_id=acct.id,
+                    amount=amt,
+                    date=last_matched - datetime.timedelta(days=d),
+                    status="posted",
+                    kind="spend",
+                    source="csv",
+                    merchant_raw=matcher,
+                    merchant_norm=matcher,
+                )
+            )
+        db.add(
+            Rule(
+                user_id=acct.user_id,
+                type="recurring_bill",
+                account_id=acct.id,
+                matcher=matcher,
+                cadence={"kind": "monthly"},
+                last_matched_at=datetime.datetime.combine(
+                    last_matched, datetime.time(), datetime.timezone.utc
+                ),
+                enabled=True,
+            )
+        )
+        await db.commit()
+
+
+async def test_a_recurring_bill_rule_projects_into_the_calendar(auth_client):
+    account_id = await _account_id(auth_client)
+    # Last paid ~3 weeks ago → monthly projection lands ~a week out, inside the horizon.
+    await _recurring_bill_rule(
+        account_id, "FRONTIER", datetime.date.today() - datetime.timedelta(days=22)
+    )
+
+    body = (await auth_client.get("/cashflow")).json()
+    projected = [b for b in body["bills"] if b["is_projected"]]
+    assert any(b["biller"] == "FRONTIER" for b in projected)
+    frontier = next(b for b in projected if b["biller"] == "FRONTIER")
+    assert frontier["amount_due_cents"] == 8000  # median of 8000/8000/8200
+
+
+async def test_a_concrete_statement_suppresses_its_projection(auth_client):
+    account_id = await _account_id(auth_client)
+    await _recurring_bill_rule(
+        account_id, "FRONTIER", datetime.date.today() - datetime.timedelta(days=22)
+    )
+    # A concrete unmatched statement for the same biller in the window — the real bill wins.
+    future = (datetime.date.today() + datetime.timedelta(days=8)).isoformat()
+    await auth_client.post(
+        "/bills",
+        json={
+            "biller": "FRONTIER",
+            "account_id": account_id,
+            "amount_due": 8100,
+            "due_date": future,
+        },
+    )
+
+    body = (await auth_client.get("/cashflow")).json()
+    frontier = [b for b in body["bills"] if b["biller"] == "FRONTIER"]
+    assert len(frontier) == 1 and frontier[0]["is_projected"] is False  # only the concrete one

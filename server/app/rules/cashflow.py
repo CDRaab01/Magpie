@@ -18,6 +18,9 @@ class BillInput:
     amount_due_cents: int
     due_date: datetime.date
     account_name: str
+    # True for a bill *projected* from a recurring-bill rule rather than a concrete statement
+    # (#24): the calendar fills the gap between "statement ready" emails so it never goes blank.
+    is_projected: bool = False
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,7 @@ class UpcomingBill:
     account_name: str
     is_overdue: bool
     before_next_paycheck: bool
+    is_projected: bool = False
 
 
 def next_paycheck_date(
@@ -62,6 +66,7 @@ def classify_bills(
                 account_name=bill.account_name,
                 is_overdue=bill.due_date < today,
                 before_next_paycheck=next_paycheck is not None and bill.due_date <= next_paycheck,
+                is_projected=bill.is_projected,
             )
         )
     return result

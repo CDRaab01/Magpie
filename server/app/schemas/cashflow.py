@@ -10,6 +10,8 @@ class UpcomingBillOut(BaseModel):
     account_name: str
     is_overdue: bool
     before_next_paycheck: bool
+    # A projected recurrence (from a recurring-bill rule), not a concrete statement yet (#24).
+    is_projected: bool = False
 
 
 class CashflowCalendarOut(BaseModel):
