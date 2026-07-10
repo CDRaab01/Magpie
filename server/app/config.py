@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     # hasn't in this many days may have had its alerts silently turned off — page once (F: silent
     # alert-decay is the failure mode this catches). Generous, since a rarely-used card is normal.
     account_freshness_days: int = 14
+    # CLAUDE.md §2: a pending auth hold with no posted match after this many days auto-drops with
+    # an audit note. The gas-station $1 pre-auth is the canonical case.
+    auth_hold_days: int = 7
 
     # AI category drafts (CLAUDE.md §6/Phase 7). Local LM Studio only — never a hosted model,
     # this data never leaves the host. Unset ⇒ the AI stage never runs (rule evaluation just

@@ -6,8 +6,16 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
-# "pending" | "posted" (CLAUDE.md §4/§10 — auth holds that never post get expired by a sweep).
-TRANSACTION_STATUSES = ("pending", "posted")
+# "pending" | "posted" | "expired" (CLAUDE.md §2/§4). An `expired` row is an auth hold that never
+# posted — the gas-station $1 pre-auth being the canonical case. It is *kept*, not deleted, so the
+# drop is auditable (`rule_note` carries the reason and the ingest_event still holds the raw
+# email), but it must never count as money again.
+TRANSACTION_STATUSES = ("pending", "posted", "expired")
+
+# The statuses that count toward balances, rollups and budget actuals. Every money query filters
+# on this rather than on `!= "expired"`, so adding a future non-countable status can't silently
+# leak into the ledger by omission — the one place to change is here.
+COUNTABLE_STATUSES = ("pending", "posted")
 # "spend" | "income" | "transfer" | "refund" (CLAUDE.md §2 — the accounting-semantics core:
 # card payments are "transfer" pairs that net to zero via transfer_group; refunds are negative
 # spend in the original category, never "income").

@@ -22,7 +22,7 @@ from app.ledger.rollups import (
 )
 from app.models.account import Account
 from app.models.category import Category
-from app.models.transaction import Transaction
+from app.models.transaction import COUNTABLE_STATUSES, Transaction
 from app.services.account_service import compute_account_balance
 from app.services.cashflow_service import get_cashflow_calendar
 from app.time_util import owner_local_date
@@ -65,6 +65,7 @@ async def spending_history(
             # Split children are internal allocations; the parent carries the full amount for
             # the household rollup (#26 — same rule as the Home month panel).
             Transaction.split_parent_id.is_(None),
+            Transaction.status.in_(COUNTABLE_STATUSES),
             Transaction.date >= start,
         )
     )
@@ -89,6 +90,7 @@ async def category_summary(
             Transaction.date <= end,
             # Split parents excluded; their parts carry the category breakdown (#26).
             Transaction.is_split.is_(False),
+            Transaction.status.in_(COUNTABLE_STATUSES),
         )
     )
     totals = rollup_by_category(
@@ -136,6 +138,7 @@ async def top_merchants(
             Transaction.date >= start,
             Transaction.date <= end,
             Transaction.is_split.is_(False),  # parts carry the category; parents are excluded
+            Transaction.status.in_(COUNTABLE_STATUSES),
             Transaction.kind.in_(("spend", "refund")),  # spend view: income/transfers excluded
             merchant.is_not(None),
         )

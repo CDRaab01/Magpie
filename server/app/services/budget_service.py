@@ -16,7 +16,7 @@ from app.ledger.rollups import TransactionForCategoryRollup, rollup_by_category
 from app.models.account import Account
 from app.models.budget import Budget
 from app.models.category import Category
-from app.models.transaction import Transaction
+from app.models.transaction import COUNTABLE_STATUSES, Transaction
 from app.schemas.budget import BudgetCreate
 
 
@@ -68,6 +68,7 @@ async def actual_spend_by_category(
             # A split parent is excluded here — its child parts carry the category breakdown, so
             # the split's spend lands in the right categories and isn't double-counted (#26).
             Transaction.is_split.is_(False),
+            Transaction.status.in_(COUNTABLE_STATUSES),  # an expired auth hold is not spend
         )
     )
     rollup_input = (

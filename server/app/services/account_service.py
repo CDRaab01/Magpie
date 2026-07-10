@@ -12,7 +12,7 @@ from app.ledger.balances import (
 )
 from app.models.account import Account
 from app.models.statement_checkpoint import StatementCheckpoint
-from app.models.transaction import Transaction
+from app.models.transaction import COUNTABLE_STATUSES, Transaction
 from app.schemas.account import AccountCreate, AccountUpdate
 
 
@@ -91,6 +91,8 @@ async def _dated_amounts(db: AsyncSession, account_id: uuid.UUID) -> list[DatedA
             # A split parent carries the full amount; its child parts are excluded so the money
             # isn't double-counted in the balance (#26).
             Transaction.split_parent_id.is_(None),
+            # An expired auth hold never became money; it must not move the balance.
+            Transaction.status.in_(COUNTABLE_STATUSES),
         )
     )
     return [DatedAmount(date=d, amount=a) for d, a in result.all()]

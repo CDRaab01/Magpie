@@ -2,8 +2,8 @@
 unparsed-email backlog, **missing-bill** (the 'a simulated missing bill pages the phone' exit,
 CLAUDE.md Phase 6), **paycheck-late**, and **per-account freshness**. Latch state is persisted
 (F11) via `alert_latch_service`, so a redeploy never re-pages an already-open condition. Not yet
-built (same latched pattern): paycheck-*short* (band-based, better at ingestion) and auth-hold
-expiry (a data-mutation sweep).
+built (same latched pattern): paycheck-*short* (band-based, better at ingestion). **Auth-hold
+expiry is built** (2026-07-10) — the first sweep that mutates data rather than only alerting.
 """
 
 import asyncio
@@ -18,8 +18,10 @@ from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.account import Account
 from app.models.bill_statement import BillStatement
+from app.imports.pending_match import PendingCandidate, find_posted_duplicate
 from app.models.ingest_event import IngestEvent
 from app.models.rule import Rule
+from app.models.transaction import Transaction
 from app.models.user import User
 from app.rules.recurrence import InvalidCadence, expected_next_date
 from app.services.alert_latch_service import latched_should_alert
@@ -152,6 +154,90 @@ async def run_account_freshness_sweep(
             )
 
 
+async def run_auth_hold_expiry_sweep(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    now: datetime.datetime,
+    hold_days: int | None = None,
+) -> int:
+    """Expire pending auth holds that never posted (CLAUDE.md §2). Returns how many were dropped.
+
+    The first sweep that *mutates* data rather than only alerting, so it is deliberately timid:
+
+    * The row is **kept**, not deleted — `status="expired"` plus an audit note in `rule_note`.
+      The raw email survives in `ingest_events` either way, so the drop is fully reconstructible.
+      Expired rows are excluded from every money query via `COUNTABLE_STATUSES`.
+    * A hold with a matching **posted** transaction is never expired: it was reconciled, and the
+      "same swipe" question is answered by `find_posted_duplicate` — the same tolerance the CSV
+      importer and the parser replay use, so all three agree on what a match is.
+    * A **human-confirmed** row is never touched. If the owner said the pending charge is real,
+      a sweep does not overrule them (the F3 principle, applied to the clock).
+    * A row already paired into a `transfer_group` is never touched: its partner would be left
+      dangling half a group.
+    * **Card accounts only.** An auth hold is a card concept. A depository "pending" is a real,
+      completed debit (US Bank's own alert says "your transaction is complete") that is pending
+      only because the CSV has not imported it yet — expiring those would silently delete real
+      ACH activity every time the owner went a week without a reconciliation import.
+
+    No ntfy alert: an expiring $1 pre-auth is routine, and paging for routine is how alerting
+    dies. The audit note is the record.
+    """
+    hold_days = settings.auth_hold_days if hold_days is None else hold_days
+    cutoff = owner_local_date(now, settings.owner_timezone) - datetime.timedelta(days=hold_days)
+
+    stale = (
+        (
+            await db.execute(
+                select(Transaction)
+                .join(Account, Transaction.account_id == Account.id)
+                .where(
+                    Account.user_id == user_id,
+                    Account.type == "card",  # an auth hold is a card concept, never a debit
+                    Transaction.status == "pending",
+                    Transaction.date < cutoff,
+                    Transaction.review_state != "confirmed",
+                    Transaction.transfer_group.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    dropped = 0
+    for txn in stale:
+        window_lo = txn.date - datetime.timedelta(days=3)
+        window_hi = txn.date + datetime.timedelta(days=hold_days)
+        posted = (
+            (
+                await db.execute(
+                    select(Transaction.id, Transaction.amount, Transaction.date).where(
+                        Transaction.account_id == txn.account_id,
+                        Transaction.status == "posted",
+                        Transaction.split_parent_id.is_(None),
+                        Transaction.date >= window_lo,
+                        Transaction.date <= window_hi,
+                    )
+                )
+            )
+            .tuples()
+            .all()
+        )
+        candidates = [PendingCandidate(str(i), a, d) for i, a, d in posted]
+        if find_posted_duplicate(txn.amount, txn.date, candidates, window_days=hold_days):
+            continue  # it posted after all; reconciliation owns this row, not the clock
+
+        txn.status = "expired"
+        txn.review_state = "auto"
+        txn.rule_note = f"auth hold expired: no posted match within {hold_days} days"
+        dropped += 1
+
+    if dropped:
+        logger.info("Expired %d auth hold(s) for user %s", dropped, user_id)
+    return dropped
+
+
 async def _resolve_sweep_user_id() -> uuid.UUID | None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(User).where(User.email == settings.ingest_user_email))
@@ -179,7 +265,8 @@ async def sweep_loop() -> None:
                     await run_missing_bill_sweep(db, user_id, publisher, now=now)
                     await run_paycheck_late_sweep(db, user_id, publisher, now=now)
                     await run_account_freshness_sweep(db, user_id, publisher, now=now)
-                    await db.commit()  # persist the alert latches (F11)
+                    await run_auth_hold_expiry_sweep(db, user_id, now=now)
+                    await db.commit()  # persist the alert latches (F11) + any expired holds
         except Exception:
             logger.exception("Sweep failed")
         await asyncio.sleep(settings.sweep_interval_minutes * 60)
