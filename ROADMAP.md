@@ -93,10 +93,19 @@ else in this wave can run in parallel with it.
 
 Code items, all unblocked now:
 
-5. **The two remaining sweeps.** **Auth-hold expiry** — a pending row >7 days with no posted
-   match auto-drops with an audit note (§2; the first data-*mutation* sweep — same clock/latch
-   seams, new shape). **Paycheck-short** — band-based, detected at ingestion when a
-   recurring-income match lands under band; pages with median context.
+5. **The two remaining sweeps.** **Auth-hold expiry — DONE 2026-07-10** (`run_auth_hold_expiry_
+   sweep`, wired into `sweep_loop`): a pending **card** auth >7 days with no posted match drops
+   with an audit note. The row is *kept* (`status="expired"` + `rule_note`), never deleted, and
+   `COUNTABLE_STATUSES` is now the single filter balances/rollups/budgets/summaries share, so an
+   expired hold stops being money in exactly one place. It refuses to touch a human-confirmed row,
+   a paired transfer leg, or a hold with a posted match (`find_posted_duplicate` — the same
+   tolerance the importer and replay use, so all three agree, settled tips included). **Scoped to
+   card accounts after dry-running against the live ledger:** a depository "pending" is a real
+   completed ACH debit awaiting CSV import (a $193.47 checking row sat exactly in that trap), and
+   expiring those would silently delete real activity whenever a reconciliation import slipped a
+   week. No ntfy alert — an expiring $1 pre-auth is routine, and paging for routine is how alerting
+   dies. 12 time-travel tests. **Still owed: paycheck-short** — band-based, detected at ingestion
+   when a recurring-income match lands under band; pages with median context.
 6. **Bill-matching guards (F13) — DONE 2026-07-09.** The matcher compared `abs(amount)` alone,
    so a same-magnitude *deposit* near the due date "paid" the bill and silenced its missing-bill
    alert — strictly worse than a bill that looks unpaid. Now a payment must be an outflow of a
@@ -313,8 +322,36 @@ Pydantic-validated, drafts never auto-commit, descriptive never advisory.
 24. **Cash-flow calendar, projected:** recurring-*bill* rules project into the upcoming set
     (today the calendar shows concrete `bill_statements` only, so it goes blank between
     statement emails) — deferred from V1 Tier 3 #23.
-25. **Rule → history application:** creating or editing a merchant rule offers "apply to N
-    existing matches" — the replay tool's UI-facing cousin and F15's second customer.
+25. **Rule → history application — DONE 2026-07-10** (server side). `POST /rules/from-suggestions`
+    promotes each merchant's AI draft into a deterministic `merchant_category` rule and files its
+    whole history; `POST /rules/{id}/apply-to-history` does it for one existing rule. Both default
+    to `dry_run=true`. **Calling the endpoint is the human confirmation §6 requires** — afterwards
+    the model is out of the loop for that merchant and the rule explains itself ("matched rule:
+    THERESA"). Applied to prod at `min_transactions=2`: **373 rules filed 3,192 transactions, and
+    the review queue fell 4,368 → 1,176.** Guards: a rule never overrules a human (a merchant with
+    *any* confirmed row gets no rule — a bug the prod dry run caught, where GOOGLE's 5 confirmed
+    rows carried no AI draft and were invisible to the per-group check); a merchant whose rows
+    disagree on the draft is skipped, never guessed; income rows never inherit a spend category;
+    re-running is idempotent. Matching reuses `merchant_match.matches`, never a SQL `LIKE`, so a
+    rule cannot mean one thing at ingest and another applied to history.
+    **Still owed:** the Android affordance (this is server-only), and three rules the model got
+    wrong that want an owner's eye — `MONTHLY MAINTENANCE FEE → Housing` (a bank fee),
+    `WHATNOT INC → Other` (408 rows, a shopping marketplace), `PAYPAL → Other`.
+25a. **`merchant_norm` was stale everywhere, and Zelle payees were unmatchable — fixed
+    2026-07-10.** Two bugs. (a) The backfill imported 4,712 rows *before* the bank-prefix
+    stripping was deployed, so every stored `merchant_norm` was computed by an older normalizer
+    (`WEB AUTHORIZED PMT VENMO` never became `VENMO`). (b) Zelle carries a per-transaction
+    confirmation reference inside the merchant string, so each payment normalized to its own
+    merchant — 127 "merchants" for 27 real counterparties, and **no rule could ever match a Zelle
+    payee**. The naive fix (strip any long trailing token) is not idempotent and eats surnames
+    (`JOSE HANDYMAN → JOSE`); the reference is instead recognized as long *and* machine-shaped
+    (bank-code prefix, or contains a digit), with a ≥2-token guard. Re-normalizing 1,186 rows
+    collapsed 1,365 → 1,250 distinct merchants and surfaced real recurring payees (THERESA ×31 =
+    $15,156; JOSE HANDYMAN ×6). Verified idempotent on live data: a second pass changed 0 rows.
+    **The pattern, now three times over** (parser `parse_version`, the pre-deploy CSV import, and
+    now `merchant_norm`): the code was right and the *data* was computed by yesterday's code. A
+    `POST /admin/renormalize` — same shape as `/ingest/replay`, dry-run by default — would retire
+    the scratch script this needed.
 26. **Monthly export/report:** `GET /export/transactions.csv?month=` + a share action. A
     trust feature at near-zero cost: the escape hatch that keeps the data the owner's.
 27. **Cross-app wave** (per `Dragonfly/CROSS-APP.md`: flag-gated, degrade-to-absence,
