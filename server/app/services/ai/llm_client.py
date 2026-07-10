@@ -13,6 +13,8 @@ import httpx
 class LlmClient(Protocol):
     async def complete(self, prompt: str) -> str: ...
 
+    async def chat(self, messages: list[dict]) -> str: ...
+
 
 class FakeLlmClient:
     """Test double — returns a scripted response regardless of prompt content."""
@@ -20,9 +22,14 @@ class FakeLlmClient:
     def __init__(self, response: str):
         self.response = response
         self.prompts_seen: list[str] = []
+        self.messages_seen: list[list[dict]] = []
 
     async def complete(self, prompt: str) -> str:
         self.prompts_seen.append(prompt)
+        return self.response
+
+    async def chat(self, messages: list[dict]) -> str:
+        self.messages_seen.append(messages)
         return self.response
 
 
@@ -33,14 +40,13 @@ class LmStudioClient:
         self._timeout = timeout_seconds
 
     async def complete(self, prompt: str) -> str:
+        return await self.chat([{"role": "user", "content": prompt}])
+
+    async def chat(self, messages: list[dict]) -> str:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.post(
                 self._url,
-                json={
-                    "model": self._model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0,
-                },
+                json={"model": self._model, "messages": messages, "temperature": 0},
             )
             response.raise_for_status()
             data = response.json()
