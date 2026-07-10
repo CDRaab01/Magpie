@@ -26,6 +26,7 @@ import com.magpie.data.remote.SuiteLoginRequest
 import com.magpie.data.remote.TokenResponse
 import com.magpie.data.remote.SplitRequest
 import com.magpie.data.remote.SplitResult
+import com.magpie.data.remote.MonthlyInsightOut
 import com.magpie.data.remote.TransactionCreate
 import com.magpie.data.remote.TransactionOut
 import com.magpie.data.remote.VersionOut
@@ -159,6 +160,9 @@ private class FakeApi : ApiService {
     ): MerchantSummaryOut = error("unused")
 
     override suspend fun getSafeToSpend(): SafeToSpendOut = error("unused")
+
+    override suspend fun getMonthlyInsight(month: String, narrative: Boolean): MonthlyInsightOut =
+        error("unused")
 
     override suspend fun getVersion(): VersionOut = error("unused")
 }

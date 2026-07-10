@@ -40,6 +40,8 @@ import com.magpie.ui.transactions.TxnFilter
 import com.magpie.data.remote.CategorySummaryItem
 import com.magpie.data.remote.MerchantSummaryItem
 import com.magpie.data.remote.MonthSummaryOut
+import com.magpie.data.remote.MonthlyInsightOut
+import com.magpie.data.remote.CategoryChangeOut
 import com.magpie.ui.trends.TrendsContent
 import com.magpie.ui.trends.TrendsUiState
 import com.magpie.ui.merchant.MerchantDetailContent
@@ -424,6 +426,20 @@ private fun HomeReadyScene() {
                 MonthSummaryOut(2026, 5, 450000, -390000, 60000),
                 MonthSummaryOut(2026, 6, 470000, -402000, 68000),
                 MonthSummaryOut(2026, 7, 450000, -132000, 318000),
+            ),
+            insight = MonthlyInsightOut(
+                month = "2026-07-01",
+                incomeCents = 450000,
+                spendCents = 132000,
+                netCents = 318000,
+                categoryChanges = listOf(
+                    CategoryChangeOut("Dining", thisMonthCents = 70000,
+                        trailingMedianCents = 30000, deltaCents = 40000),
+                ),
+                budgetVerdicts = emptyList(),
+                narrativeHeadline = "Dining up this month",
+                narrativeSummary = "Dining ran higher than its usual $300 — about $400 over.",
+                narrativeSource = "llm",
             ),
         ),
         onAddTransaction = {},

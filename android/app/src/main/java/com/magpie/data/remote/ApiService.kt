@@ -135,6 +135,13 @@ interface ApiService {
     @GET("summary/safe-to-spend")
     suspend fun getSafeToSpend(): SafeToSpendOut
 
+    @GET("insights/monthly")
+    suspend fun getMonthlyInsight(
+        @Query("month") month: String,
+        // Home uses the fast, deterministic aggregate — no LLM call blocking the screen.
+        @Query("narrative") narrative: Boolean = false,
+    ): MonthlyInsightOut
+
     // --- Ops ---
     @GET("version")
     suspend fun getVersion(): VersionOut

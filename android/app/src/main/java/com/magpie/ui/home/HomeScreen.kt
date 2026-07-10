@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.magpie.data.remote.MonthlyInsightOut
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.ui.util.RefreshOnResume
 import com.magpie.ui.navigation.Routes
@@ -117,6 +118,7 @@ internal fun HomeContent(
                 )
                 is HomeUiState.Ready -> {
                     MonthPanel(state.summary, state.history)
+                    InsightCard(state.insight, onClick = onViewTrends)
                     Spacer(Modifier.height(12.dp))
                     // Content, not links (#29): the review queue and the next bill are live cards
                     // showing their own data; only the two non-tab utilities (Accounts, Rules) stay
@@ -297,6 +299,47 @@ private fun AutoFitValue(
             }
         },
     )
+}
+
+/**
+ * The monthly-insight card (#18) in the AI voice (violet), sitting under the "This month" panel.
+ * Shows the LLM "what changed" headline when one is present, otherwise a deterministic one-liner
+ * about the month's biggest category move — so the card is useful even when the model is off.
+ * It hides itself entirely when there is neither prose nor a notable change, rather than showing a
+ * vacuous AI card. Tapping opens Trends, where the full breakdown lives.
+ */
+@Composable
+private fun InsightCard(insight: MonthlyInsightOut?, onClick: () -> Unit) {
+    val line = insightLine(insight) ?: return
+    val channel = MagpieTheme.colors.aiVoice.base
+    Spacer(Modifier.height(12.dp))
+    PanelCard(channel = channel, onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Column {
+            SectionHeader(label = "Insight", channel = channel)
+            Spacer(Modifier.height(8.dp))
+            insight?.narrativeHeadline?.takeIf { insight.narrativeSource == "llm" }?.let { head ->
+                Text(head, style = MaterialTheme.typography.titleSmall, color = channel)
+                Spacer(Modifier.height(2.dp))
+            }
+            Text(line, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+/** The card's body text: the LLM summary when present, else a deterministic biggest-mover line, or
+ *  null when there's nothing worth surfacing (so [InsightCard] can hide). Pure, so it's unit- and
+ *  screenshot-testable without a model. */
+internal fun insightLine(insight: MonthlyInsightOut?): String? {
+    if (insight == null) return null
+    if (insight.narrativeSource == "llm" && !insight.narrativeSummary.isNullOrBlank()) {
+        return insight.narrativeSummary
+    }
+    val mover = insight.categoryChanges.firstOrNull() ?: return null
+    // Only surface a change that's both materially large and a real swing from the usual.
+    if (kotlin.math.abs(mover.deltaCents) < 5_000) return null
+    val direction = if (mover.deltaCents > 0) "over" else "under"
+    val amount = formatCentsCompact(kotlin.math.abs(mover.deltaCents))
+    return "${mover.category} is running $amount $direction its usual this month."
 }
 
 /** Home's review-queue content card (#29) — the count as a live datum, tappable to the queue. */

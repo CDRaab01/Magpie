@@ -216,6 +216,36 @@ data class SafeToSpendOut(
     @SerialName("next_paycheck_date") val nextPaycheckDate: String?,
 )
 
+// --- Monthly insight (#18) ---
+@Serializable
+data class CategoryChangeOut(
+    val category: String,
+    @SerialName("this_month_cents") val thisMonthCents: Long,
+    @SerialName("trailing_median_cents") val trailingMedianCents: Long,
+    @SerialName("delta_cents") val deltaCents: Long, // this month − usual; positive = spent more
+)
+
+@Serializable
+data class BudgetVerdictOut(
+    val category: String,
+    @SerialName("actual_cents") val actualCents: Long,
+    @SerialName("budget_cents") val budgetCents: Long,
+    @SerialName("over_cents") val overCents: Long,
+)
+
+@Serializable
+data class MonthlyInsightOut(
+    val month: String,
+    @SerialName("income_cents") val incomeCents: Long,
+    @SerialName("spend_cents") val spendCents: Long,
+    @SerialName("net_cents") val netCents: Long,
+    @SerialName("category_changes") val categoryChanges: List<CategoryChangeOut>,
+    @SerialName("budget_verdicts") val budgetVerdicts: List<BudgetVerdictOut>,
+    @SerialName("narrative_headline") val narrativeHeadline: String? = null,
+    @SerialName("narrative_summary") val narrativeSummary: String? = null,
+    @SerialName("narrative_source") val narrativeSource: String = "unavailable",
+)
+
 @Serializable
 data class RuleCadence(
     val kind: String? = null,

@@ -20,10 +20,12 @@ import design.pulse.ui.theme.LocalSpacing
 import design.pulse.ui.theme.darkChannel
 import design.pulse.ui.theme.darkGreenChannel
 import design.pulse.ui.theme.darkAmberChannel
+import design.pulse.ui.theme.darkVioletChannel
 import design.pulse.ui.theme.darkPulseStructure
 import design.pulse.ui.theme.lightChannel
 import design.pulse.ui.theme.lightGreenChannel
 import design.pulse.ui.theme.lightAmberChannel
+import design.pulse.ui.theme.lightVioletChannel
 import design.pulse.ui.theme.lightPulseStructure
 
 /**
@@ -45,6 +47,10 @@ data class MagpieColors(
     val underBudget: PulseChannel,
     val needsReview: PulseChannel,
     val overBudget: PulseChannel,
+    /** violet — the AI voice: category drafts and the monthly insight, visually distinct from
+     * the deterministic teal/green/amber channels so "the model suggested this" reads at a glance
+     * (ARCHITECTURE.md §"Android design"; #31's violet-for-AI tail). */
+    val aiVoice: PulseChannel,
     val hairline: Color,
     val hairlineStrong: Color,
     val panel: Color,
@@ -64,6 +70,7 @@ private fun magpieColors(dark: Boolean): MagpieColors {
         underBudget = if (dark) darkGreenChannel() else lightGreenChannel(),
         needsReview = if (dark) darkAmberChannel() else lightAmberChannel(),
         overBudget = if (dark) darkRedChannel() else lightRedChannel(),
+        aiVoice = if (dark) darkVioletChannel() else lightVioletChannel(),
         hairline = structure.hairline,
         hairlineStrong = structure.hairlineStrong,
         panel = structure.panel,

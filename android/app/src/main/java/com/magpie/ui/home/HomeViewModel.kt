@@ -6,6 +6,7 @@ import com.magpie.data.remote.AccountCreate
 import com.magpie.data.remote.AccountOut
 import com.magpie.data.remote.ApiService
 import com.magpie.data.remote.MonthSummaryOut
+import com.magpie.data.remote.MonthlyInsightOut
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.data.remote.UpcomingBillOut
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -42,6 +43,10 @@ sealed interface HomeUiState {
         // 6-month income/spend/net series for the month-tile sparklines (#13). Best-effort; empty
         // just means the tiles render without their trend line (the value still shows).
         val history: List<MonthSummaryOut> = emptyList(),
+        // The month's "what changed" insight (#18). Fetched deterministic-only (no LLM) so Home
+        // never waits on a model call; null on any hiccup, and the card hides itself when there's
+        // nothing notable to say.
+        val insight: MonthlyInsightOut? = null,
     ) : HomeUiState
     data class Error(val message: String) : HomeUiState
 }
@@ -80,8 +85,13 @@ class HomeViewModel @Inject constructor(
                     runCatching { api.getSafeToSpend().safeToSpendCents }.getOrNull()
                 val history =
                     runCatching { api.getHistory(6).months }.getOrDefault(emptyList())
+                val insight =
+                    runCatching {
+                        api.getMonthlyInsight(month = "%04d-%02d-01".format(now.year, now.monthValue))
+                    }.getOrNull()
                 _state.value = HomeUiState.Ready(
-                    summary, accounts, greetingForNow(), reviewCount, nextBill, safeToSpend, history,
+                    summary, accounts, greetingForNow(), reviewCount, nextBill, safeToSpend,
+                    history, insight,
                 )
             } catch (e: Exception) {
                 _state.value = HomeUiState.Error(e.message ?: "Couldn't reach Magpie")
