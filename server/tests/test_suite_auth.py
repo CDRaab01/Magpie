@@ -1,3 +1,5 @@
+import uuid
+
 from sqlalchemy import func, select
 
 from app.database import AsyncSessionLocal
@@ -19,7 +21,11 @@ async def test_disabled_by_default_returns_404(client):
 
 
 async def test_new_email_creates_and_links(client, suite_enabled, make_suite_token):
-    email = "brandnew@example.com"
+    # A fresh email per run: this test's whole premise is "an address the DB has never seen",
+    # and the local throwaway DB outlives a pytest run (only CI gets a virgin container). A
+    # hardcoded address made the suite pass once and fail every time after — the same
+    # non-idempotent-test-data trap `test_ingest_service.py` dodges with unique Message-IDs.
+    email = f"brandnew-{uuid.uuid4().hex[:8]}@example.com"
     assert await _count_users(email) == 0
     r = await client.post("/auth/suite", json={"suite_token": make_suite_token(email)})
     assert r.status_code == 200, r.text

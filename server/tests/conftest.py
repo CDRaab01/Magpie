@@ -2,10 +2,46 @@ import asyncio
 import os
 import time
 import uuid
+from pathlib import Path
 
 # Must be set before any `app.*` import: the engine is built at app.database import time.
 os.environ.setdefault("DB_NULLPOOL", "true")
 os.environ.setdefault("SECRET_KEY", "ci-test-secret-key-not-for-production")
+
+
+# --- The test suite must never touch the production database -------------------------------
+#
+# `app/config.py` falls back to `server/.env` when DATABASE_URL is unset — and on the deploy
+# host that file points at the LIVE financial database (`magpie` on :5436). CI was only ever
+# safe by accident: its workflow exports `DATABASE_URL=.../magpie_test`. A bare `pytest` on the
+# host resolved to prod and wrote test users, accounts and transactions straight into real
+# money (found 2026-07-09: ~456 test users and ~400 test accounts had accumulated there).
+#
+# So the database *name* is pinned here rather than inherited: same server, same credentials,
+# a throwaway `*_test` database. CLAUDE.md §9 calls for a throwaway DB — this is what makes
+# that true instead of aspirational.
+
+
+_db_url = os.environ.get("DATABASE_URL", "")
+if not _db_url:
+    _env_file = Path(__file__).resolve().parent.parent / ".env"
+    _lines = _env_file.read_text().splitlines() if _env_file.exists() else []
+    _db_url = next(
+        (ln.split("=", 1)[1].strip() for ln in _lines if ln.strip().startswith("DATABASE_URL=")),
+        "",
+    )
+if not _db_url:
+    raise RuntimeError("No DATABASE_URL in the environment or server/.env — cannot run tests.")
+
+_base, _, _name = _db_url.rpartition("/")
+if not _name.endswith("_test"):
+    _db_url = f"{_base}/{_name}_test"
+os.environ["DATABASE_URL"] = _db_url
+
+# Tripwire: if the redirect above ever fails to hold (a URL with a query string, a future
+# refactor), stop the run rather than let create_all/commits reach real financial data.
+if not os.environ["DATABASE_URL"].rpartition("/")[2].endswith("_test"):
+    raise RuntimeError(f"Refusing to run tests against a non-test database: {_db_url!r}")
 
 import pytest
 import pytest_asyncio
