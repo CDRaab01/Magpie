@@ -104,8 +104,14 @@ Code items, all unblocked now:
    completed ACH debit awaiting CSV import (a $193.47 checking row sat exactly in that trap), and
    expiring those would silently delete real activity whenever a reconciliation import slipped a
    week. No ntfy alert — an expiring $1 pre-auth is routine, and paging for routine is how alerting
-   dies. 12 time-travel tests. **Still owed: paycheck-short** — band-based, detected at ingestion
-   when a recurring-income match lands under band; pages with median context.
+   dies. 12 time-travel tests. **Paycheck-short — DONE 2026-07-10** (`run_paycheck_short_sweep`):
+   pages once, with median context, when a recurring-income rule's *most recent* paycheck lands
+   below its band (arrived-but-light, vs paycheck-late's never-arrived). Built as a **sweep**, not
+   the ingestion hook the earlier note guessed at — detecting from ledger state reuses the latch +
+   publisher and, by only inspecting the latest observation per rule, can't storm the phone with
+   past short weeks during a backfill (the ingestion hook's failure mode). `band_shortfall` is
+   directional: a *high* paycheck is out of band too but is deliberately silent. **Both sweeps are
+   now built; the sweep set is complete.**
 6. **Bill-matching guards (F13) — DONE 2026-07-09.** The matcher compared `abs(amount)` alone,
    so a same-magnitude *deposit* near the due date "paid" the bill and silenced its missing-bill
    alert — strictly worse than a bill that looks unpaid. Now a payment must be an outflow of a
