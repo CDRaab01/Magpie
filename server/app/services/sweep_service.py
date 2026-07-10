@@ -239,7 +239,11 @@ async def run_large_charge_sweep(
     for txn in recent:
         if not is_large_charge(txn.amount, settings.anomaly_large_charge_cents):
             continue
-        name = txn.merchant_norm or txn.merchant_raw
+        name = (txn.merchant_norm or txn.merchant_raw or "").strip()
+        if not name:
+            # A nameless row (a US Bank "transaction is complete" alert carries no merchant) can't
+            # be a "new merchant" — there's nothing to recognise, and reconciliation owns it.
+            continue
         # First appearance = no *earlier* transaction shares this merchant. Ties on the same date
         # are broken by created_at so a same-day pair doesn't each count the other as "prior".
         earlier = await db.scalar(

@@ -81,7 +81,8 @@ class Settings(BaseSettings):
     # Deterministic thresholds; an LLM narration line is optional (#19) and never the trigger.
     # (1) A large charge at a merchant never seen before, within the recency window (older
     #     first-appearances are just the backfill, not news).
-    anomaly_large_charge_cents: int = 20000  # $200
+    anomaly_large_charge_cents: int = 50000  # $500 — the bar for a *notable* charge somewhere new;
+    # lower (e.g. $200) turns a routine grocery run at a variant-spelled merchant into a false alarm.
     anomaly_new_merchant_days: int = 7
     # (2) A category whose month-to-date spend runs well over its trailing full-month median.
     #     `factor` is the "well over" multiplier; `floor` suppresses noise on tiny categories;

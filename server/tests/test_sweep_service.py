@@ -530,7 +530,7 @@ async def test_large_charge_at_a_new_merchant_pages_once():
     user_id = await _make_user()
     account_id = await _make_account(user_id)
     await _spend_txn(
-        account_id, amount=-45000, date=datetime.date(2026, 7, 30), merchant="FANCY SOFA CO"
+        account_id, amount=-65000, date=datetime.date(2026, 7, 30), merchant="FANCY SOFA CO"
     )
 
     publisher = FakeNtfyPublisher()
@@ -546,8 +546,8 @@ async def test_a_large_charge_at_a_familiar_merchant_is_not_news():
     user_id = await _make_user()
     account_id = await _make_account(user_id)
     # Same merchant seen months earlier — a big charge there is expected, not novel.
-    await _spend_txn(account_id, amount=-30000, date=datetime.date(2026, 3, 1), merchant="COSTCO")
-    await _spend_txn(account_id, amount=-45000, date=datetime.date(2026, 7, 30), merchant="COSTCO")
+    await _spend_txn(account_id, amount=-60000, date=datetime.date(2026, 3, 1), merchant="COSTCO")
+    await _spend_txn(account_id, amount=-65000, date=datetime.date(2026, 7, 30), merchant="COSTCO")
 
     publisher = FakeNtfyPublisher()
     await _sweep_large_charge(user_id, publisher)
@@ -568,7 +568,7 @@ async def test_an_old_large_new_merchant_charge_is_outside_the_recency_window():
     """The backfill guard: a big first-seen charge from months ago must not page today."""
     user_id = await _make_user()
     account_id = await _make_account(user_id)
-    await _spend_txn(account_id, amount=-45000, date=datetime.date(2026, 2, 1), merchant="OLD SHOP")
+    await _spend_txn(account_id, amount=-65000, date=datetime.date(2026, 2, 1), merchant="OLD SHOP")
 
     publisher = FakeNtfyPublisher()
     await _sweep_large_charge(user_id, publisher)
@@ -652,4 +652,16 @@ async def test_category_overspend_needs_enough_history():
 
     publisher = FakeNtfyPublisher()
     await _sweep_overspend(user_id, publisher)
+    assert publisher.published == []
+
+
+async def test_a_large_charge_with_no_merchant_name_does_not_page():
+    """A US Bank 'transaction is complete' alert carries no merchant — there is nothing to
+    recognise as new, so a nameless large pending debit is reconciliation's job, not an anomaly."""
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    await _spend_txn(account_id, amount=-70000, date=datetime.date(2026, 7, 30), merchant="")
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_large_charge(user_id, publisher)
     assert publisher.published == []
