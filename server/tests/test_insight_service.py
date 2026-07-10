@@ -250,3 +250,16 @@ async def test_monthly_endpoint_returns_aggregates(auth_client):
 
 async def test_monthly_endpoint_requires_auth(client):
     assert (await client.get("/insights/monthly?month=2026-07-01")).status_code == 401
+
+
+async def test_monthly_endpoint_skips_the_llm_when_narrative_false(auth_client):
+    r = await auth_client.post(
+        "/accounts", json={"name": "Checking", "institution": "T", "type": "depository"}
+    )
+    account_id = r.json()["id"]
+    await _spend(uuid.UUID(account_id), amount=-42000, date=datetime.date(2026, 7, 10))
+
+    r = await auth_client.get("/insights/monthly?month=2026-07-01&narrative=false")
+    assert r.status_code == 200
+    assert r.json()["narrative_source"] == "unavailable"  # LLM never consulted
+    assert r.json()["spend_cents"] == 42000
