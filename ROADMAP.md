@@ -255,7 +255,28 @@ Pydantic-validated, drafts never auto-commit, descriptive never advisory.
     fence fix (both live on this branch). Deploying = getting this branch onto `main` (CI deploys
     the server; note the branch also carries `android/**`, so it cuts an APK release too) — the
     owner's merge/deploy call. After deploy, re-verify draft quality on real post-backfill merchants.
-18. **Monthly insight note** — the unbuilt pitch feature. An LLM-written "what changed"
+17a. **The AI ran over the whole backfill (2026-07-10).** 1,265 distinct merchants classified by
+    `gemma-4-e4b` in ~13 min (batched 20/call, ids not echoed merchant strings, so a paraphrased
+    name cannot mis-assign a row), **0 parse failures**, producing 4,127 `ai_suggested_category_id`
+    **drafts**. `category_id` was never written — the guardrail held under bulk load.
+    **The run's real payoff was a correctness bug, not the labels:** the model kept filing the
+    largest "merchants" as `Other`, because they were not merchants — they were card payments
+    booked as `spend` ($89k across three buckets). That produced the transfer-window fix and the
+    reclassification above (#2a). Vocabulary gaps then showed up as a $69k `Other` bucket;
+    adding **`Education`** and **`Taxes`** (user-scoped, like `Debt Payment`) and re-drafting only
+    the `Other` merchants cut it to $42k, with $18.2k landing in `Taxes`.
+    **Owed:** an **`Insurance`** category ($5.7k of GEICO/SAFECO still in `Other`), and the honest
+    ceiling of name-only classification — `PB CANTERBURY S FORT WAYNE IN` stayed `Other` even with
+    `Education` available. Merchant *rules* (§5 step 4), not re-prompting, are the fix: ~200
+    approvals cover 84% of spend, vs 4,127 individual confirmations.
+18. **Monthly insight note — prototyped 2026-07-10, not yet in-app.** A script fed the model
+    aggregates only (monthly income/spend/net, category + merchant rollups, income sources) and it
+    wrote four paragraphs of descriptive prose. **Every figure it stated was verified against the
+    SQL — four monthly nets and four income sources, exact to the cent; nothing hallucinated**, and
+    it correctly described `Other` as a catch-all rather than a finding. This is the contract §18
+    wants (aggregates in, prose out, never raw rows); what remains is the Home card, the ntfy
+    digest, and making it a real service with tests rather than a scratch script.
+    _Original description follows._ An LLM-written "what changed"
     (top category deltas vs the trailing median, new recurrences, budget verdicts) generated
     from Wave 1's read models — aggregates in, prose out, never raw rows. Surfaced as a Home
     card in the violet AI voice + an ntfy digest ping. Draft-visible in-app first; insights
