@@ -243,3 +243,20 @@ async def test_promote_endpoint_commits_when_asked(auth_client):
 
 async def test_promote_endpoint_requires_auth(client):
     assert (await client.post("/rules/from-suggestions")).status_code == 401
+
+
+async def test_no_rule_when_a_human_confirmed_a_row_that_carries_no_draft():
+    """The GOOGLE case, found on real data: 44 drafted rows plus 5 separately-confirmed ones
+    with no AI draft. Grouping only over drafted rows cannot see the confirmed ones, so the
+    merchant looked untouched and got a rule anyway."""
+    user_id, account_id, cats = await _setup()
+    confirmed = await _txn(account_id, "GOOGLE", cat=cats["Dining"])  # note: no draft
+    await _txn(account_id, "GOOGLE", draft=cats["Groceries"])
+    await _txn(account_id, "GOOGLE", draft=cats["Groceries"])
+
+    async with AsyncSessionLocal() as db:
+        summary = await promote_suggestions_to_rules(db, user_id, dry_run=False)
+
+    assert summary.rules_created == 0
+    assert await _rules(user_id) == []
+    assert (await _get(confirmed)).category_id == cats["Dining"]

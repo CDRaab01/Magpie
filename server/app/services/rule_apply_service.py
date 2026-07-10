@@ -174,6 +174,30 @@ async def promote_suggestions_to_rules(
         .all()
     )
 
+    # Merchants where a human has already categorized ANY row — including rows the AI never
+    # drafted, which the `grouped` query above cannot see. If a person has expressed an opinion
+    # about a merchant, a rule for it is theirs to make, not the model's. (Found on real data:
+    # GOOGLE had 44 drafted rows and 5 separately-confirmed ones, and the per-group confirmed
+    # count missed the latter entirely.)
+    human_decided = {
+        m
+        for (m,) in (
+            await db.execute(
+                select(Transaction.merchant_norm)
+                .where(
+                    Transaction.account_id.in_(accounts),
+                    Transaction.merchant_norm.is_not(None),
+                    Transaction.category_id.is_not(None),
+                    Transaction.kind.in_(CATEGORIZABLE_KINDS),
+                    Transaction.split_parent_id.is_(None),
+                )
+                .distinct()
+            )
+        )
+        .tuples()
+        .all()
+    }
+
     existing = {
         r.matcher
         for r in (
@@ -198,6 +222,7 @@ async def promote_suggestions_to_rules(
         if (
             seen[merchant] > 1  # ambiguous: rows disagree on the draft
             or confirmed  # a human already categorized some of these rows
+            or merchant in human_decided  # ...or any other row of this merchant
             or n < min_transactions
             or matcher in existing
             or not matcher
