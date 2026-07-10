@@ -284,13 +284,17 @@ Pydantic-validated, drafts never auto-commit, descriptive never advisory.
     ceiling of name-only classification — `PB CANTERBURY S FORT WAYNE IN` stayed `Other` even with
     `Education` available. Merchant *rules* (§5 step 4), not re-prompting, are the fix: ~200
     approvals cover 84% of spend, vs 4,127 individual confirmations.
-18. **Monthly insight note — prototyped 2026-07-10, not yet in-app.** A script fed the model
-    aggregates only (monthly income/spend/net, category + merchant rollups, income sources) and it
-    wrote four paragraphs of descriptive prose. **Every figure it stated was verified against the
-    SQL — four monthly nets and four income sources, exact to the cent; nothing hallucinated**, and
-    it correctly described `Other` as a catch-all rather than a finding. This is the contract §18
-    wants (aggregates in, prose out, never raw rows); what remains is the Home card, the ntfy
-    digest, and making it a real service with tests rather than a scratch script.
+18. **Monthly insight note — DONE server-side 2026-07-10** (`insight_service` +
+    `app/services/ai/insight.py` + `GET /insights/monthly?month=` + `run_monthly_digest_sweep`).
+    The deterministic aggregate (income/spend/net, per-category this-month-vs-trailing-median
+    deltas, over-budget verdicts, top merchants) is the source of truth, aggregated in SQL (F14),
+    verified against the real ledger (June nets $15,927; deltas + merchants legible). The LLM
+    narrates those aggregates under §6 — DB-derived figures only, Pydantic-validated
+    `{headline, summary}`, best-effort — and a garbled/absent model degrades to aggregates-only;
+    a test asserts the prompt carries rounded dollars, never raw cents. The ntfy digest fires a
+    one-line recap once per completed month (latched), LLM headline when up, a deterministic
+    spend/net + biggest-mover line when not. **Still owed: the Home insight card** (client-side,
+    the violet AI voice). Earlier prototype notes retained below for context.
     _Original description follows._ An LLM-written "what changed"
     (top category deltas vs the trailing median, new recurrences, budget verdicts) generated
     from Wave 1's read models — aggregates in, prose out, never raw rows. Surfaced as a Home
