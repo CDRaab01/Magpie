@@ -365,9 +365,13 @@ Pydantic-validated, drafts never auto-commit, descriptive never advisory.
     the draft pass had skipped as human-confirmed, so future Venmo/Zelle→Other, the untracked
     cards→Debt Payment, and the mortgage/credit-union→Housing now auto-file. The 814 seen-once
     merchants were deliberately left rule-free.
-    **Still owed:** the Android affordance (this is server-only), and three rules the model got
-    wrong that want an owner's eye — `MONTHLY MAINTENANCE FEE → Housing` (a bank fee),
-    `WHATNOT INC → Other` (408 rows, a shopping marketplace), `PAYPAL → Other`.
+    **Android affordance DONE 2026-07-10:** the Rules screen shows a best-effort dry-run preview
+    ("Auto-file N more merchants — you've categorized these, make rules so they file themselves")
+    with a one-tap Create driving `POST /rules/from-confirmed`; a spinner while in flight, then a
+    reload. `RulesContent` stays pure (banner driven by `suggestedRuleCount`/`creatingRules`);
+    baselines re-recorded light+dark. **Still owed:** three rules the model got wrong that want an
+    owner's eye — `MONTHLY MAINTENANCE FEE → Housing` (a bank fee), `WHATNOT INC → Other` (408
+    rows, a shopping marketplace), `PAYPAL → Other`.
 25a. **`merchant_norm` was stale everywhere, and Zelle payees were unmatchable — fixed
     2026-07-10.** Two bugs. (a) The backfill imported 4,712 rows *before* the bank-prefix
     stripping was deployed, so every stored `merchant_norm` was computed by an older normalizer
