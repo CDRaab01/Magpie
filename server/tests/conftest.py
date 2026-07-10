@@ -1,5 +1,7 @@
 import asyncio
 import os
+import subprocess
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -42,6 +44,18 @@ os.environ["DATABASE_URL"] = _db_url
 # refactor), stop the run rather than let create_all/commits reach real financial data.
 if not os.environ["DATABASE_URL"].rpartition("/")[2].endswith("_test"):
     raise RuntimeError(f"Refusing to run tests against a non-test database: {_db_url!r}")
+
+# Migrate the way CI does (`alembic upgrade head`, then pytest). `setup_tables`' create_all
+# builds tables but never runs *data* migrations, so a genuinely fresh database would have no
+# seeded shared categories and a dozen tests would fail on `KeyError: 'Groceries'`. That went
+# unnoticed while the suite was quietly running against the already-migrated prod database.
+# A subprocess, because alembic's async env.py wants an event loop of its own.
+subprocess.run(
+    [sys.executable, "-m", "alembic", "upgrade", "head"],
+    cwd=Path(__file__).resolve().parent.parent,
+    check=True,
+    capture_output=True,
+)
 
 import pytest
 import pytest_asyncio
