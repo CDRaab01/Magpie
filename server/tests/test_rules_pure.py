@@ -2,7 +2,7 @@ import datetime
 
 import pytest
 
-from app.rules.bands import is_within_band, median_cents
+from app.rules.bands import band_shortfall, is_within_band, median_cents
 from app.rules.merchant_match import matches, normalize_merchant
 from app.rules.recurrence import InvalidCadence, expected_next_date, is_within_cadence_window
 from app.rules.transfer_matching import TransferCandidate, find_transfer_match
@@ -287,3 +287,28 @@ def test_a_non_peer_merchant_keeps_a_long_trailing_token():
 def test_bank_prefixes_still_strip():
     assert normalize_merchant("WEB AUTHORIZED PMT VENMO") == "VENMO"
     assert normalize_merchant("ELECTRONIC WITHDRAWAL GEICO") == "GEICO"
+
+
+# --- band_shortfall: the paycheck-short signal (directional, not just out-of-band) --------
+
+
+def test_band_shortfall_none_when_within_band():
+    assert band_shortfall(3500, [3000, 3800], 0.2) is None
+
+
+def test_band_shortfall_none_when_above_band():
+    """Extra money is out of band too, but nobody needs paging for it."""
+    assert band_shortfall(9000, [3000, 3800], 0.2) is None
+
+
+def test_band_shortfall_reports_cents_below_the_median_when_short():
+    # median 3400, low bound 3400*0.8 = 2720; a 2000 paycheck is short by 3400-2000 = 1400.
+    assert band_shortfall(2000, [3000, 3800], 0.2) == 1400
+
+
+def test_band_shortfall_is_magnitude_based():
+    assert band_shortfall(-2000, [3000, 3800], 0.2) == 1400
+
+
+def test_band_shortfall_at_the_exact_low_bound_is_not_short():
+    assert band_shortfall(2720, [3000, 3800], 0.2) is None

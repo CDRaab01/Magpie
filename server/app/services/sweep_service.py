@@ -1,9 +1,9 @@
 """Sweep pass (CLAUDE.md §5/§10): latched ntfy alerts for silent-failure conditions. Built:
 unparsed-email backlog, **missing-bill** (the 'a simulated missing bill pages the phone' exit,
 CLAUDE.md Phase 6), **paycheck-late**, and **per-account freshness**. Latch state is persisted
-(F11) via `alert_latch_service`, so a redeploy never re-pages an already-open condition. Not yet
-built (same latched pattern): paycheck-*short* (band-based, better at ingestion). **Auth-hold
-expiry is built** (2026-07-10) — the first sweep that mutates data rather than only alerting.
+(F11) via `alert_latch_service`, so a redeploy never re-pages an already-open condition.
+**Auth-hold expiry** (2026-07-10) is the first sweep that mutates data rather than only alerting;
+**paycheck-short** (2026-07-10) pages when a recurring paycheck lands below its band.
 """
 
 import asyncio
@@ -23,8 +23,10 @@ from app.models.ingest_event import IngestEvent
 from app.models.rule import Rule
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.rules.bands import band_shortfall, median_cents
 from app.rules.recurrence import InvalidCadence, expected_next_date
 from app.services.alert_latch_service import latched_should_alert
+from app.services.rule_service import MIN_OBSERVATIONS_TO_AUTOFILE, observation_history
 from app.services.ntfy_client import HttpNtfyPublisher, NtfyPublisher
 from app.time_util import owner_local_date
 
@@ -124,6 +126,52 @@ async def run_paycheck_late_sweep(
             await publisher.publish(
                 f"Expected income '{rule.matcher}' hasn't arrived — it was due around {expected}.",
                 title="Magpie: paycheck late",
+                click=LINK_CASHFLOW,
+            )
+
+
+async def run_paycheck_short_sweep(
+    db: AsyncSession, user_id: uuid.UUID, publisher: NtfyPublisher, *, now: datetime.datetime
+) -> None:
+    """A recurring-income rule whose *most recent* paycheck landed **below** its amount band pages
+    once, with median context. Distinct from paycheck-late: that one is about a paycheck that never
+    came; this one arrived, but light (a cut hours week, a missed bonus).
+
+    Detected from ledger state, not at ingestion, for the same reason the other sweeps are: it
+    reuses the persisted latch + publisher, and it only ever looks at the *latest* observation per
+    rule — so importing three years of historical paychecks can't storm the phone with past short
+    weeks. The band is computed from the *prior* observations (as it was when that paycheck was
+    evaluated), and a rule needs at least `MIN_OBSERVATIONS_TO_AUTOFILE` priors before it has a
+    band to be short of. The latch key carries the paycheck's own id, so each short paycheck fires
+    exactly once and a later short one (a different row) is a fresh episode on its own key.
+    """
+    result = await db.execute(
+        select(Rule).where(
+            Rule.user_id == user_id,
+            Rule.type == "recurring_income",
+            Rule.enabled.is_(True),
+        )
+    )
+    for rule in result.scalars().all():
+        pct = (rule.amount_band or {}).get("pct")
+        if pct is None or rule.account_id is None:
+            continue  # no band configured, or an all-accounts income rule — nothing to be short of
+        history = await observation_history(db, rule.account_id, rule.matcher)
+        income = sorted(
+            (t for t in history if t.kind == "income"), key=lambda t: (t.date, t.created_at)
+        )
+        if len(income) <= MIN_OBSERVATIONS_TO_AUTOFILE:
+            continue  # need >=3 priors *plus* the latest to judge it against a real band
+        latest = income[-1]
+        priors = [t.amount for t in income[:-1]]
+        shortfall = band_shortfall(latest.amount, priors, pct)
+        key = f"paycheck_short:{rule.id}:{latest.id}"
+        if await latched_should_alert(db, user_id, key, shortfall is not None, now):
+            median = median_cents([abs(a) for a in priors])
+            await publisher.publish(
+                f"'{rule.matcher}' came in ${abs(latest.amount) / 100:,.2f} on {latest.date} — "
+                f"about ${shortfall / 100:,.2f} under its ~${median / 100:,.2f} median.",
+                title="Magpie: paycheck short",
                 click=LINK_CASHFLOW,
             )
 
@@ -264,6 +312,7 @@ async def sweep_loop() -> None:
                     await run_unparsed_backlog_sweep(db, user_id, publisher, now=now)
                     await run_missing_bill_sweep(db, user_id, publisher, now=now)
                     await run_paycheck_late_sweep(db, user_id, publisher, now=now)
+                    await run_paycheck_short_sweep(db, user_id, publisher, now=now)
                     await run_account_freshness_sweep(db, user_id, publisher, now=now)
                     await run_auth_hold_expiry_sweep(db, user_id, now=now)
                     await db.commit()  # persist the alert latches (F11) + any expired holds

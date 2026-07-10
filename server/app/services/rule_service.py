@@ -207,7 +207,7 @@ async def _matching_category_rule(
     return None
 
 
-async def _observation_history(
+async def observation_history(
     db: AsyncSession, account_id: uuid.UUID, matcher: str
 ) -> list[Transaction]:
     """Every past transaction on this account whose merchant matches — includes Phase 3's
@@ -300,7 +300,7 @@ async def evaluate_transaction(
     #    amount band both have to hold before auto-filing.
     recurring = await _matching_recurring_rule(db, user_id, account_id, merchant_norm)
     if recurring is not None:
-        history = await _observation_history(db, account_id, recurring.matcher)
+        history = await observation_history(db, account_id, recurring.matcher)
         observations = len(history)
         # The amount's sign, not the rule type, decides kind — a rule only recognizes *which*
         # recurring thing this is (for cadence/band/category), never overrides the ledger's

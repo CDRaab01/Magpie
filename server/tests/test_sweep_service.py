@@ -332,3 +332,153 @@ async def test_account_with_no_history_does_not_page():
     publisher = FakeNtfyPublisher()
     await _sweep_freshness(user_id, publisher)
     assert publisher.published == []
+
+
+# --- paycheck short (band-based; the paycheck arrived but light) ---------------------------
+
+
+async def _income_txn(account_id, *, amount, date, rule_id=None):
+    async with AsyncSessionLocal() as db:
+        db.add(
+            Transaction(
+                account_id=account_id,
+                amount=amount,
+                date=date,
+                status="posted",
+                kind="income",
+                source="csv",
+                merchant_raw="EMPLOYER",
+                merchant_norm="EMPLOYER",
+                matched_rule_id=rule_id,
+                review_state="auto",
+            )
+        )
+        await db.commit()
+
+
+async def _banded_income_rule(user_id, account_id, *, pct=0.2, matcher="EMPLOYER") -> None:
+    async with AsyncSessionLocal() as db:
+        db.add(
+            Rule(
+                user_id=user_id,
+                type="recurring_income",
+                account_id=account_id,
+                matcher=matcher,
+                amount_band={"pct": pct},
+                enabled=True,
+            )
+        )
+        await db.commit()
+
+
+async def _sweep_short(user_id, publisher, now=NOW) -> None:
+    from app.services.sweep_service import run_paycheck_short_sweep
+
+    async with AsyncSessionLocal() as db:
+        await run_paycheck_short_sweep(db, user_id, publisher, now=now)
+        await db.commit()
+
+
+async def test_a_short_paycheck_pages_once_with_median_context():
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    await _banded_income_rule(user_id, account_id)
+    # Three normal $3,000 paychecks, then a light one.
+    for d in (1, 15, 29):
+        await _income_txn(account_id, amount=300000, date=datetime.date(2026, 7, d))
+    await _income_txn(account_id, amount=180000, date=datetime.date(2026, 8, 1))  # $1,800, short
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_short(user_id, publisher)
+    assert len(publisher.published) == 1
+    message, title, _ = publisher.published[0]
+    assert "short" in title.lower()
+    assert "1,800.00" in message and "3,000.00" in message
+
+    # Latched: a second sweep with the same latest paycheck does not re-page.
+    await _sweep_short(user_id, publisher)
+    assert len(publisher.published) == 1
+
+
+async def test_a_normal_paycheck_does_not_page():
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    await _banded_income_rule(user_id, account_id)
+    for d in (1, 15, 29):
+        await _income_txn(account_id, amount=300000, date=datetime.date(2026, 7, d))
+    await _income_txn(account_id, amount=295000, date=datetime.date(2026, 8, 1))  # within band
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_short(user_id, publisher)
+    assert publisher.published == []
+
+
+async def test_a_high_paycheck_does_not_page():
+    """Extra money is out of band too, but nobody needs paging for it."""
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    await _banded_income_rule(user_id, account_id)
+    for d in (1, 15, 29):
+        await _income_txn(account_id, amount=300000, date=datetime.date(2026, 7, d))
+    await _income_txn(account_id, amount=500000, date=datetime.date(2026, 8, 1))  # a bonus
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_short(user_id, publisher)
+    assert publisher.published == []
+
+
+async def test_no_band_configured_never_pages():
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    async with AsyncSessionLocal() as db:  # a rule with no amount_band
+        db.add(
+            Rule(
+                user_id=user_id,
+                type="recurring_income",
+                account_id=account_id,
+                matcher="EMPLOYER",
+                enabled=True,
+            )
+        )
+        await db.commit()
+    for d in (1, 15, 29):
+        await _income_txn(account_id, amount=300000, date=datetime.date(2026, 7, d))
+    await _income_txn(account_id, amount=100000, date=datetime.date(2026, 8, 1))
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_short(user_id, publisher)
+    assert publisher.published == []
+
+
+async def test_cold_start_too_few_priors_never_pages():
+    """A band needs >=3 prior observations before the latest can be judged short of it."""
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    await _banded_income_rule(user_id, account_id)
+    await _income_txn(account_id, amount=300000, date=datetime.date(2026, 7, 1))
+    await _income_txn(
+        account_id, amount=180000, date=datetime.date(2026, 8, 1)
+    )  # short but 1 prior
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_short(user_id, publisher)
+    assert publisher.published == []
+
+
+async def test_a_later_short_paycheck_is_a_fresh_episode():
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    await _banded_income_rule(user_id, account_id)
+    for d in (1, 15, 29):
+        await _income_txn(account_id, amount=300000, date=datetime.date(2026, 7, d))
+    await _income_txn(account_id, amount=180000, date=datetime.date(2026, 8, 1))
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_short(user_id, publisher)
+    assert len(publisher.published) == 1
+
+    # A normal one lands, then another short one — a distinct row, so a new alert.
+    await _income_txn(account_id, amount=300000, date=datetime.date(2026, 8, 15))
+    await _income_txn(account_id, amount=170000, date=datetime.date(2026, 8, 29))
+    await _sweep_short(user_id, publisher)
+    assert len(publisher.published) == 2
