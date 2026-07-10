@@ -312,3 +312,61 @@ def test_band_shortfall_is_magnitude_based():
 
 def test_band_shortfall_at_the_exact_low_bound_is_not_short():
     assert band_shortfall(2720, [3000, 3800], 0.2) is None
+
+
+# --- anomaly detection (pure) -------------------------------------------------------------
+
+from app.rules.anomaly import category_overspend, is_large_charge  # noqa: E402
+
+
+def test_is_large_charge_uses_magnitude():
+    assert is_large_charge(-20000, 20000)
+    assert is_large_charge(20000, 20000)
+    assert not is_large_charge(-19999, 20000)
+
+
+def test_category_overspend_none_before_min_months():
+    # Only two priors; a median needs at least three.
+    assert (
+        category_overspend(50000, [10000, 10000], factor=1.5, floor_cents=15000, min_months=3)
+        is None
+    )
+
+
+def test_category_overspend_none_below_floor():
+    # Median 100, MTD 120 — over 1.5x median in ratio, but under the $150 floor: not news.
+    assert (
+        category_overspend(
+            12000, [10000, 10000, 10000], factor=1.5, floor_cents=15000, min_months=3
+        )
+        is None
+    )
+
+
+def test_category_overspend_none_when_within_factor():
+    # Median 40000; 1.5x = 60000; MTD 55000 is over the floor but under the factor.
+    assert (
+        category_overspend(
+            55000, [40000, 40000, 40000], factor=1.5, floor_cents=15000, min_months=3
+        )
+        is None
+    )
+
+
+def test_category_overspend_reports_overage_against_the_plain_median():
+    # Median 40000; 1.5x = 60000; MTD 90000 exceeds it → overage is 90000 - 40000 = 50000.
+    assert (
+        category_overspend(
+            90000, [40000, 40000, 40000], factor=1.5, floor_cents=15000, min_months=3
+        )
+        == 50000
+    )
+
+
+def test_category_overspend_is_magnitude_based():
+    assert (
+        category_overspend(
+            -90000, [-40000, -40000, -40000], factor=1.5, floor_cents=15000, min_months=3
+        )
+        == 50000
+    )

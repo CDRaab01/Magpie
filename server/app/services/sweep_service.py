@@ -3,7 +3,9 @@ unparsed-email backlog, **missing-bill** (the 'a simulated missing bill pages th
 CLAUDE.md Phase 6), **paycheck-late**, and **per-account freshness**. Latch state is persisted
 (F11) via `alert_latch_service`, so a redeploy never re-pages an already-open condition.
 **Auth-hold expiry** (2026-07-10) is the first sweep that mutates data rather than only alerting;
-**paycheck-short** (2026-07-10) pages when a recurring paycheck lands below its band.
+**paycheck-short** (2026-07-10) pages when a recurring paycheck lands below its band. **Spending
+anomalies** (2026-07-10) page on a large charge at a never-seen merchant and on a category running
+well over its trailing median — the proactive half of "watch my spending" (#19a).
 """
 
 import asyncio
@@ -20,9 +22,11 @@ from app.models.account import Account
 from app.models.bill_statement import BillStatement
 from app.imports.pending_match import PendingCandidate, find_posted_duplicate
 from app.models.ingest_event import IngestEvent
+from app.models.category import Category
 from app.models.rule import Rule
-from app.models.transaction import Transaction
+from app.models.transaction import COUNTABLE_STATUSES, Transaction
 from app.models.user import User
+from app.rules.anomaly import category_overspend, is_large_charge
 from app.rules.bands import band_shortfall, median_cents
 from app.rules.recurrence import InvalidCadence, expected_next_date
 from app.services.alert_latch_service import latched_should_alert
@@ -202,6 +206,145 @@ async def run_account_freshness_sweep(
             )
 
 
+async def run_large_charge_sweep(
+    db: AsyncSession, user_id: uuid.UUID, publisher: NtfyPublisher, *, now: datetime.datetime
+) -> None:
+    """A large spend at a merchant never seen before, within the recency window, pages once
+    (ROADMAP #19a). "Never seen before" is the key that makes this proactive rather than a plain
+    threshold alert on every big purchase — a large charge at your usual grocery store is not
+    news; the same charge at a merchant that has never appeared is. The recency window keeps a
+    three-year backfill (where every merchant is 'new' at first sight) from storming the phone.
+    """
+    window_start = owner_local_date(now, settings.owner_timezone) - datetime.timedelta(
+        days=settings.anomaly_new_merchant_days
+    )
+    merchant = func.coalesce(Transaction.merchant_norm, Transaction.merchant_raw)
+    recent = (
+        (
+            await db.execute(
+                select(Transaction)
+                .join(Account, Transaction.account_id == Account.id)
+                .where(
+                    Account.user_id == user_id,
+                    Transaction.kind == "spend",
+                    Transaction.split_parent_id.is_(None),
+                    Transaction.date >= window_start,
+                    merchant.is_not(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for txn in recent:
+        if not is_large_charge(txn.amount, settings.anomaly_large_charge_cents):
+            continue
+        name = txn.merchant_norm or txn.merchant_raw
+        # First appearance = no *earlier* transaction shares this merchant. Ties on the same date
+        # are broken by created_at so a same-day pair doesn't each count the other as "prior".
+        earlier = await db.scalar(
+            select(func.count())
+            .select_from(Transaction)
+            .join(Account, Transaction.account_id == Account.id)
+            .where(
+                Account.user_id == user_id,
+                func.coalesce(Transaction.merchant_norm, Transaction.merchant_raw) == name,
+                Transaction.id != txn.id,
+                (Transaction.date < txn.date)
+                | ((Transaction.date == txn.date) & (Transaction.created_at < txn.created_at)),
+            )
+        )
+        first_seen = earlier == 0
+        if await latched_should_alert(db, user_id, f"large_new_charge:{txn.id}", first_seen, now):
+            await publisher.publish(
+                f"${abs(txn.amount) / 100:,.2f} at {name} on {txn.date} — a merchant Magpie "
+                f"hasn't seen before.",
+                title="Magpie: large charge, new merchant",
+                click=LINK_HOME,
+            )
+
+
+async def run_category_overspend_sweep(
+    db: AsyncSession, user_id: uuid.UUID, publisher: NtfyPublisher, *, now: datetime.datetime
+) -> None:
+    """A category whose month-to-date spend runs well over its trailing full-month median pages
+    once for the month (ROADMAP #19a) — "you've already spent more on dining this month than you
+    usually spend in a whole one." Latched per (category, month), so it fires once and a later
+    month is a fresh episode. Aggregated in SQL (F14); the numeric judgment is pure
+    (`anomaly.category_overspend`).
+    """
+    today = owner_local_date(now, settings.owner_timezone)
+    this_month = today.replace(day=1)
+    window_start = _months_before(this_month, settings.anomaly_category_trailing_months)
+
+    # Per (category, month-bucket) spend magnitude, in SQL. Refunds net against spend within a
+    # month, matching how every other rollup treats a category (#26 semantics).
+    month_bucket = func.date_trunc("month", Transaction.date)
+    rows = (
+        await db.execute(
+            select(
+                Transaction.category_id,
+                month_bucket.label("m"),
+                func.sum(-Transaction.amount),
+            )
+            .join(Account, Transaction.account_id == Account.id)
+            .where(
+                Account.user_id == user_id,
+                Transaction.category_id.is_not(None),
+                Transaction.kind.in_(("spend", "refund")),
+                Transaction.is_split.is_(False),
+                Transaction.status.in_(COUNTABLE_STATUSES),
+                Transaction.date >= window_start,
+            )
+            .group_by(Transaction.category_id, "m")
+        )
+    ).all()
+
+    priors: dict[uuid.UUID, list[int]] = {}
+    mtd: dict[uuid.UUID, int] = {}
+    for category_id, bucket, spend in rows:
+        bucket_month = bucket.date() if hasattr(bucket, "date") else bucket
+        if bucket_month == this_month:
+            mtd[category_id] = int(spend)
+        else:
+            priors.setdefault(category_id, []).append(int(spend))
+
+    names = await _category_display_names(db, user_id)
+    for category_id, mtd_spend in mtd.items():
+        overage = category_overspend(
+            mtd_spend,
+            priors.get(category_id, []),
+            factor=settings.anomaly_category_factor,
+            floor_cents=settings.anomaly_category_floor_cents,
+            min_months=settings.anomaly_category_min_months,
+        )
+        key = f"category_overspend:{category_id}:{this_month:%Y-%m}"
+        if await latched_should_alert(db, user_id, key, overage is not None, now):
+            median = median_cents([abs(a) for a in priors[category_id]])
+            name = names.get(category_id, "a category")
+            await publisher.publish(
+                f"{name}: ${mtd_spend / 100:,.2f} so far this month — about ${overage / 100:,.2f} "
+                f"over its ~${median / 100:,.2f} monthly median.",
+                title="Magpie: category over its usual",
+                click=LINK_HOME,
+            )
+
+
+def _months_before(month_start: datetime.date, n: int) -> datetime.date:
+    y, m = month_start.year, month_start.month
+    total = (y * 12 + (m - 1)) - n
+    return datetime.date(total // 12, total % 12 + 1, 1)
+
+
+async def _category_display_names(db: AsyncSession, user_id: uuid.UUID) -> dict[uuid.UUID, str]:
+    rows = await db.execute(
+        select(Category.id, Category.name).where(
+            (Category.user_id == user_id) | (Category.user_id.is_(None))
+        )
+    )
+    return {cid: name for cid, name in rows.tuples().all()}
+
+
 async def run_auth_hold_expiry_sweep(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -313,6 +456,8 @@ async def sweep_loop() -> None:
                     await run_missing_bill_sweep(db, user_id, publisher, now=now)
                     await run_paycheck_late_sweep(db, user_id, publisher, now=now)
                     await run_paycheck_short_sweep(db, user_id, publisher, now=now)
+                    await run_large_charge_sweep(db, user_id, publisher, now=now)
+                    await run_category_overspend_sweep(db, user_id, publisher, now=now)
                     await run_account_freshness_sweep(db, user_id, publisher, now=now)
                     await run_auth_hold_expiry_sweep(db, user_id, now=now)
                     await db.commit()  # persist the alert latches (F11) + any expired holds

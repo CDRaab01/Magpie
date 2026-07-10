@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.database import AsyncSessionLocal
 from app.models.account import Account
 from app.models.bill_statement import BillStatement
+from app.models.category import Category
 from app.models.ingest_event import IngestEvent
 from app.models.rule import Rule
 from app.models.transaction import Transaction
@@ -482,3 +483,173 @@ async def test_a_later_short_paycheck_is_a_fresh_episode():
     await _income_txn(account_id, amount=170000, date=datetime.date(2026, 8, 29))
     await _sweep_short(user_id, publisher)
     assert len(publisher.published) == 2
+
+
+# --- spending anomalies -------------------------------------------------------------------
+
+
+async def _spend_txn(account_id, *, amount, date, merchant, category_id=None):
+    async with AsyncSessionLocal() as db:
+        db.add(
+            Transaction(
+                account_id=account_id,
+                amount=amount,
+                date=date,
+                status="posted",
+                kind="spend",
+                source="csv",
+                merchant_raw=merchant,
+                merchant_norm=merchant,
+                category_id=category_id,
+                review_state="auto",
+            )
+        )
+        await db.commit()
+
+
+async def _sweep_large_charge(user_id, publisher, now=NOW):
+    from app.services.sweep_service import run_large_charge_sweep
+
+    async with AsyncSessionLocal() as db:
+        await run_large_charge_sweep(db, user_id, publisher, now=now)
+        await db.commit()
+
+
+async def _sweep_overspend(user_id, publisher, now=NOW):
+    from app.services.sweep_service import run_category_overspend_sweep
+
+    async with AsyncSessionLocal() as db:
+        await run_category_overspend_sweep(db, user_id, publisher, now=now)
+        await db.commit()
+
+
+# NOW is 2026-08-01; the recency window (7 days) reaches back to 2026-07-25.
+
+
+async def test_large_charge_at_a_new_merchant_pages_once():
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    await _spend_txn(
+        account_id, amount=-45000, date=datetime.date(2026, 7, 30), merchant="FANCY SOFA CO"
+    )
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_large_charge(user_id, publisher)
+    assert len(publisher.published) == 1
+    assert "FANCY SOFA CO" in publisher.published[0][0]
+
+    await _sweep_large_charge(user_id, publisher)  # latched
+    assert len(publisher.published) == 1
+
+
+async def test_a_large_charge_at_a_familiar_merchant_is_not_news():
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    # Same merchant seen months earlier — a big charge there is expected, not novel.
+    await _spend_txn(account_id, amount=-30000, date=datetime.date(2026, 3, 1), merchant="COSTCO")
+    await _spend_txn(account_id, amount=-45000, date=datetime.date(2026, 7, 30), merchant="COSTCO")
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_large_charge(user_id, publisher)
+    assert publisher.published == []
+
+
+async def test_a_small_charge_at_a_new_merchant_does_not_page():
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    await _spend_txn(account_id, amount=-1500, date=datetime.date(2026, 7, 30), merchant="NEW CAFE")
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_large_charge(user_id, publisher)
+    assert publisher.published == []
+
+
+async def test_an_old_large_new_merchant_charge_is_outside_the_recency_window():
+    """The backfill guard: a big first-seen charge from months ago must not page today."""
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    await _spend_txn(account_id, amount=-45000, date=datetime.date(2026, 2, 1), merchant="OLD SHOP")
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_large_charge(user_id, publisher)
+    assert publisher.published == []
+
+
+async def _category(user_id, name="Dining") -> uuid.UUID:
+    async with AsyncSessionLocal() as db:
+        c = Category(name=name, user_id=user_id)
+        db.add(c)
+        await db.commit()
+        await db.refresh(c)
+        return c.id
+
+
+async def test_category_running_over_its_median_pages_once_for_the_month():
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    cat = await _category(user_id)
+    # ~$400/month for three prior months, then $900 already this month (well over 1.5x).
+    for m in (5, 6, 7):
+        await _spend_txn(
+            account_id,
+            amount=-40000,
+            date=datetime.date(2026, m, 10),
+            merchant=f"REST{m}",
+            category_id=cat,
+        )
+    await _spend_txn(
+        account_id,
+        amount=-90000,
+        date=datetime.date(2026, 8, 1),
+        merchant="BIG DINNER",
+        category_id=cat,
+    )
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_overspend(user_id, publisher)
+    assert len(publisher.published) == 1
+    assert "Dining" in publisher.published[0][0]
+
+    await _sweep_overspend(user_id, publisher)  # latched per (category, month)
+    assert len(publisher.published) == 1
+
+
+async def test_a_category_within_its_usual_range_does_not_page():
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    cat = await _category(user_id)
+    for m in (5, 6, 7):
+        await _spend_txn(
+            account_id,
+            amount=-40000,
+            date=datetime.date(2026, m, 10),
+            merchant=f"REST{m}",
+            category_id=cat,
+        )
+    await _spend_txn(
+        account_id,
+        amount=-42000,
+        date=datetime.date(2026, 8, 1),
+        merchant="DINNER",
+        category_id=cat,
+    )
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_overspend(user_id, publisher)
+    assert publisher.published == []
+
+
+async def test_category_overspend_needs_enough_history():
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    cat = await _category(user_id)
+    await _spend_txn(
+        account_id, amount=-40000, date=datetime.date(2026, 7, 10), merchant="REST", category_id=cat
+    )  # only one prior month
+    await _spend_txn(
+        account_id, amount=-90000, date=datetime.date(2026, 8, 1), merchant="BIG", category_id=cat
+    )
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_overspend(user_id, publisher)
+    assert publisher.published == []

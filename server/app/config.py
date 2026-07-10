@@ -77,6 +77,20 @@ class Settings(BaseSettings):
     # an audit note. The gas-station $1 pre-auth is the canonical case.
     auth_hold_days: int = 7
 
+    # Spending-anomaly sweeps (ROADMAP #19a — the proactive half of "watch my spending").
+    # Deterministic thresholds; an LLM narration line is optional (#19) and never the trigger.
+    # (1) A large charge at a merchant never seen before, within the recency window (older
+    #     first-appearances are just the backfill, not news).
+    anomaly_large_charge_cents: int = 20000  # $200
+    anomaly_new_merchant_days: int = 7
+    # (2) A category whose month-to-date spend runs well over its trailing full-month median.
+    #     `factor` is the "well over" multiplier; `floor` suppresses noise on tiny categories;
+    #     a median needs `min_months` of trailing history over a `trailing_months` window.
+    anomaly_category_factor: float = 1.5
+    anomaly_category_floor_cents: int = 15000  # $150
+    anomaly_category_trailing_months: int = 6
+    anomaly_category_min_months: int = 3
+
     # AI category drafts (CLAUDE.md §6/Phase 7). Local LM Studio only — never a hosted model,
     # this data never leaves the host. Unset ⇒ the AI stage never runs (rule evaluation just
     # falls through to needs_review with no draft, same as before Phase 7).
