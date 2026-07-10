@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.schemas.rule import PromotionResultOut, RuleCreate, RuleOut, RuleUpdate
 from app.security import CurrentUser
-from app.services.rule_apply_service import apply_rule_to_history, promote_suggestions_to_rules
+from app.services.rule_apply_service import (
+    apply_rule_to_history,
+    promote_confirmed_to_rules,
+    promote_suggestions_to_rules,
+)
 from app.services.rule_service import create_rule, delete_rule, get_rule, list_rules, update_rule
 
 router = APIRouter(prefix="/rules", tags=["rules"])
@@ -45,6 +49,28 @@ async def promote_suggestions(
     that already have a rule — so this is safe to re-run.
     """
     summary = await promote_suggestions_to_rules(
+        db, current_user.id, dry_run=dry_run, min_transactions=min_transactions
+    )
+    return PromotionResultOut(**dataclasses.asdict(summary))
+
+
+@router.post("/from-confirmed", response_model=PromotionResultOut)
+async def promote_confirmed(
+    current_user: CurrentUser,
+    db: DbSession,
+    dry_run: Annotated[bool, Query()] = True,
+    min_transactions: Annotated[int, Query(ge=1)] = 2,
+):
+    """Turn merchants a human has already *confirmed* a category for into `merchant_category`
+    rules, so future transactions from them auto-file instead of returning to the review queue.
+
+    The sibling of `/from-suggestions`, for after the queue is worked: those confirmations are the
+    most legitimate rule source there is. A merchant split across categories is skipped (never
+    guessed); already-ruled merchants are skipped (safe to re-run). `min_transactions` defaults to
+    2 — a merchant seen once is a one-off and a rule for it is speculative — but can be lowered to
+    1 to blanket every categorized merchant. `dry_run=true` (default) writes nothing.
+    """
+    summary = await promote_confirmed_to_rules(
         db, current_user.id, dry_run=dry_run, min_transactions=min_transactions
     )
     return PromotionResultOut(**dataclasses.asdict(summary))

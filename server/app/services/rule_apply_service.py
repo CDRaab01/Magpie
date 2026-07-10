@@ -260,3 +260,118 @@ async def promote_suggestions_to_rules(
         merchants_skipped=skipped,
         applications=applications,
     )
+
+
+async def promote_confirmed_to_rules(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    dry_run: bool = True,
+    min_transactions: int = 2,
+    now: datetime.datetime | None = None,
+) -> PromotionSummary:
+    """Turn each merchant's *confirmed* category into a `merchant_category` rule, so future
+    transactions from a merchant a human has already categorized auto-file instead of returning
+    to the queue.
+
+    The sibling of `promote_suggestions_to_rules`, but the more legitimate rule source: these
+    categories were confirmed by a person, not drafted by the model. A merchant qualifies when
+    (a) all its confirmed spend/refund rows agree on a single category — a merchant split across
+    categories is ambiguous and skipped, never guessed; (b) it meets `min_transactions`; and
+    (c) it has no rule yet. Idempotent: re-running skips merchants that already have a rule.
+
+    `min_transactions` defaults to 2 here (unlike the draft promoter's 1): a merchant seen once in
+    the whole history is a genuine one-off, and a rule for it is speculative clutter — the caller
+    can lower it to blanket every categorized merchant.
+    """
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    accounts = await _user_account_ids(db, user_id)
+
+    grouped = (
+        (
+            await db.execute(
+                select(
+                    Transaction.merchant_norm,
+                    Transaction.category_id,
+                    func.count().label("n"),
+                )
+                .where(
+                    Transaction.account_id.in_(accounts),
+                    Transaction.merchant_norm.is_not(None),
+                    Transaction.category_id.is_not(None),
+                    Transaction.kind.in_(CATEGORIZABLE_KINDS),
+                    Transaction.split_parent_id.is_(None),
+                )
+                .group_by(Transaction.merchant_norm, Transaction.category_id)
+            )
+        )
+        .tuples()
+        .all()
+    )
+
+    # A merchant appearing in more than one (merchant, category) group has inconsistent
+    # categorization — skip it rather than pick one.
+    group_count: dict[str, int] = {}
+    total_rows: dict[str, int] = {}
+    for merchant, _cat, n in grouped:
+        group_count[merchant] = group_count.get(merchant, 0) + 1
+        total_rows[merchant] = total_rows.get(merchant, 0) + n
+
+    existing = {
+        r.matcher
+        for r in (
+            await db.execute(
+                select(Rule).where(Rule.user_id == user_id, Rule.type == "merchant_category")
+            )
+        )
+        .scalars()
+        .all()
+    }
+
+    applications: list[RuleApplication] = []
+    created = filed = skipped = 0
+    merchants = await _candidate_merchants(db, user_id)
+
+    for merchant, category_id, _n in grouped:
+        matcher = normalize_merchant(merchant)
+        if (
+            group_count[merchant] > 1  # inconsistent: rows confirmed to different categories
+            or total_rows[merchant] < min_transactions
+            or matcher in existing
+            or not matcher
+        ):
+            skipped += 1
+            continue
+
+        rule = Rule(
+            user_id=user_id,
+            type="merchant_category",
+            account_id=None,
+            matcher=matcher,
+            category_id=category_id,
+            enabled=True,
+        )
+        db.add(rule)
+        await db.flush()
+        existing.add(matcher)
+        created += 1
+
+        # Existing rows are already confirmed, so apply-to-history mostly reports them as
+        # skipped_confirmed — the rule's real job is the *next* transaction from this merchant.
+        application = await apply_rule_to_history(db, user_id, rule, now=now, merchants=merchants)
+        filed += application.matched
+        applications.append(application)
+
+    if dry_run:
+        await db.rollback()
+    else:
+        await db.commit()
+
+    applications.sort(key=lambda a: -a.matched)
+    return PromotionSummary(
+        dry_run=dry_run,
+        rules_created=created,
+        transactions_filed=filed,
+        merchants_skipped=skipped,
+        applications=applications,
+    )

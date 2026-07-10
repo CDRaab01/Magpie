@@ -260,3 +260,116 @@ async def test_no_rule_when_a_human_confirmed_a_row_that_carries_no_draft():
     assert summary.rules_created == 0
     assert await _rules(user_id) == []
     assert (await _get(confirmed)).category_id == cats["Dining"]
+
+
+# --- promote_confirmed_to_rules (the "after the queue is worked" path) ---------------------
+
+from app.services.rule_apply_service import promote_confirmed_to_rules  # noqa: E402
+
+
+async def test_a_confirmed_merchant_becomes_a_rule():
+    user_id, account_id, cats = await _setup()
+    for _ in range(2):
+        await _txn(account_id, "THERESA", cat=cats["Groceries"])
+
+    async with AsyncSessionLocal() as db:
+        summary = await promote_confirmed_to_rules(db, user_id, dry_run=False, min_transactions=2)
+
+    assert summary.rules_created == 1
+    rules = await _rules(user_id)
+    assert len(rules) == 1 and rules[0].matcher == "THERESA"
+    assert rules[0].category_id == cats["Groceries"]
+
+
+async def test_confirmed_promotion_dry_run_writes_nothing():
+    user_id, account_id, cats = await _setup()
+    for _ in range(2):
+        await _txn(account_id, "THERESA", cat=cats["Groceries"])
+
+    async with AsyncSessionLocal() as db:
+        summary = await promote_confirmed_to_rules(db, user_id, dry_run=True, min_transactions=2)
+
+    assert summary.rules_created == 1
+    assert await _rules(user_id) == []
+
+
+async def test_a_one_off_confirmed_merchant_is_held_back_at_min_two():
+    user_id, account_id, cats = await _setup()
+    await _txn(account_id, "ONEOFF", cat=cats["Dining"])  # seen once
+
+    async with AsyncSessionLocal() as db:
+        summary = await promote_confirmed_to_rules(db, user_id, dry_run=False, min_transactions=2)
+
+    assert summary.rules_created == 0
+    assert await _rules(user_id) == []
+
+
+async def test_min_one_blankets_even_a_single_confirmed_merchant():
+    user_id, account_id, cats = await _setup()
+    await _txn(account_id, "ONEOFF", cat=cats["Dining"])
+
+    async with AsyncSessionLocal() as db:
+        summary = await promote_confirmed_to_rules(db, user_id, dry_run=False, min_transactions=1)
+
+    assert summary.rules_created == 1
+    assert [r.matcher for r in await _rules(user_id)] == ["ONEOFF"]
+
+
+async def test_a_merchant_confirmed_to_two_categories_is_skipped_not_guessed():
+    user_id, account_id, cats = await _setup()
+    await _txn(account_id, "SPLIT", cat=cats["Groceries"])
+    await _txn(account_id, "SPLIT", cat=cats["Dining"])
+
+    async with AsyncSessionLocal() as db:
+        summary = await promote_confirmed_to_rules(db, user_id, dry_run=False, min_transactions=1)
+
+    assert summary.rules_created == 0
+    assert await _rules(user_id) == []
+
+
+async def test_confirmed_promotion_is_idempotent():
+    user_id, account_id, cats = await _setup()
+    for _ in range(2):
+        await _txn(account_id, "THERESA", cat=cats["Groceries"])
+
+    async with AsyncSessionLocal() as db:
+        first = await promote_confirmed_to_rules(db, user_id, dry_run=False, min_transactions=2)
+    async with AsyncSessionLocal() as db:
+        second = await promote_confirmed_to_rules(db, user_id, dry_run=False, min_transactions=2)
+
+    assert first.rules_created == 1
+    assert second.rules_created == 0
+    assert len(await _rules(user_id)) == 1
+
+
+async def test_confirmed_promotion_ignores_income_rows():
+    """A merchant seen only as income never becomes a spend-category rule."""
+    user_id, account_id, cats = await _setup()
+    for _ in range(2):
+        await _txn(account_id, "EMPLOYER", amount=5000, kind="income", cat=cats["Groceries"])
+
+    async with AsyncSessionLocal() as db:
+        summary = await promote_confirmed_to_rules(db, user_id, dry_run=False, min_transactions=1)
+
+    assert summary.rules_created == 0
+
+
+async def test_confirmed_promotion_endpoint(auth_client):
+    r = await auth_client.post(
+        "/accounts", json={"name": "Checking", "institution": "T", "type": "depository"}
+    )
+    account_id = r.json()["id"]
+    user_id = await _account_user(account_id)
+    async with AsyncSessionLocal() as db:
+        cat = Category(name="Dining", user_id=user_id)
+        db.add(cat)
+        await db.commit()
+        cat_id = cat.id
+    for _ in range(2):
+        await _txn(uuid.UUID(account_id), "CAFE", cat=cat_id)
+
+    r = await auth_client.post("/rules/from-confirmed?dry_run=false&min_transactions=2")
+    assert r.status_code == 200, r.text
+    assert r.json()["rules_created"] == 1
+    rules = (await auth_client.get("/rules")).json()
+    assert any(rule["matcher"] == "CAFE" for rule in rules)
