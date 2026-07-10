@@ -246,6 +246,24 @@ data class MonthlyInsightOut(
     @SerialName("narrative_source") val narrativeSource: String = "unavailable",
 )
 
+// --- Subscriptions (#22) ---
+@Serializable
+data class SubscriptionOut(
+    val merchant: String,
+    val cadence: String,
+    @SerialName("typical_amount_cents") val typicalAmountCents: Long,
+    val occurrences: Int,
+    @SerialName("last_date") val lastDate: String,
+    @SerialName("last_amount_cents") val lastAmountCents: Long,
+    @SerialName("annual_cost_cents") val annualCostCents: Long,
+)
+
+@Serializable
+data class SubscriptionsOut(
+    val subscriptions: List<SubscriptionOut>,
+    @SerialName("total_annual_cost_cents") val totalAnnualCostCents: Long,
+)
+
 // --- Rule promotion (#25) ---
 @Serializable
 data class RuleApplicationOut(

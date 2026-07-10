@@ -28,6 +28,7 @@ import com.magpie.ui.settings.SettingsScreen
 import com.magpie.ui.signin.SignInScreen
 import com.magpie.ui.merchant.MerchantDetailScreen
 import com.magpie.ui.transactions.TransactionsScreen
+import com.magpie.ui.subscriptions.SubscriptionsScreen
 import com.magpie.ui.trends.TrendsScreen
 
 /**
@@ -67,6 +68,7 @@ private fun routeForDeepLink(host: String?): String? = when (host) {
     "review" -> Routes.REVIEW_QUEUE
     "transactions" -> Routes.TRANSACTIONS
     "home" -> Routes.HOME
+    "subscriptions" -> Routes.SUBSCRIPTIONS
     else -> null
 }
 
@@ -123,6 +125,7 @@ private fun SignedInGraph(deepLinkHost: StateFlow<String?> = MutableStateFlow(nu
             composable(Routes.BUDGETS) { BudgetsScreen(navController) }
             composable(Routes.RULES) { RulesScreen(navController) }
             composable(Routes.TRENDS) { TrendsScreen(navController) }
+            composable(Routes.SUBSCRIPTIONS) { SubscriptionsScreen(navController) }
             composable(Routes.MERCHANT_DETAIL) { entry ->
                 val merchant = entry.arguments?.getString("merchant")
                     ?.let { java.net.URLDecoder.decode(it, "UTF-8") }

@@ -123,6 +123,9 @@ interface ApiService {
     suspend fun createBudget(@Body req: BudgetCreate): BudgetOut
 
     // --- Cash-flow calendar ---
+    @GET("subscriptions")
+    suspend fun getSubscriptions(): SubscriptionsOut
+
     @GET("cashflow")
     suspend fun getCashflow(): CashflowCalendarOut
 

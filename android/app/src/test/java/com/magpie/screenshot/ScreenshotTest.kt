@@ -49,6 +49,9 @@ import com.magpie.ui.merchant.MerchantDetailUiState
 import com.magpie.ui.rules.RuleRow
 import com.magpie.ui.rules.RulesContent
 import com.magpie.ui.rules.RulesUiState
+import com.magpie.ui.subscriptions.SubscriptionsContent
+import com.magpie.ui.subscriptions.SubscriptionsUiState
+import com.magpie.data.remote.SubscriptionOut
 import com.magpie.ui.home.HomeContent
 import com.magpie.ui.home.HomeUiState
 import com.magpie.ui.onboarding.OnboardingContent
@@ -149,6 +152,12 @@ class ScreenshotTest {
 
     @Test
     fun rules_dark() = capture("rules_dark", dark = true) { RulesScene() }
+
+    @org.junit.Test
+    fun subscriptions_light() = capture("subscriptions_light", dark = false) { SubscriptionsScene() }
+
+    @org.junit.Test
+    fun subscriptions_dark() = capture("subscriptions_dark", dark = true) { SubscriptionsScene() }
 
     @Test
     fun bottom_bar_light() = capture("bottom_bar_light", dark = false) { BottomBarScene() }
@@ -632,6 +641,22 @@ private fun RulesScene() {
         onSetEnabled = { _, _ -> },
         onDelete = {},
         onCreateSuggested = {},
+    )
+}
+
+@Composable
+private fun SubscriptionsScene() {
+    SubscriptionsContent(
+        state = SubscriptionsUiState(
+            subscriptions = listOf(
+                SubscriptionOut("NETFLIX", "monthly", 1599, 12, "2026-07-01", 1899, 19188),
+                SubscriptionOut("SPOTIFY", "monthly", 1099, 10, "2026-07-01", 1099, 13188),
+                SubscriptionOut("THE GYM", "monthly", 5000, 8, "2026-06-15", 5000, 60000),
+            ),
+            totalAnnualCostCents = 92376,
+            loading = false,
+        ),
+        onBack = {},
     )
 }
 

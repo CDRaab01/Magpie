@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.CircularProgressIndicator
@@ -62,6 +63,7 @@ fun TrendsScreen(navController: NavController) {
         state = state,
         onBack = { navController.popBackStack() },
         onMerchantClick = { navController.navigate(com.magpie.ui.navigation.Routes.merchantDetail(it)) },
+        onViewRecurring = { navController.navigate(com.magpie.ui.navigation.Routes.SUBSCRIPTIONS) },
     )
 }
 
@@ -71,6 +73,7 @@ internal fun TrendsContent(
     state: TrendsUiState,
     onBack: () -> Unit,
     onMerchantClick: (String) -> Unit = {},
+    onViewRecurring: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -79,6 +82,14 @@ internal fun TrendsContent(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onViewRecurring) {
+                        Icon(
+                            Icons.Default.Autorenew,
+                            contentDescription = "Recurring charges",
+                        )
                     }
                 },
             )

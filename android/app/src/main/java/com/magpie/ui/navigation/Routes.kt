@@ -11,6 +11,7 @@ object Routes {
     const val BUDGETS = "budgets"
     const val RULES = "rules"
     const val TRENDS = "trends"
+    const val SUBSCRIPTIONS = "subscriptions"
     const val SETTINGS = "settings"
 
     // Merchant drill-down (#16) — the merchant name is URL-encoded into a single path segment.

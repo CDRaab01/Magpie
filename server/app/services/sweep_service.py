@@ -52,6 +52,7 @@ LINK_BILLS = "magpie://bills"
 LINK_CASHFLOW = "magpie://cashflow"
 LINK_ACCOUNTS = "magpie://accounts"
 LINK_HOME = "magpie://home"
+LINK_SUBSCRIPTIONS = "magpie://subscriptions"
 
 
 async def count_unparsed_events(db: AsyncSession, user_id: uuid.UUID) -> int:
@@ -532,7 +533,7 @@ async def run_subscription_sweeps(
                 f"New recurring charge: ${rec.typical_amount_cents / 100:,.2f} {rec.cadence} at "
                 f"{sub.merchant} (~${rec.annual_cost_cents / 100:,.0f}/yr).",
                 title="Magpie: new subscription",
-                click=LINK_HOME,
+                click=LINK_SUBSCRIPTIONS,
             )
         hike = price_hike_cents(rec)
         key = f"price_hike:{sub.merchant}:{rec.last_amount_cents}"
@@ -542,7 +543,7 @@ async def run_subscription_sweeps(
                 f"${rec.last_amount_cents / 100:,.2f} vs its usual "
                 f"${rec.typical_amount_cents / 100:,.2f}.",
                 title="Magpie: subscription price up",
-                click=LINK_HOME,
+                click=LINK_SUBSCRIPTIONS,
             )
 
 
