@@ -15,6 +15,15 @@ depository account (outflow, negative) and lands on a card account as a payment/
 import datetime
 from dataclasses import dataclass
 
+# How far apart a card payment's two legs may post. Was 3; widened to 5 on 2026-07-10 after the
+# real backfill produced a miss by exactly one day: an $8,000 Amex payment posted to the card on
+# 2025-02-06 and cleared checking on 2025-02-10, so the legs never paired and $8,000 sat in the
+# ledger as *spend* — the double-count this module exists to prevent. Widening is safe because
+# pairing already demands exact cancellation plus the payment shape (one card leg positive, one
+# depository leg negative, different accounts); two unrelated transactions colliding on an exact
+# opposite amount, in that shape, inside five days is not a realistic false positive.
+DEFAULT_WINDOW_DAYS = 5
+
 
 @dataclass(frozen=True)
 class TransferCandidate:
@@ -49,10 +58,10 @@ def is_card_payment_pair(a: TransferCandidate, b: TransferCandidate) -> bool:
 def find_transfer_match(
     candidate: TransferCandidate,
     pool: list[TransferCandidate],
-    window_days: int = 3,
+    window_days: int = DEFAULT_WINDOW_DAYS,
 ) -> TransferCandidate | None:
     """The closest-dated pool member that forms a card-payment pair with the candidate, within
-    `window_days` either side (a payment can post to checking a day or two before/after it
+    `window_days` either side (a payment can post to checking a few days before/after it
     posts to the card). Exact cancellation only — partial payments fall through to review."""
     lo = candidate.date - datetime.timedelta(days=window_days)
     hi = candidate.date + datetime.timedelta(days=window_days)

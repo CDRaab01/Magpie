@@ -201,3 +201,36 @@ def test_f3_two_depository_accounts_do_not_pair():
     savings = TransferCandidate("s", "savings", "depository", 5000, datetime.date(2026, 7, 5))
     checking = _checking("c", -5000, datetime.date(2026, 7, 5))
     assert find_transfer_match(checking, [savings]) is None
+
+
+# --- The pairing window (widened 3 -> 5 on 2026-07-10) -----------------------------------
+#
+# The real Amex backfill missed a pair by exactly one day, leaving $8,000 booked as spend.
+
+
+def test_legs_four_days_apart_pair_the_real_amex_case():
+    """Amex credited the $8,000 payment on the 6th; checking cleared it on the 10th."""
+    checking = _checking("chk", -800000, datetime.date(2025, 2, 10))
+    pool = [_card("amex", 800000, datetime.date(2025, 2, 6))]
+    match = find_transfer_match(checking, pool)
+    assert match is not None and match.id == "amex"
+
+
+def test_legs_five_days_apart_still_pair():
+    checking = _checking("chk", -800000, datetime.date(2025, 2, 11))
+    pool = [_card("amex", 800000, datetime.date(2025, 2, 6))]
+    assert find_transfer_match(checking, pool) is not None
+
+
+def test_legs_six_days_apart_do_not_pair():
+    """The window is widened, not removed."""
+    checking = _checking("chk", -800000, datetime.date(2025, 2, 12))
+    pool = [_card("amex", 800000, datetime.date(2025, 2, 6))]
+    assert find_transfer_match(checking, pool) is None
+
+
+def test_widened_window_still_refuses_a_non_payment_shape():
+    """F3 holds: a wider window must not fuse a coincidental same-amount deposit."""
+    card_spend = _card("spend", -5000, datetime.date(2026, 7, 10))
+    pool = [_checking("deposit", 5000, datetime.date(2026, 7, 14))]
+    assert find_transfer_match(card_spend, pool) is None
