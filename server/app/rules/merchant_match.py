@@ -12,6 +12,27 @@ import re
 # "OTIFY", POSTAL -> "TAL", POSTMATES -> "TMATES". Requiring a separator means the prefix only
 # strips when it's genuinely a standalone token.
 _NOISE_PREFIX_RE = re.compile(r"^(?:SQ|TST|PAYPAL|SP|POS|AMZN|WL)(?:\s*\*\s*|\s+)")
+# Bank-statement transaction-type prefixes (from the real US Bank export): the actual merchant is
+# what FOLLOWS. Stripping them turns "WEB AUTHORIZED PMT ROCKET MORTGAGE" into "ROCKET MORTGAGE"
+# for display, better AI input, and rule matching — and it merges the same payee across
+# transaction types (a "WEB AUTHORIZED PMT VENMO" and an "ELECTRONIC WITHDRAWAL VENMO" both
+# become "VENMO"). Longest/most-specific alternatives first so "DEBIT PURCHASE -VISA" wins over
+# "DEBIT PURCHASE". These are statement artifacts, not real merchant names, so stripping is safe.
+_BANK_PREFIX_RE = re.compile(
+    r"^(?:"
+    r"WEB AUTHORIZED PMT|"
+    r"RECURRING DEBIT PURCHASE|"
+    r"DEBIT PURCHASE -VISA|"
+    r"DEBIT PURCHASE|"
+    r"ELECTRONIC WITHDRAWAL|"
+    r"ELECTRONIC DEPOSIT|"
+    r"ZELLE INSTANT PMT FROM|"
+    r"ZELLE INSTANT PMT TO|"
+    r"ACH WITHDRAWAL|"
+    r"ACH DEPOSIT|"
+    r"POS DEBIT"
+    r")\s+"
+)
 _NON_ALNUM_RE = re.compile(r"[^A-Z0-9 ]")
 _TRAILING_ID_RE = re.compile(r"\s+#?\d{3,}$")
 _MULTISPACE_RE = re.compile(r"\s+")
@@ -19,7 +40,8 @@ _MULTISPACE_RE = re.compile(r"\s+")
 
 def normalize_merchant(raw: str) -> str:
     text = raw.upper().strip()
-    text = _NOISE_PREFIX_RE.sub("", text)
+    text = _BANK_PREFIX_RE.sub("", text)  # strip the bank transaction-type wrapper first
+    text = _NOISE_PREFIX_RE.sub("", text)  # then any card-network noise on the merchant itself
     text = _TRAILING_ID_RE.sub("", text)
     text = _NON_ALNUM_RE.sub(" ", text)
     text = _MULTISPACE_RE.sub(" ", text).strip()

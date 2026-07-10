@@ -80,7 +80,7 @@ internal fun SplitSheetContent(
             .padding(bottom = MagpieTheme.spacing.lg),
     ) {
         SectionHeader(
-            label = txn.merchantRaw ?: "Split transaction",
+            label = txn.merchantNorm ?: txn.merchantRaw ?: "Split transaction",
             channel = MagpieTheme.colors.money.base,
         )
         Text("Total ${formatCents(txn.amount)}", style = MaterialTheme.typography.bodyMedium)

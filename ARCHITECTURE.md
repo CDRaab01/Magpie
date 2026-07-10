@@ -225,7 +225,14 @@ Pulse composite build, suite signing/release/deploy conventions.
   it no longer chews mid-word — SPOTIFY/POSTAL/POSTMATES survive; and matching is now *one-way*
   containment: the rule pattern must appear within the observed merchant, so a broad rule
   ("AMAZON") matches a specific merchant ("AMAZON PRIME") but the specific "AMAZON PRIME" rule
-  no longer mis-fires on a plain "AMAZON" purchase) + `transfer_matching.py`
+  no longer mis-fires on a plain "AMAZON" purchase. **Bank-prefix strip (2026-07-09, from the
+  real US Bank data):** normalization also strips statement transaction-type wrappers —
+  `WEB AUTHORIZED PMT`, `ELECTRONIC WITHDRAWAL/DEPOSIT`, `RECURRING DEBIT PURCHASE`,
+  `DEBIT PURCHASE [-VISA]`, `ZELLE INSTANT PMT FROM/TO` — so `merchant_norm` is the clean payee
+  ("ROCKET MORTGAGE", not "WEB AUTHORIZED PMT ROCKET MORTGAGE"), which the Android screens now
+  display (they switched from `merchant_raw` to `merchant_norm ?: merchant_raw`), the AI reads,
+  and `/summary/merchants` groups by — merging a payee across transaction types. `merchant_raw`
+  stays the untouched original for provenance/search) + `transfer_matching.py`
   (**F3 fixed 2026-07-08** — pairs only a *payment-shaped* pair: the `card` leg is the
   positive inflow, the `depository` leg the negative outflow, net zero, different account,
   within a day window. Requiring the card-payment shape — not merely two ±equal amounts —

@@ -131,7 +131,7 @@ private fun TransactionRow(txn: TransactionOut) {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(txn.merchantRaw ?: txn.merchantNorm ?: "—", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(txn.merchantNorm ?: txn.merchantRaw ?: "—", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(txn.date, style = MaterialTheme.typography.bodySmall)
             }
             Text(formatCents(txn.amount), color = color)

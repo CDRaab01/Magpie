@@ -167,7 +167,7 @@ private fun ReviewQueueRow(
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(txn.merchantRaw ?: txn.kind.replaceFirstChar { it.uppercase() })
+                Text(txn.merchantNorm ?: txn.merchantRaw ?: txn.kind.replaceFirstChar { it.uppercase() })
                 Text(txn.date, style = MaterialTheme.typography.bodySmall)
                 // Distinct from a rule hit (`rule_note`, teal/needs-review text): an AI draft
                 // is never shown as fact, always labeled "AI suggests" with its own accept
@@ -245,7 +245,7 @@ private fun CorrectionSheet(
                 .padding(bottom = MagpieTheme.spacing.lg),
         ) {
             SectionHeader(
-                label = txn.merchantRaw ?: "Transaction",
+                label = txn.merchantNorm ?: txn.merchantRaw ?: "Transaction",
                 channel = MagpieTheme.colors.needsReview.base,
             )
             Text(formatCents(txn.amount), style = MaterialTheme.typography.bodyMedium)

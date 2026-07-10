@@ -72,7 +72,7 @@ internal fun TransactionActionsContent(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         SectionHeader(
-            label = txn.merchantRaw ?: txn.kind.replaceFirstChar { it.uppercase() },
+            label = txn.merchantNorm ?: txn.merchantRaw ?: txn.kind.replaceFirstChar { it.uppercase() },
             channel = MagpieTheme.colors.money.base,
         )
         Text(

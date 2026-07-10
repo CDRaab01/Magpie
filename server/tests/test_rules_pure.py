@@ -89,6 +89,28 @@ def test_normalize_strips_trailing_transaction_id():
     assert normalize_merchant("XCEL ENERGY 88213091") == "XCEL ENERGY"
 
 
+def test_normalize_strips_bank_statement_prefixes():
+    # Real US Bank descriptions wrap the merchant in a transaction-type prefix.
+    assert normalize_merchant("WEB AUTHORIZED PMT ROCKET MORTGAGE") == "ROCKET MORTGAGE"
+    assert normalize_merchant("ELECTRONIC WITHDRAWAL PROFED FED CU") == "PROFED FED CU"
+    assert normalize_merchant("RECURRING DEBIT PURCHASE FRONTIER COMM") == "FRONTIER COMM"
+    assert normalize_merchant("ELECTRONIC DEPOSIT BAE SYSTEMS") == "BAE SYSTEMS"
+    # "DEBIT PURCHASE -VISA" must win over the shorter "DEBIT PURCHASE", and card-network noise
+    # on the inner merchant still strips.
+    assert normalize_merchant("DEBIT PURCHASE -VISA COSTCO WHSE") == "COSTCO WHSE"
+    assert normalize_merchant("DEBIT PURCHASE COSTCO WHSE") == "COSTCO WHSE"
+    # Same payee across transaction types collapses to one merchant.
+    assert normalize_merchant("WEB AUTHORIZED PMT VENMO") == "VENMO"
+    assert normalize_merchant("ELECTRONIC WITHDRAWAL VENMO") == "VENMO"
+
+
+def test_normalize_leaves_ordinary_merchants_untouched():
+    # A real merchant that merely starts with a word like "ELECTRONIC" isn't a bank prefix (no
+    # following transaction-type phrase), so nothing is stripped.
+    assert normalize_merchant("ELECTRONIC ARTS") == "ELECTRONIC ARTS"
+    assert normalize_merchant("MEIJER STORE") == "MEIJER STORE"
+
+
 def test_f8_noise_prefix_does_not_fire_mid_word():
     # The old all-optional-separator regex chewed the front off real merchant names.
     assert normalize_merchant("SPOTIFY") == "SPOTIFY"  # not "OTIFY" (SP)

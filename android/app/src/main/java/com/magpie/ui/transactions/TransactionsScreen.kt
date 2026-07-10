@@ -246,7 +246,7 @@ private fun TransactionRow(txn: TransactionOut, categoryName: String?, onClick: 
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
-                Text(txn.merchantRaw ?: txn.kind.replaceFirstChar { it.uppercase() })
+                Text(txn.merchantNorm ?: txn.merchantRaw ?: txn.kind.replaceFirstChar { it.uppercase() })
                 Text(
                     listOfNotNull(txn.date, categoryName, if (txn.isSplit) "Split" else null)
                         .joinToString(" · "),
