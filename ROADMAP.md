@@ -356,6 +356,15 @@ Pydantic-validated, drafts never auto-commit, descriptive never advisory.
     disagree on the draft is skipped, never guessed; income rows never inherit a spend category;
     re-running is idempotent. Matching reuses `merchant_match.matches`, never a SQL `LIKE`, so a
     rule cannot mean one thing at ingest and another applied to history.
+    **`POST /rules/from-confirmed` added 2026-07-10** — the sibling that promotes *confirmed*
+    categories (the most legitimate rule source) rather than AI drafts, for after the queue is
+    worked. A merchant split across categories is skipped, never guessed; defaults to
+    `min_transactions=2` (a merchant seen once is a one-off). **After the owner emptied the queue
+    (1,178 rows categorized 2026-07-10 — 782 AI drafts accepted, 321 income→Income, 72 transfers
+    confirmed, 3 by hand), this was run at min=2: +22 rules (377→399)** for the recurring merchants
+    the draft pass had skipped as human-confirmed, so future Venmo/Zelle→Other, the untracked
+    cards→Debt Payment, and the mortgage/credit-union→Housing now auto-file. The 814 seen-once
+    merchants were deliberately left rule-free.
     **Still owed:** the Android affordance (this is server-only), and three rules the model got
     wrong that want an owner's eye — `MONTHLY MAINTENANCE FEE → Housing` (a bank fee),
     `WHATNOT INC → Other` (408 rows, a shopping marketplace), `PAYPAL → Other`.
