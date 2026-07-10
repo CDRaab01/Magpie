@@ -26,35 +26,47 @@ calendar, transaction splits, rules editor, onboarding, deep-linked alerts, and 
 suite-parity pass (bottom bar, hero, content Home, color grammar, ~28 Roborazzi baselines)
 have all shipped.
 
-**But:** the ledger has never held a real dollar (one "Test" account; 22 real Amex alerts
-sit unfiled), the production LLM has never fired (`llm_base_url` unset — the AI stage
-silently skips), and no screen draws a single chart — the suite's most numbers-heavy app is
-its only member with zero data visualization (no `Sparkline`, `ProgressRing`, `TickerNumber`,
-or Canvas anywhere, while Plate's Home leads with a ring + ticker + sparkline and Spotter has
-a full animated trend chart).
+**Superseded 2026-07-09 — all three of the original "But:" gaps are closed.** The ledger now
+holds **4,747 real transactions** across four real accounts (Amex, Checking, Savings, Discover),
+backfilled from CSV and reconciling; the unparsed ingest backlog is zero. The production LLM is
+wired and deployed (`LLM_BASE_URL` + the JSON-fence fix, Wave 2 #17), so the AI categorization
+stage fires for real. And Wave 1's charts have landed (Trends, Home sparklines + safe-to-spend
+ticker, Budgets ring, merchant drill-down). What remains is proof over time, not absence:
+statement parity for two consecutive months (#3), the Savings backfill (#2), and the two
+unbuilt sweeps (#5).
 
 ## Wave 0 — v1 exit: prove it on real money
 
 **The critical path is data, not code.** The gate chain below is strictly ordered; everything
 else in this wave can run in parallel with it.
 
-1. **[H] Create the real accounts** (Amex, US Bank checking, Discover — with last4s). New
-   alerts auto-file the moment these exist; the 22 already-seen stay unfiled until the replay
-   tool (#7) retro-files them.
+1. **[H] Create the real accounts — DONE.** Amex (…2005), Checking (…7197), Savings (…6340),
+   Discover. **Consolidated 2026-07-09:** a stale second Amex account (…1007, the owner's
+   *replaced* card) held one email-sourced charge and no history — a live double-count risk,
+   since reconciliation matches within an account and the Amex CSV lands on …2005. Its rows were
+   moved to …2005 and the account deleted; `match_account` now also ignores inactive accounts,
+   so a retired card's alerts surface in the unparsed operator view rather than misfiling.
+   _(Surfaced by that consolidation, still owed to the review queue **[H]**: two $9.99 `GOOGLE`
+   pendings a day apart — distinct Message-IDs, one per card number. Either two subscriptions or
+   Google re-billing the new card. The July Amex CSV settles it.)_
 2. **CSV backfill** per account. **Amex IN HAND + first reality-fix landed (2026-07-09):** the
    owner supplied 16 Amex exports = a complete **18-month** run (2024-12-09 → 2026-06-12, 2633
    rows, one card account). Dry-running the *real* import service against them surfaced the
    expected reality-fix: sign alone is wrong for a card — the naive `amount>0 ⇒ income` would have
    booked **~$208k of phantom income** (17 card payments + 49 refunds). Fixed with
    `institution_mappings.default_kind_for` (card: positive = payment→transfer / refund, never
-   income); re-verified on the corpus ($0 income, −$198k net spend, transfers excluded). **Still
-   to do:** deploy the fix `[H]`, then the real prod import (needs the account created + owner
-   auth — minting a session token server-side is the agreed path). **US Bank Checking + Savings
-   format VALIDATED (2026-07-09)** on a 1-month sample: parses with no code change (standard signed
+   income); re-verified on the corpus ($0 income, −$198k net spend, transfers excluded). The fix
+   is deployed and the real prod import is done. **US Bank Checking + Savings
+   format VALIDATED (2026-07-09):** parses with no code change (standard signed
    format, "Name" = description, no flip); paychecks book as income; the Amex/Discover payment legs
    pair to zero cross-account; and a new fix books internal checking↔savings moves as transfers
-   (they were double-counted as spend+income). **Still owed: the full ~3-year US Bank export** (this
-   was the default 1-month range). **Visa: likely moot** — the "VISA" lines in checking are
+   (they were double-counted as spend+income).
+   **Backfill status as actually imported (verified against prod 2026-07-09):**
+   Amex …2005 — 2,633 CSV rows, 2024-12-09 → 2026-06-12. Discover — 693 rows, 2024-07 → 2026-06.
+   **Checking …7197 — 1,317 rows, 2024-06-21 → 2026-07-08, dense and gapless (40–78 rows every
+   month): complete, nothing owed.** **Savings …6340 — 69 rows but only from 2025-03-31, and the
+   account predates that (owner-confirmed): the full Savings export is the one remaining backfill
+   `[H]`.** **Visa: moot** — the "VISA" lines in checking are
    *debit-card* purchases already captured in the checking feed, not a separate credit card.
    **Discover IN HAND + confirmed (2026-07-09):** a real 24-month export (693 rows, 2024-07 →
    2026-06); same positive-is-charge convention as Amex (added to the sign-flip list), and its two
@@ -64,6 +76,14 @@ else in this wave can run in parallel with it.
    rules engine's medians (cold start §5) and is the precondition for Wave 2's AI being worth
    anything. _(Nice-to-have surfaced: a per-transaction "tag" for the Christian/Elizabeth
    cardholder split — a small future feature, not blocking.)_
+2a. **The first real review-queue correction (2026-07-09).** Replay filed a $12,086.78 checking
+   outflow as a pending *spend*; the owner identified it as a card payment, and it was confirmed
+   as `kind=transfer` through the app's own PATCH path. July spend fell from ~$22.8k to
+   $10,729.67 — the concrete proof of the double-count law (CLAUDE.md §2: card payments are
+   transfers, never spend). It sits **unpaired** (`transfer_group` NULL) until the July Amex CSV
+   imports its other leg; note F3 then routes that leg to review rather than auto-pairing,
+   because this row is now human-`confirmed` and must never be silently rewritten. Pairing it is
+   a one-tap `[H]` follow-up once the Amex July export lands.
 3. **[H] Anchor checkpoints and drive every account to "Reconciled"** — then the
    **statement-parity clock starts**: two consecutive to-the-penny months (§9, the v1
    acceptance gate). Mostly elapsed time plus a monthly reconciliation habit.
@@ -95,9 +115,12 @@ Code items, all unblocked now:
    whose swipe the CSV already posted is recorded `duplicate` via `find_posted_duplicate()`, the
    inverse of the F4 matcher, reusing its one "same swipe" tolerance. Scoped to `unparsed` events
    on purpose: re-parsing a `created` one mutates live history and belongs with #25. 11 tests
-   (service + endpoint) and 7 more on the pure matcher. **Its customer is still waiting on #1** —
-   the 22 Amex alerts retro-file the moment the real Amex account exists `[H]`; until then replay
-   correctly reports them as "no unique account matches last4 …". The Discover
+   (service + endpoint) and 7 more on the pure matcher. **Run against prod 2026-07-09 and its
+   customer is served:** the "22 unfiled Amex alerts" this item was written for had already
+   auto-filed once the real Amex account existed; the actual backlog was 4 US Bank events, of
+   which 2 filed and **2 were correctly refused as swipes the CSV backfill had already posted** —
+   the double-count guard earning its keep on real money. The unparsed backlog is now zero. The
+   Discover
    statement-ready parser follows **[H]** once the owner confirms the real sender address
    (browser flakiness blocked that confirmation last time; don't guess).
 8. **Small UI debts from Tier 4:** AI-suggestion text gets its own violet voice and teal is
@@ -114,8 +137,8 @@ Code items, all unblocked now:
 11. **Ops loose ends:** verify the uptime-kuma monitor exists and pages; update host
     `C:\Code\CLAUDE.md` + ROADMAP2's Magpie rows from "planned" to live; backup passphrase →
     password manager + offsite copy **[H]**.
-11a. **`pytest` wrote into the production database — fixed at the source 2026-07-09, prod
-    cleanup still owed `[H]`.** `app/config.py` falls back to `server/.env` when `DATABASE_URL`
+11a. **`pytest` wrote into the production database — fixed at the source AND cleaned up
+    2026-07-09.** `app/config.py` falls back to `server/.env` when `DATABASE_URL`
     is unset, and on this host that file points at the live `magpie` DB on :5436. CI was safe
     only by accident (its workflow exports `.../magpie_test`); a bare local `pytest` resolved to
     prod. This is the real, much larger story behind the old "smoke user's prod residue" line:
@@ -125,9 +148,14 @@ Code items, all unblocked now:
     tripwire that refuses a non-`_test` target; verified by running the full suite and watching
     the prod user count hold at 458. **The real financial data was never corrupted** — the 2 real
     users, 6 real accounts and 4,745 real transactions are untouched (every service is
-    user-scoped, so test rows never mingled). *Owed:* a one-shot cleanup deleting the test users
-    and cascading their accounts/transactions/ingest_events out of prod, taken against a fresh
-    `pg_dump` and diffed before/after.
+    user-scoped, so test rows never mingled). *Cleaned up:* `scripts/cleanup_test_residue.sql`
+    (rehearsed on a restored dump both ways — correct run, and an injected over-broad pattern that
+    the tripwire aborted) was applied to prod: `DELETE 456`, "OK: 4745 real transactions
+    preserved", ending at 2 users / 6 accounts, zero orphans. A second bug hid behind the first —
+    CI runs `alembic upgrade head` before pytest and nothing did locally, so the suite had been
+    leaning on prod's migrated schema; conftest now runs alembic itself. *Still owed:*
+    `import_batches` has no `user_id` and no FK to one, so ~88 test batches there can't be
+    attributed or pruned — scoping that table to a user is the real fix, not a DELETE.
 
 **v1 is done when:** parity holds for two consecutive months, the owner runs the daily review
 from the phone, a simulated missing bill and a short paycheck both page it, and the on-device
