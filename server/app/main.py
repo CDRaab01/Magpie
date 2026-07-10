@@ -26,6 +26,7 @@ from app.routers import (
     rules,
     suite_auth,
     insights,
+    subscriptions,
     summary,
     transactions,
 )
@@ -130,6 +131,7 @@ app.include_router(bills.router)
 app.include_router(budgets.router)
 app.include_router(cashflow.router)
 app.include_router(summary.router)
+app.include_router(subscriptions.router)
 app.include_router(insights.router)
 app.include_router(admin.router)
 app.include_router(export.router)

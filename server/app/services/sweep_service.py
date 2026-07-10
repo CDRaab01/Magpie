@@ -27,12 +27,15 @@ from app.models.rule import Rule
 from app.models.transaction import COUNTABLE_STATUSES, Transaction
 from app.models.user import User
 from app.rules.anomaly import category_overspend, is_large_charge
+from app.rules.subscriptions import price_hike_cents
 from app.rules.bands import band_shortfall, median_cents
+from app.rules.merchant_match import matches
 from app.rules.recurrence import InvalidCadence, expected_next_date
 from app.services.alert_latch_service import latched_should_alert
 from app.services.ai.llm_client import LlmClient
 from app.services.ingest_service import make_llm_client
 from app.services.insight_service import generate_monthly_insight
+from app.services.subscription_service import list_subscriptions
 from app.services.rule_service import MIN_OBSERVATIONS_TO_AUTOFILE, observation_history
 from app.services.ntfy_client import HttpNtfyPublisher, NtfyPublisher
 from app.time_util import owner_local_date
@@ -474,6 +477,52 @@ async def run_monthly_digest_sweep(
     await publisher.publish(body, title=f"Magpie: {prev_month:%B} recap", click=LINK_HOME)
 
 
+async def run_subscription_sweeps(
+    db: AsyncSession, user_id: uuid.UUID, publisher: NtfyPublisher, *, now: datetime.datetime
+) -> None:
+    """Two subscription alerts (ROADMAP #22), both latched per merchant: a **new recurrence** — a
+    merchant that has become subscription-shaped and isn't already a rule — and a **price hike** —
+    a subscription whose latest charge broke upward past its typical amount ("Netflix went up $3").
+    Inferred from the ledger (`subscription_service`), so no rule is needed to notice the pattern.
+    """
+    subs = await list_subscriptions(db, user_id, now=now)
+    if not subs:
+        return
+    known = {
+        r.matcher
+        for r in (
+            await db.execute(
+                select(Rule).where(
+                    Rule.user_id == user_id,
+                    Rule.type.in_(("recurring_bill", "merchant_category")),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    }
+    for sub in subs:
+        rec = sub.recurrence
+        is_new = not any(matches(m, sub.merchant) or matches(sub.merchant, m) for m in known)
+        if await latched_should_alert(db, user_id, f"new_recurrence:{sub.merchant}", is_new, now):
+            await publisher.publish(
+                f"New recurring charge: ${rec.typical_amount_cents / 100:,.2f} {rec.cadence} at "
+                f"{sub.merchant} (~${rec.annual_cost_cents / 100:,.0f}/yr).",
+                title="Magpie: new subscription",
+                click=LINK_HOME,
+            )
+        hike = price_hike_cents(rec)
+        key = f"price_hike:{sub.merchant}:{rec.last_amount_cents}"
+        if await latched_should_alert(db, user_id, key, hike is not None, now):
+            await publisher.publish(
+                f"{sub.merchant} went up ${hike / 100:,.2f} — now "
+                f"${rec.last_amount_cents / 100:,.2f} vs its usual "
+                f"${rec.typical_amount_cents / 100:,.2f}.",
+                title="Magpie: subscription price up",
+                click=LINK_HOME,
+            )
+
+
 async def _resolve_sweep_user_id() -> uuid.UUID | None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(User).where(User.email == settings.ingest_user_email))
@@ -508,6 +557,7 @@ async def sweep_loop() -> None:
                     await run_monthly_digest_sweep(
                         db, user_id, publisher, now=now, llm_client=make_llm_client()
                     )
+                    await run_subscription_sweeps(db, user_id, publisher, now=now)
                     await db.commit()  # persist the alert latches (F11) + any expired holds
         except Exception:
             logger.exception("Sweep failed")
