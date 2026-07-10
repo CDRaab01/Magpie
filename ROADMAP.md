@@ -325,7 +325,7 @@ Pydantic-validated, drafts never auto-commit, descriptive never advisory.
 20. **Auto-budget proposals — DONE 2026-07-10** (`GET /budgets/proposals`, deterministic): "Set budgets from your history" offers
     the trailing-3-month median per category as drafts the user confirms one by one. Genre
     table stakes, and it's the review-not-enter law applied to budgets.
-21. **Ask-your-ledger chat (owner's go/no-go before building).** The Plate `coach_chat` shape
+21. **Ask-your-ledger chat — DONE 2026-07-10** (owner approved). `POST /chat` + an "Ask Magpie" screen. The Plate `coach_chat` shape
     over money: a server-side prompt carrying the month's aggregates + category/merchant
     rollups, read-only, descriptive-only, no tool access. Two suite chat precedents exist and
     this is the highest-leverage surface an app like this can have ("how much did we spend on
