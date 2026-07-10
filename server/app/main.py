@@ -14,6 +14,7 @@ from app.ingest.poller import poll_loop
 from app.limiter import limiter
 from app.routers import (
     accounts,
+    admin,
     auth,
     bills,
     budgets,
@@ -129,6 +130,7 @@ app.include_router(budgets.router)
 app.include_router(cashflow.router)
 app.include_router(summary.router)
 app.include_router(insights.router)
+app.include_router(admin.router)
 
 
 @app.get("/health", tags=["health"])
