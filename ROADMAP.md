@@ -142,7 +142,7 @@ Code items, all unblocked now:
    pared back to brand/primary + money-totals (#31's tail); inline editing of a rule's
    band/cadence (the editor is enable/disable/delete today); the `flip_sign` override
    checkbox in the import dialog (server param exists).
-9. **Fixture-sanitization CI guard** (V1 Tier 5 #39): a test asserting every committed `.eml`
+9. **Fixture-sanitization CI guard — DONE 2026-07-10** (`tests/test_fixture_sanitization.py`): a test asserting every committed `.eml`
    uses sentinel values only (last4 `0000`, `SENTINEL` merchants). A real PII leak already
    happened once this build; gitleaks doesn't know what a merchant looks like.
 10. **[H] The accumulated on-device batch:** formal SSO sign-in confirmation (real-use
@@ -305,7 +305,7 @@ Pydantic-validated, drafts never auto-commit, descriptive never advisory.
     from Wave 1's read models — aggregates in, prose out, never raw rows. Surfaced as a Home
     card in the violet AI voice + an ntfy digest ping. Draft-visible in-app first; insights
     may slip without blocking anything else, category drafts may not (unchanged from V1).
-19. **Alert narration:** deviation alerts optionally carry one LLM-drafted context line
+19. **Alert narration — DONE 2026-07-10** (`app/services/ai/narrate.py`): deviation alerts optionally carry one LLM-drafted context line
     ("XCEL is $31 over its 12-month median; the last outlier was January") appended to the
     ntfy body — never replacing the deterministic fact, which stays first.
 19a. **Spending-anomaly alerts — DONE 2026-07-10** (`run_large_charge_sweep` +
@@ -322,7 +322,7 @@ Pydantic-validated, drafts never auto-commit, descriptive never advisory.
     optional and never the trigger. **Watch item:** merchant-string variants (the Meijer case) can
     still trip trigger 1 above $500 — the deeper fix is better `merchant_norm` collapsing, not a
     higher threshold.
-20. **Auto-budget proposals — deterministic, not AI:** "Set budgets from your history" offers
+20. **Auto-budget proposals — DONE 2026-07-10** (`GET /budgets/proposals`, deterministic): "Set budgets from your history" offers
     the trailing-3-month median per category as drafts the user confirms one by one. Genre
     table stakes, and it's the review-not-enter law applied to budgets.
 21. **Ask-your-ledger chat (owner's go/no-go before building).** The Plate `coach_chat` shape
@@ -334,14 +334,14 @@ Pydantic-validated, drafts never auto-commit, descriptive never advisory.
 
 ## Wave 3 — The money works for you
 
-22. **Subscription surfacing** (promoted from post-v1 #1 — it's nearly free). Invert the
+22. **Subscription surfacing — DONE 2026-07-10** (`GET /subscriptions` + new-recurrence/price-hike sweeps). Invert the
     rules engine: a "your recurrences, totaled, sorted by annual cost" screen, plus a
     **new-recurrence-detected** sweep alert ("new monthly charge: $14.99 — HULU") and a
     **price-hike** alert (an upward band breach on a subscription-shaped rule; "Netflix went
     up $3"). The single most actionable screen in consumer finance.
 23. **Savings goals:** named buckets funded from the monthly surplus the ledger already
     computes — a `goals` table, a Home card, a progress ring (Wave 1's components).
-24. **Cash-flow calendar, projected:** recurring-*bill* rules project into the upcoming set
+24. **Cash-flow calendar, projected — DONE 2026-07-10:** recurring-*bill* rules project into the upcoming set
     (today the calendar shows concrete `bill_statements` only, so it goes blank between
     statement emails) — deferred from V1 Tier 3 #23.
 25. **Rule → history application — DONE 2026-07-10** (server side). `POST /rules/from-suggestions`
@@ -387,7 +387,7 @@ Pydantic-validated, drafts never auto-commit, descriptive never advisory.
     now `merchant_norm`): the code was right and the *data* was computed by yesterday's code. A
     `POST /admin/renormalize` — same shape as `/ingest/replay`, dry-run by default — would retire
     the scratch script this needed.
-26. **Monthly export/report:** `GET /export/transactions.csv?month=` + a share action. A
+26. **Monthly export/report — DONE 2026-07-10** (server): `GET /export/transactions.csv?month=` + a share action. A
     trust feature at near-zero cost: the escape hatch that keeps the data the owner's.
 27. **Cross-app wave** (per `Dragonfly/CROSS-APP.md`: flag-gated, degrade-to-absence,
     contract fixtures): Cookbook grocery actuals ("planned vs spent"); the suite weekly
