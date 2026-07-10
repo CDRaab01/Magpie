@@ -30,6 +30,9 @@ from app.rules.anomaly import category_overspend, is_large_charge
 from app.rules.bands import band_shortfall, median_cents
 from app.rules.recurrence import InvalidCadence, expected_next_date
 from app.services.alert_latch_service import latched_should_alert
+from app.services.ai.llm_client import LlmClient
+from app.services.ingest_service import make_llm_client
+from app.services.insight_service import generate_monthly_insight
 from app.services.rule_service import MIN_OBSERVATIONS_TO_AUTOFILE, observation_history
 from app.services.ntfy_client import HttpNtfyPublisher, NtfyPublisher
 from app.time_util import owner_local_date
@@ -433,6 +436,44 @@ async def run_auth_hold_expiry_sweep(
     return dropped
 
 
+async def run_monthly_digest_sweep(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    publisher: NtfyPublisher,
+    *,
+    now: datetime.datetime,
+    llm_client: LlmClient | None = None,
+) -> None:
+    """Once per completed month, page a one-line "what changed" digest for the month just ended
+    (ROADMAP #18's ntfy half). Latched on the summarized month, so it fires once; the LLM headline
+    rides along when the model is up, and a deterministic fallback (spend/net + biggest mover)
+    carries it when the model is off — the ping is never blocked on the prose (§6).
+    """
+    today = owner_local_date(now, settings.owner_timezone)
+    prev_month = _months_before(today.replace(day=1), 1)
+    key = f"monthly_digest:{prev_month:%Y-%m}"
+    # The condition is simply "that month is complete" — always true once we're past it; the latch
+    # turns that into exactly-once. The first sweep after a deploy sends last month's digest once.
+    if not await latched_should_alert(db, user_id, key, True, now):
+        return
+
+    insight = await generate_monthly_insight(db, user_id, prev_month, llm_client=llm_client)
+    spend = insight.spend_cents / 100
+    net = insight.net_cents / 100
+    if insight.narrative_source == "llm" and insight.narrative_summary:
+        body = f"{insight.narrative_headline}. {insight.narrative_summary}"
+    else:
+        mover = insight.category_changes[0] if insight.category_changes else None
+        move_line = ""
+        if mover is not None and mover.delta_cents:
+            direction = "up" if mover.delta_cents > 0 else "down"
+            move_line = (
+                f" {mover.category} was {direction} ${abs(mover.delta_cents) / 100:,.0f} vs usual."
+            )
+        body = f"Spent ${spend:,.0f}, net ${net:,.0f}.{move_line}"
+    await publisher.publish(body, title=f"Magpie: {prev_month:%B} recap", click=LINK_HOME)
+
+
 async def _resolve_sweep_user_id() -> uuid.UUID | None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(User).where(User.email == settings.ingest_user_email))
@@ -464,6 +505,9 @@ async def sweep_loop() -> None:
                     await run_category_overspend_sweep(db, user_id, publisher, now=now)
                     await run_account_freshness_sweep(db, user_id, publisher, now=now)
                     await run_auth_hold_expiry_sweep(db, user_id, now=now)
+                    await run_monthly_digest_sweep(
+                        db, user_id, publisher, now=now, llm_client=make_llm_client()
+                    )
                     await db.commit()  # persist the alert latches (F11) + any expired holds
         except Exception:
             logger.exception("Sweep failed")

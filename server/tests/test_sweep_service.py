@@ -665,3 +665,62 @@ async def test_a_large_charge_with_no_merchant_name_does_not_page():
     publisher = FakeNtfyPublisher()
     await _sweep_large_charge(user_id, publisher)
     assert publisher.published == []
+
+
+# --- monthly digest -----------------------------------------------------------------------
+
+
+async def _sweep_digest(user_id, publisher, now=NOW, llm_client=None):
+    from app.services.sweep_service import run_monthly_digest_sweep
+
+    async with AsyncSessionLocal() as db:
+        await run_monthly_digest_sweep(db, user_id, publisher, now=now, llm_client=llm_client)
+        await db.commit()
+
+
+async def test_monthly_digest_pages_once_for_the_completed_month():
+    # NOW is 2026-08-01, so the digest summarizes July.
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    await _spend_txn(account_id, amount=-120000, date=datetime.date(2026, 7, 10), merchant="SHOP")
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_digest(user_id, publisher)
+    assert len(publisher.published) == 1
+    message, title, _ = publisher.published[0]
+    assert "July recap" in title
+    assert "1,200" in message  # $1,200 spent, deterministic fallback (no LLM)
+
+    await _sweep_digest(user_id, publisher)  # latched — same month, no re-page
+    assert len(publisher.published) == 1
+
+
+async def test_monthly_digest_uses_the_llm_headline_when_available():
+    from app.services.ntfy_client import FakeNtfyPublisher as _P
+
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    await _spend_txn(account_id, amount=-50000, date=datetime.date(2026, 7, 10), merchant="SHOP")
+
+    from app.services.ai.llm_client import FakeLlmClient
+
+    fake_llm = FakeLlmClient('{"headline": "Quiet July", "summary": "Spending was steady."}')
+    publisher = _P()
+    await _sweep_digest(user_id, publisher, llm_client=fake_llm)
+    assert len(publisher.published) == 1
+    assert "Quiet July" in publisher.published[0][0]
+
+
+async def test_a_later_month_is_a_fresh_digest():
+    user_id = await _make_user()
+    account_id = await _make_account(user_id)
+    await _spend_txn(account_id, amount=-50000, date=datetime.date(2026, 7, 10), merchant="SHOP")
+
+    publisher = FakeNtfyPublisher()
+    await _sweep_digest(user_id, publisher)  # July digest
+    assert len(publisher.published) == 1
+
+    # A month later: now = 2026-09-01 → summarizes August, a distinct latch key.
+    sept = datetime.datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
+    await _sweep_digest(user_id, publisher, now=sept)
+    assert len(publisher.published) == 2
