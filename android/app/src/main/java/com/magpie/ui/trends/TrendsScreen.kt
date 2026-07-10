@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.CircularProgressIndicator
@@ -64,6 +65,7 @@ fun TrendsScreen(navController: NavController) {
         onBack = { navController.popBackStack() },
         onMerchantClick = { navController.navigate(com.magpie.ui.navigation.Routes.merchantDetail(it)) },
         onViewRecurring = { navController.navigate(com.magpie.ui.navigation.Routes.SUBSCRIPTIONS) },
+        onAskMagpie = { navController.navigate(com.magpie.ui.navigation.Routes.CHAT) },
     )
 }
 
@@ -74,6 +76,7 @@ internal fun TrendsContent(
     onBack: () -> Unit,
     onMerchantClick: (String) -> Unit = {},
     onViewRecurring: () -> Unit = {},
+    onAskMagpie: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -85,6 +88,12 @@ internal fun TrendsContent(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onAskMagpie) {
+                        Icon(
+                            Icons.Default.Chat,
+                            contentDescription = "Ask Magpie",
+                        )
+                    }
                     IconButton(onClick = onViewRecurring) {
                         Icon(
                             Icons.Default.Autorenew,

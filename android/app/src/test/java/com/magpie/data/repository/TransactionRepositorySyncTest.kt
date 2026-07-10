@@ -27,6 +27,8 @@ import com.magpie.data.remote.TokenResponse
 import com.magpie.data.remote.SplitRequest
 import com.magpie.data.remote.SplitResult
 import com.magpie.data.remote.SubscriptionsOut
+import com.magpie.data.remote.ChatRequest
+import com.magpie.data.remote.ChatResponse
 import com.magpie.data.remote.MonthlyInsightOut
 import com.magpie.data.remote.PromotionResultOut
 import com.magpie.data.remote.TransactionCreate
@@ -153,6 +155,8 @@ private class FakeApi : ApiService {
     override suspend fun createBudget(req: BudgetCreate): BudgetOut = error("unused")
 
     override suspend fun getSubscriptions(): SubscriptionsOut = error("unused")
+
+    override suspend fun chat(req: ChatRequest): ChatResponse = error("unused")
 
     override suspend fun getCashflow(): CashflowCalendarOut = error("unused")
 

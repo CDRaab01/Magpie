@@ -126,6 +126,9 @@ interface ApiService {
     @GET("subscriptions")
     suspend fun getSubscriptions(): SubscriptionsOut
 
+    @POST("chat")
+    suspend fun chat(@Body req: ChatRequest): ChatResponse
+
     @GET("cashflow")
     suspend fun getCashflow(): CashflowCalendarOut
 

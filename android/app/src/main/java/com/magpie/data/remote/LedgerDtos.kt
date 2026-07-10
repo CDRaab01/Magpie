@@ -246,6 +246,24 @@ data class MonthlyInsightOut(
     @SerialName("narrative_source") val narrativeSource: String = "unavailable",
 )
 
+// --- Ask-your-ledger chat (#21) ---
+@Serializable
+data class ChatMessage(
+    val role: String, // "user" | "assistant"
+    val content: String,
+)
+
+@Serializable
+data class ChatRequest(
+    val message: String,
+    val history: List<ChatMessage> = emptyList(),
+)
+
+@Serializable
+data class ChatResponse(
+    val reply: String,
+)
+
 // --- Subscriptions (#22) ---
 @Serializable
 data class SubscriptionOut(

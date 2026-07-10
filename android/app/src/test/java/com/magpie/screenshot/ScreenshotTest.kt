@@ -52,6 +52,9 @@ import com.magpie.ui.rules.RulesUiState
 import com.magpie.ui.subscriptions.SubscriptionsContent
 import com.magpie.ui.subscriptions.SubscriptionsUiState
 import com.magpie.data.remote.SubscriptionOut
+import com.magpie.data.remote.ChatMessage
+import com.magpie.ui.chat.ChatContent
+import com.magpie.ui.chat.ChatUiState
 import com.magpie.ui.home.HomeContent
 import com.magpie.ui.home.HomeUiState
 import com.magpie.ui.onboarding.OnboardingContent
@@ -68,10 +71,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * JVM screenshot tests (Robolectric native graphics + Roborazzi) — render Magpie's first real
+ * JVM screenshot tests (Robolectric native graphics + Roborazzi) â€” render Magpie's first real
  * screen to PNGs without a device or emulator. Run with `:app:testDebugUnitTest`; images land
  * in `app/screenshots/`. Record with `-Proborazzi.test.record=true`. Mirrors the suite reference
- * (Plate/Cookbook's `ScreenshotTest`) — screenshot the pure Content composable, not the
+ * (Plate/Cookbook's `ScreenshotTest`) â€” screenshot the pure Content composable, not the
  * ViewModel-wired screen, so no Hilt DI is needed here.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -158,6 +161,12 @@ class ScreenshotTest {
 
     @org.junit.Test
     fun subscriptions_dark() = capture("subscriptions_dark", dark = true) { SubscriptionsScene() }
+
+    @org.junit.Test
+    fun chat_light() = capture("chat_light", dark = false) { ChatScene() }
+
+    @org.junit.Test
+    fun chat_dark() = capture("chat_dark", dark = true) { ChatScene() }
 
     @Test
     fun bottom_bar_light() = capture("bottom_bar_light", dark = false) { BottomBarScene() }
@@ -447,7 +456,7 @@ private fun HomeReadyScene() {
                 ),
                 budgetVerdicts = emptyList(),
                 narrativeHeadline = "Dining up this month",
-                narrativeSummary = "Dining ran higher than its usual $300 — about $400 over.",
+                narrativeSummary = "Dining ran higher than its usual $300 â€” about $400 over.",
                 narrativeSource = "llm",
             ),
         ),
@@ -615,21 +624,21 @@ private fun RulesScene() {
                     id = "1",
                     typeLabel = "Income",
                     matcher = "EMPLOYER PAYROLL",
-                    summary = "biweekly ±3d",
+                    summary = "biweekly Â±3d",
                     enabled = true,
                 ),
                 RuleRow(
                     id = "2",
                     typeLabel = "Bill",
                     matcher = "XCEL ENERGY",
-                    summary = "monthly ±20% · → Utilities",
+                    summary = "monthly Â±20% Â· â†’ Utilities",
                     enabled = true,
                 ),
                 RuleRow(
                     id = "3",
                     typeLabel = "Category rule",
                     matcher = "SAMPLE BISTRO",
-                    summary = "→ Dining",
+                    summary = "â†’ Dining",
                     enabled = false,
                 ),
             ),
@@ -641,6 +650,22 @@ private fun RulesScene() {
         onSetEnabled = { _, _ -> },
         onDelete = {},
         onCreateSuggested = {},
+    )
+}
+
+@Composable
+private fun ChatScene() {
+    ChatContent(
+        state = ChatUiState(
+            messages = listOf(
+                ChatMessage("user", "How much did we spend on dining vs May?"),
+                ChatMessage("assistant", "In June you spent $561.71 on dining; in May it was $1,183.17, about half as much."),
+                ChatMessage("user", "What are my biggest recurring charges?"),
+                ChatMessage("assistant", "Your largest recurring charges are the mortgage and school tuition; together they're most of your recurring cost."),
+            ),
+        ),
+        onBack = {},
+        onSend = {},
     )
 }
 
