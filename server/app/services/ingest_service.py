@@ -35,11 +35,16 @@ class IngestPollSummary:
     unparsed: int
 
 
-def make_llm_client() -> LmStudioClient | None:
+def make_llm_client(timeout_seconds: float | None = None) -> LmStudioClient | None:
     """None when `llm_base_url` is unset — the AI stage then silently skips (CLAUDE.md §5:
-    deterministic rules first, the LLM only proposes)."""
-    return (
-        LmStudioClient(settings.llm_base_url, settings.llm_model) if settings.llm_base_url else None
+    deterministic rules first, the LLM only proposes). `timeout_seconds` overrides the default
+    draft timeout for slower callers (the chat passes `llm_chat_timeout_seconds`)."""
+    if not settings.llm_base_url:
+        return None
+    return LmStudioClient(
+        settings.llm_base_url,
+        settings.llm_model,
+        timeout_seconds=timeout_seconds or settings.llm_timeout_seconds,
     )
 
 

@@ -171,3 +171,16 @@ async def test_chat_endpoint_rejects_empty(auth_client):
 
 async def test_chat_endpoint_requires_auth(client):
     assert (await client.post("/chat", json={"message": "hi"})).status_code == 401
+
+
+def test_make_llm_client_honors_a_timeout_override():
+    from app.config import settings
+    from app.services.ingest_service import make_llm_client
+
+    original = settings.llm_base_url
+    settings.llm_base_url = "http://example:1234"
+    try:
+        assert make_llm_client()._timeout == settings.llm_timeout_seconds
+        assert make_llm_client(settings.llm_chat_timeout_seconds)._timeout == 60.0
+    finally:
+        settings.llm_base_url = original

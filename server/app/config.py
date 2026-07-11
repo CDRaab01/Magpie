@@ -97,6 +97,12 @@ class Settings(BaseSettings):
     # falls through to needs_review with no draft, same as before Phase 7).
     llm_base_url: str | None = None
     llm_model: str = "local-model"
+    # LLM call timeouts. Categorization/insight drafts are short and run in background loops, so a
+    # tight bound is right there; the ask-your-ledger chat produces longer prose the local model
+    # can take a while over (the #17/#21 live probes needed ~60s for the fuller answers), so it
+    # gets its own generous timeout — a 15s cap silently turned real answers into the fallback.
+    llm_timeout_seconds: float = 15.0
+    llm_chat_timeout_seconds: float = 60.0
 
 
 settings = Settings()
