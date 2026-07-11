@@ -49,6 +49,7 @@ import com.magpie.data.remote.AccountOut
 import com.magpie.ui.util.RefreshOnResume
 import com.magpie.ui.theme.MagpieTheme
 import com.magpie.util.formatCents
+import java.time.LocalDate
 import design.pulse.ui.components.EmptyState
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
@@ -84,6 +85,7 @@ fun AccountsScreen(navController: NavController) {
         onDismissImportResult = viewModel::dismissImportResult,
         onAddAccount = viewModel::createAccount,
         onDelete = viewModel::deleteAccount,
+        onEnterBalance = viewModel::addCheckpoint,
     )
 
     if (showImportDialog) {
@@ -145,9 +147,11 @@ internal fun AccountsContent(
     onDismissImportResult: () -> Unit,
     onAddAccount: (name: String, institution: String, type: String, last4: String?) -> Unit,
     onDelete: (accountId: String) -> Unit,
+    onEnterBalance: (accountId: String, statementDate: String, statedBalanceCents: Long) -> Unit,
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var deletingAccount by remember { mutableStateOf<AccountOut?>(null) }
+    var enteringBalanceFor by remember { mutableStateOf<AccountOut?>(null) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -189,6 +193,7 @@ internal fun AccountsContent(
                                 account,
                                 onImport = { onStartImport(account.id) },
                                 onDelete = { deletingAccount = account },
+                                onEnterBalance = { enteringBalanceFor = account },
                             )
                         }
                     }
@@ -222,6 +227,17 @@ internal fun AccountsContent(
             onConfirm = { name, institution, type, last4 ->
                 onAddAccount(name, institution, type, last4)
                 showAddDialog = false
+            },
+        )
+    }
+
+    enteringBalanceFor?.let { account ->
+        EnterBalanceDialog(
+            account = account,
+            onDismiss = { enteringBalanceFor = null },
+            onConfirm = { statementDate, statedBalanceCents ->
+                onEnterBalance(account.id, statementDate, statedBalanceCents)
+                enteringBalanceFor = null
             },
         )
     }
@@ -316,7 +332,12 @@ private fun AddAccountDialog(
 }
 
 @Composable
-private fun AccountRow(account: AccountOut, onImport: () -> Unit, onDelete: () -> Unit) {
+private fun AccountRow(
+    account: AccountOut,
+    onImport: () -> Unit,
+    onDelete: () -> Unit,
+    onEnterBalance: () -> Unit,
+) {
     PanelCard(channel = MagpieTheme.colors.money.base, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         SectionHeader(label = account.name, channel = MagpieTheme.colors.money.base)
         Spacer(Modifier.height(8.dp))
@@ -345,6 +366,15 @@ private fun AccountRow(account: AccountOut, onImport: () -> Unit, onDelete: () -
                         color = deltaColor,
                     )
                 }
+                Spacer(Modifier.height(6.dp))
+                // The manual statement-balance path (#4): the honesty meter only becomes real once
+                // the owner has anchored a statement — this is how they do it without a CSV.
+                PulseButton(
+                    text = if (account.balanceDeltaCents == null) "Enter statement balance" else "Update balance",
+                    tonal = true,
+                    compact = true,
+                    onClick = onEnterBalance,
+                )
             }
             PulseButton(
                 text = "Import CSV",
@@ -358,4 +388,90 @@ private fun AccountRow(account: AccountOut, onImport: () -> Unit, onDelete: () -
             }
         }
     }
+}
+
+@Composable
+private fun EnterBalanceDialog(
+    account: AccountOut,
+    onDismiss: () -> Unit,
+    onConfirm: (statementDate: String, statedBalanceCents: Long) -> Unit,
+) {
+    var statementDate by remember { mutableStateOf(LocalDate.now().toString()) }
+    var amount by remember { mutableStateOf("") }
+    val cents = parseDollarsToCents(amount)
+    val isCard = account.type == "card"
+    val dateValid = runCatching { LocalDate.parse(statementDate) }.isSuccess
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Statement balance") },
+        text = {
+            Column {
+                Text(
+                    "Enter the closing balance from ${account.name}'s statement so Magpie can " +
+                        "reconcile the ledger against it.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(12.dp))
+                TextField(
+                    value = statementDate,
+                    onValueChange = { statementDate = it },
+                    label = { Text("Statement date (YYYY-MM-DD)") },
+                    singleLine = true,
+                    isError = !dateValid,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                TextField(
+                    value = amount,
+                    onValueChange = { amount = it },
+                    label = { Text(if (isCard) "Amount owed (e.g. 840.00)" else "Balance (e.g. 2500.00)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    isError = amount.isNotBlank() && cents == null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (isCard) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Recorded as a negative balance — what you owe.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            PulseButton(
+                text = "Save",
+                enabled = dateValid && cents != null,
+                compact = true,
+                onClick = {
+                    if (cents != null) {
+                        val signed = if (isCard) -kotlin.math.abs(cents) else cents
+                        onConfirm(statementDate, signed)
+                    }
+                },
+            )
+        },
+        dismissButton = {
+            PulseButton(text = "Cancel", tonal = true, compact = true, onClick = onDismiss)
+        },
+    )
+}
+
+/** Parse a dollars string ("2500", "2500.00", "-84.5") to signed integer cents, or null if it
+ *  isn't a clean money value. Avoids float rounding by splitting on the decimal point. */
+private fun parseDollarsToCents(input: String): Long? {
+    val s = input.trim().replace(",", "")
+    if (s.isEmpty()) return null
+    val neg = s.startsWith("-")
+    val body = s.removePrefix("-").removePrefix("+")
+    val parts = body.split(".")
+    if (parts.size > 2) return null
+    val whole = parts[0].ifEmpty { "0" }
+    val frac = (parts.getOrNull(1) ?: "").padEnd(2, '0')
+    if (frac.length > 2 || whole.isEmpty()) return null
+    if (!whole.all(Char::isDigit) || !frac.all(Char::isDigit)) return null
+    val cents = whole.toLong() * 100 + frac.toLong()
+    return if (neg) -cents else cents
 }

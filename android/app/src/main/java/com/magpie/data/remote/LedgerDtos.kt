@@ -25,6 +25,23 @@ data class AccountOut(
 )
 
 @Serializable
+data class CheckpointCreate(
+    // ISO date "YYYY-MM-DD"; the statement's closing date. Must not be in the future.
+    @SerialName("statement_date") val statementDate: String,
+    // Signed in the ledger's convention — a card's owed balance is negative.
+    @SerialName("stated_balance_cents") val statedBalanceCents: Long,
+)
+
+@Serializable
+data class CheckpointOut(
+    val id: String,
+    @SerialName("account_id") val accountId: String,
+    @SerialName("statement_date") val statementDate: String,
+    @SerialName("stated_balance_cents") val statedBalanceCents: Long,
+    @SerialName("import_batch_id") val importBatchId: String?,
+)
+
+@Serializable
 data class BillOut(
     val id: String,
     val biller: String,
