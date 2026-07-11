@@ -183,6 +183,10 @@ data class BudgetOut(
     @SerialName("actual_cents") val actualCents: Long,
 )
 
+/** Body for POST/DELETE /subscriptions/mute (#12). */
+@Serializable
+data class MuteMerchantRequest(val merchant: String)
+
 @Serializable
 data class BudgetProposalOut(
     @SerialName("category_id") val categoryId: String,

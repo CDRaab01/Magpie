@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -47,12 +48,20 @@ fun SubscriptionsScreen(navController: NavController) {
     val viewModel: SubscriptionsViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
     RefreshOnResume { viewModel.load() }
-    SubscriptionsContent(state = state, onBack = { navController.popBackStack() })
+    SubscriptionsContent(
+        state = state,
+        onBack = { navController.popBackStack() },
+        onMute = viewModel::mute,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SubscriptionsContent(state: SubscriptionsUiState, onBack: () -> Unit) {
+internal fun SubscriptionsContent(
+    state: SubscriptionsUiState,
+    onBack: () -> Unit,
+    onMute: (merchant: String) -> Unit = {},
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -81,7 +90,9 @@ internal fun SubscriptionsContent(state: SubscriptionsUiState, onBack: () -> Uni
                 )
                 else -> LazyColumn(modifier = Modifier.padding(MagpieTheme.spacing.md)) {
                     item { AnnualTotalCard(state.totalAnnualCostCents) }
-                    items(state.subscriptions) { sub -> SubscriptionCard(sub) }
+                    items(state.subscriptions) { sub ->
+                        SubscriptionCard(sub, onMute = { onMute(sub.merchant) })
+                    }
                 }
             }
         }
@@ -104,7 +115,7 @@ private fun AnnualTotalCard(totalAnnualCents: Long) {
 }
 
 @Composable
-private fun SubscriptionCard(sub: SubscriptionOut) {
+private fun SubscriptionCard(sub: SubscriptionOut, onMute: () -> Unit) {
     // A charge above its usual is flagged (the price-hike signal, #22); teal otherwise.
     val hiked = sub.lastAmountCents > sub.typicalAmountCents * 11 / 10
     val channel = if (hiked) MagpieTheme.colors.overBudget.base else MagpieTheme.colors.money.base
@@ -128,6 +139,14 @@ private fun SubscriptionCard(sub: SubscriptionOut) {
                     color = channel)
                 Text("per year", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            // #12: dismiss a false positive (weekly gas, a person, a double-counted mortgage).
+            IconButton(onClick = onMute) {
+                Icon(
+                    Icons.Default.Block,
+                    contentDescription = "Not a subscription",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

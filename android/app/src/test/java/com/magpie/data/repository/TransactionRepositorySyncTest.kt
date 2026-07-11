@@ -161,6 +161,8 @@ private class FakeApi : ApiService {
         error("unused")
 
     override suspend fun getSubscriptions(): SubscriptionsOut = error("unused")
+    override suspend fun muteSubscription(req: com.magpie.data.remote.MuteMerchantRequest) =
+        error("unused")
 
     override suspend fun chat(req: ChatRequest): ChatResponse = error("unused")
 

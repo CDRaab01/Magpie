@@ -140,6 +140,10 @@ interface ApiService {
     @GET("subscriptions")
     suspend fun getSubscriptions(): SubscriptionsOut
 
+    // #12: mark a merchant "not a subscription" — drops it from the screen and both sweeps.
+    @POST("subscriptions/mute")
+    suspend fun muteSubscription(@Body req: MuteMerchantRequest)
+
     @POST("chat")
     suspend fun chat(@Body req: ChatRequest): ChatResponse
 
