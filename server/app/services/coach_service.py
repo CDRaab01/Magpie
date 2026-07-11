@@ -190,7 +190,7 @@ async def _fixed_categories(
     }
 
 
-async def _income_spend_medians(
+async def income_spend_medians(
     db: AsyncSession, user_id: uuid.UUID, *, now: datetime.datetime
 ) -> tuple[int, int, int, int]:
     """(mtd_income, mtd_spend, median_income_3mo, median_spend_6mo), magnitudes positive.
@@ -279,7 +279,7 @@ async def build_coach_status(
     severity = {"over": 0, "over_pace": 1, "watch": 2, "on_track": 3, "early": 4}
     rows.sort(key=lambda r: (severity.get(r.status, 5), -r.delta_vs_usual_cents))
 
-    mtd_income, mtd_spend, median_income, median_spend = await _income_spend_medians(
+    mtd_income, mtd_spend, median_income, median_spend = await income_spend_medians(
         db, user_id, now=now
     )
     net = project_net(
@@ -406,7 +406,7 @@ async def build_savings_plan(
     categories are untouchable; a cut never dips below what's already spent this month."""
     _today, this_month, _elapsed, _total_days = _month_frame(now)
 
-    mtd_income, mtd_spend, median_income, median_spend = await _income_spend_medians(
+    mtd_income, mtd_spend, median_income, median_spend = await income_spend_medians(
         db, user_id, now=now
     )
     baseline_net = median_income - median_spend

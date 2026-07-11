@@ -13,6 +13,7 @@ import asyncio
 import datetime
 import logging
 import uuid
+from calendar import monthrange
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,6 +55,7 @@ LINK_CASHFLOW = "magpie://cashflow"
 LINK_ACCOUNTS = "magpie://accounts"
 LINK_HOME = "magpie://home"
 LINK_SUBSCRIPTIONS = "magpie://subscriptions"
+LINK_BUDGETS = "magpie://budgets"
 
 
 async def count_unparsed_events(db: AsyncSession, user_id: uuid.UUID) -> int:
@@ -497,6 +499,129 @@ async def run_auth_hold_expiry_sweep(
     return dropped
 
 
+async def run_budget_pace_sweep(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    publisher: NtfyPublisher,
+    *,
+    now: datetime.datetime,
+    llm_client: LlmClient | None = None,
+) -> None:
+    """The coach's mid-month nudge (owner-approved): a budgeted category projecting past its own
+    cap pages once per (category, month). Waits until `coach_pace_min_day` so the projection means
+    something and there's month left to act; tiny budgets are floored out. All categories whose
+    latch fires in ONE run are batched into a single message — setting six budgets mid-month pages
+    once, not six times — while the per-category latches keep a later offender's page intact."""
+    from app.rules.pace import category_pace
+    from app.services.budget_service import (
+        actual_spend_by_category,
+        category_names,
+        list_budgets,
+    )
+
+    today = owner_local_date(now, settings.owner_timezone)
+    if today.day < settings.coach_pace_min_day:
+        return
+    this_month = today.replace(day=1)
+    budgets = await list_budgets(db, user_id, this_month)
+    if not budgets:
+        return
+    actual = await actual_spend_by_category(db, user_id, this_month)
+    names = await category_names(db, user_id)
+    total_days = monthrange(today.year, today.month)[1]
+    days_left = total_days - today.day
+
+    fired: list[str] = []
+    facts: list[str] = []
+    for budget in budgets:
+        spent = max(0, -actual.get(budget.category_id, 0))
+        if spent < settings.coach_pace_floor_cents:
+            continue
+        pace = category_pace(
+            budget.amount, spent, today.day, total_days, watch_factor=settings.coach_pace_factor
+        )
+        over = pace.status in ("over_pace", "over")
+        key = f"budget_pace:{budget.category_id}:{this_month:%Y-%m}"
+        if await latched_should_alert(db, user_id, key, over, now):
+            name = names.get(budget.category_id, "Uncategorized")
+            projected = pace.projected_cents if pace.projected_cents is not None else spent
+            fired.append(
+                f"{name}: ${spent / 100:,.2f} of ${budget.amount / 100:,.2f}"
+                f" with {days_left} days left — on pace for ${projected / 100:,.2f}."
+                + (
+                    f" About ${pace.daily_allowance_cents / 100:,.2f}/day keeps it on budget."
+                    if pace.daily_allowance_cents > 0
+                    else ""
+                )
+            )
+            facts.append(
+                f"{name} spent ${spent / 100:,.0f} of its ${budget.amount / 100:,.0f} budget,"
+                f" pace ${projected / 100:,.0f}"
+            )
+
+    if not fired:
+        return
+    if len(fired) == 1:
+        body, title = fired[0], "Magpie: budget over pace"
+    else:
+        body = f"{len(fired)} budgets over pace: " + " ".join(fired)
+        title = "Magpie: budgets over pace"
+    body = await _with_narration(llm_client, body, facts="; ".join(facts))
+    await publisher.publish(body, title=title, click=LINK_BUDGETS)
+
+
+async def run_savings_goal_sweep(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    publisher: NtfyPublisher,
+    *,
+    now: datetime.datetime,
+    llm_client: LlmClient | None = None,
+) -> None:
+    """Pages once per month when the projected month-end net falls short of the savings goal by
+    more than the slack. No-op without an active goal; same min-day guard as the pace sweep (an
+    early-month projection is mostly median and would cry wolf)."""
+    from app.rules.pace import project_net
+    from app.services.coach_service import get_goal, income_spend_medians
+
+    goal = await get_goal(db, user_id)
+    if goal is None:
+        return
+    today = owner_local_date(now, settings.owner_timezone)
+    if today.day < settings.coach_pace_min_day:
+        return
+    this_month = today.replace(day=1)
+    total_days = monthrange(today.year, today.month)[1]
+
+    mtd_income, mtd_spend, median_income, median_spend = await income_spend_medians(
+        db, user_id, now=now
+    )
+    net = project_net(
+        mtd_income_cents=mtd_income,
+        mtd_spend_cents=mtd_spend,
+        median_income_cents=median_income,
+        median_spend_cents=median_spend,
+        elapsed_days=today.day,
+        total_days=total_days,
+    )
+    short = goal.amount_cents - net.projected_net_cents
+    at_risk = short > settings.coach_goal_slack_cents
+    if await latched_should_alert(db, user_id, f"savings_goal_risk:{this_month:%Y-%m}", at_risk, now):
+        body = (
+            f"{today:%B} is projecting ${net.projected_net_cents / 100:,.0f} net vs your"
+            f" ${goal.amount_cents / 100:,.0f} savings goal — about ${short / 100:,.0f} short."
+        )
+        body = await _with_narration(
+            llm_client,
+            body,
+            facts=(
+                f"projected net ${net.projected_net_cents / 100:,.0f},"
+                f" goal ${goal.amount_cents / 100:,.0f}, short ${short / 100:,.0f}"
+            ),
+        )
+        await publisher.publish(body, title="Magpie: savings goal at risk", click=LINK_BUDGETS)
+
+
 async def run_monthly_digest_sweep(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -532,6 +657,39 @@ async def run_monthly_digest_sweep(
                 f" {mover.category} was {direction} ${abs(mover.delta_cents) / 100:,.0f} vs usual."
             )
         body = f"Spent ${spend:,.0f}, net ${net:,.0f}.{move_line}"
+
+    # Month-end coach verdict: did the finished month hit the savings goal, and how did the
+    # budgets land? Computed from the same aggregates at digest time — no new storage.
+    from app.services.budget_service import actual_spend_by_category, list_budgets
+    from app.services.coach_service import get_goal
+
+    goal = await get_goal(db, user_id)
+    if goal is not None:
+        verdict = "hit" if insight.net_cents >= goal.amount_cents else "missed"
+        body += (
+            f" Saved ${insight.net_cents / 100:,.0f} vs your"
+            f" ${goal.amount_cents / 100:,.0f} goal — {verdict}."
+        )
+    month_budgets = await list_budgets(db, user_id, prev_month)
+    if month_budgets:
+        actual = await actual_spend_by_category(db, user_id, prev_month)
+        overs = [
+            (b, max(0, -actual.get(b.category_id, 0)) - b.amount)
+            for b in month_budgets
+            if max(0, -actual.get(b.category_id, 0)) > b.amount
+        ]
+        if overs:
+            from app.services.budget_service import category_names
+
+            names = await category_names(db, user_id)
+            worst_budget, worst_over = max(overs, key=lambda pair: pair[1])
+            worst_name = names.get(worst_budget.category_id, "Uncategorized")
+            body += (
+                f" {len(overs)} of {len(month_budgets)} budgets went over"
+                f" (worst: {worst_name}, ${worst_over / 100:,.0f} over)."
+            )
+        else:
+            body += f" All {len(month_budgets)} budgets held."
     await publisher.publish(body, title=f"Magpie: {prev_month:%B} recap", click=LINK_HOME)
 
 
@@ -611,6 +769,12 @@ async def sweep_loop() -> None:
                     await run_paycheck_short_sweep(db, user_id, publisher, now=now)
                     await run_large_charge_sweep(db, user_id, publisher, now=now)
                     await run_category_overspend_sweep(
+                        db, user_id, publisher, now=now, llm_client=make_llm_client()
+                    )
+                    await run_budget_pace_sweep(
+                        db, user_id, publisher, now=now, llm_client=make_llm_client()
+                    )
+                    await run_savings_goal_sweep(
                         db, user_id, publisher, now=now, llm_client=make_llm_client()
                     )
                     await run_account_freshness_sweep(db, user_id, publisher, now=now)

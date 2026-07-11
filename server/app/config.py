@@ -92,9 +92,15 @@ class Settings(BaseSettings):
     anomaly_category_trailing_months: int = 6
     anomaly_category_min_months: int = 3
 
-    # AI budget coach. `coach_pace_factor` is shared by the status endpoint and (Stage 2) the
-    # pace sweep so the screen and the alert always agree on what counts as "over pace".
+    # AI budget coach. `coach_pace_factor` is shared by the status endpoint and the pace sweep so
+    # the screen and the alert always agree on what counts as "over pace". The sweep waits until
+    # `coach_pace_min_day` (projections mean something and there's month left to act), ignores
+    # budgets under the floor (a $20 budget never pages), and the goal sweep tolerates a
+    # rounding-level miss via the slack.
     coach_pace_factor: float = 1.10
+    coach_pace_min_day: int = 10
+    coach_pace_floor_cents: int = 5000  # $50
+    coach_goal_slack_cents: int = 2500  # $25
 
     # AI category drafts (CLAUDE.md §6/Phase 7). Local LM Studio only — never a hosted model,
     # this data never leaves the host. Unset ⇒ the AI stage never runs (rule evaluation just
