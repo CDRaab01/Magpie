@@ -36,7 +36,10 @@ theme is arming what's built, not building more.**
    from history for spend. Build the income analog: propose income rules (matcher, cadence,
    band) from deposit history as **drafts the owner confirms** — the same one-tap promotion shape
    as `/rules/from-confirmed`. This arms paycheck-late, paycheck-short, next-paycheck-date, and
-   the real safe-to-spend in one stroke.
+   the real safe-to-spend in one stroke. Alongside it, **[H]** confirm US Bank *deposit* alerts
+   actually arrive by email (the parser handles "deposit of"; live evidence so far is debits
+   only) — if they don't, paycheck detection is CSV-cadence-only and the rule's slack should say
+   so.
 2. **Seed recurring-bill rules the same way.** The subscriptions detector already found 55
    recurrences including AMER ELECT PWR, AT T, MAZDA FINANCIAL — those are bills. A "make this a
    bill rule" promotion (cadence + band from history) arms missing-bill and the projected
@@ -45,9 +48,13 @@ theme is arming what's built, not building more.**
 3. **`bill_issued` parser** — blocked on **[H]**: the Discover statement-ready sender address
    (open since 2026-07-08; browser flakiness; don't guess). Without it, `bill_statements` only
    fills via manual POST.
-4. **[H] Anchor statement checkpoints and start the parity clock.** Enter each account's stated
-   balance from its latest statement (the Accounts screen shows the delta). The v1 acceptance
-   gate — two consecutive to-the-penny months — has never started counting.
+4. **Anchor statement checkpoints and start the parity clock — needs code BEFORE the [H].**
+   Checkpoints are only created when an imported CSV row carries a balance column; none of the
+   owner's exports do (119 imports → 0 checkpoints), and there is **no manual entry path** — the
+   original "[H] just enter the balances" instruction was impossible as written (caught
+   2026-07-10). Build `POST /accounts/{id}/checkpoints` + a small Accounts-screen affordance,
+   THEN `[H]` enter each account's statement balance. The v1 acceptance gate — two consecutive
+   to-the-penny months — has never started counting.
 5. **[H] The two remaining exports:** Savings history before 2025-03-31 (the account predates
    its 69 imported rows), and Amex 2024-06→2024-11 (six statements). The Amex gap is why four
    payments totaling $29k sit as unpaired transfers, and it hides whether Dec-2024/Dec-2025/
@@ -90,7 +97,19 @@ theme is arming what's built, not building more.**
     this session (em-dashes written through cp1252). Fixed by going ASCII, but add the backstop:
     a lint/CI check that source strings contain no `â€`/replacement-char sequences, so the next
     corrupted write fails the build instead of the screenshot review.
-14. **Deprecation debt (small):** `androidx.hilt.navigation.compose.hiltViewModel` is deprecated
+14. **The chat/insight LLM timeout is 15s — the live probe needed 60s.** `LmStudioClient`
+    defaults to 15 seconds and `make_llm_client` doesn't override it; the longer ask-your-ledger
+    answers (the "biggest recurring charges" reply) can exceed that, so users will sometimes get
+    the fallback line for questions the model answers fine. Make the timeout config
+    (`LLM_TIMEOUT_SECONDS`, longer for /chat than for categorization drafts). While there:
+    `/chat` is the most expensive endpoint in the app and carries no per-route rate limit —
+    add a slowapi limit per the suite convention.
+14a. **Projected-bill suppression is too broad (nit).** `_projected_bills` drops a projection if
+    ANY concrete statement matches the biller anywhere in the calendar window, not near the
+    projected date — a paid-and-matched January bill correctly ages out, but an early-arriving
+    next statement plus an unpaid prior one can suppress a projection that should show. Tighten
+    to a ±window around the projected date.
+15. **Deprecation debt (small):** `androidx.hilt.navigation.compose.hiltViewModel` is deprecated
     across every screen (moved to `androidx.hilt.lifecycle.viewmodel.compose`); one mechanical
     sweep. **Design debt (small):** Home now stacks hero + month panel + insight + Ask Magpie +
     review queue + upcoming + button row — worth one Tier-4-style pass deciding what earns
@@ -98,14 +117,25 @@ theme is arming what's built, not building more.**
 
 ## Theme 3 — Client affordances for shipped server features
 
-15. **Export share** — `GET /export/transactions.csv` is live; add the Android share action
+15a. **Offline read cache — restored; the 2026-07-09 rewrite dropped it while still open.**
+    Magpie is tailnet-only, and the only offline surface is the cash-entry queue: off the
+    tailnet, the app shows *nothing* — a habit-killer for a ten-second daily review. Cache
+    last-known transactions + month summary + safe-to-spend in Room (Cookbook's read-cache
+    precedent) so the app opens to stale-but-real data and refreshes when reachable.
+15b. **Tier-4 UI leftovers (also dropped while open):** the review queue's AI-suggestion text
+    should use the violet `aiVoice` channel now that it exists (only the insight card and chat
+    use it); inline editing of a rule's band/cadence (the editor is enable/disable/delete
+    today — and Theme 1's seeded income/bill rules make band editing matter); the `flip_sign`
+    override checkbox in the import dialog (server param exists). Subscriptions/Chat
+    discoverability from Home folds into #15's placement pass.
+16. **Export share** — `GET /export/transactions.csv` is live; add the Android share action
     (Settings → "Export month" → share sheet; FileProvider + ACTION_SEND).
-16. **Budget proposals UI** — `GET /budgets/proposals` is live; surface "Set budgets from your
+17. **Budget proposals UI** — `GET /budgets/proposals` is live; surface "Set budgets from your
     history" in the Budgets screen as confirm-one-by-one drafts (review-not-enter for budgets).
-17. **Insight detail view** — the Home card shows the deterministic one-liner; tapping could
+18. **Insight detail view** — the Home card shows the deterministic one-liner; tapping could
     open the full month breakdown with the LLM narrative (`narrative=true`), category deltas,
     and budget verdicts, instead of routing to Trends.
-18. **Home-screen widget** (carried candidate, now unblocked): net-this-month + safe-to-spend +
+19. **Home-screen widget** (carried candidate, now unblocked): net-this-month + safe-to-spend +
     next bill are all served; a Glance widget reinforces the daily-review habit. Reconsider
     once Theme 1 makes safe-to-spend real (it currently renders without paycheck/bill data).
 
@@ -115,31 +145,31 @@ Magpie is **absent from CROSS-APP.md** — it consumes suite SSO and SuiteConfig
 surface. Per the cross-app design rules (point-to-point HTTPS, flag-gated, degrade-to-absence,
 read-only by preference), in priority order:
 
-19. **`GET /cross-app/summary?start=&end=`** — the suite weekly digest's money paragraph
+20. **`GET /cross-app/summary?start=&end=`** — the suite weekly digest's money paragraph
     (income/spend/net + biggest category move for the window; the insight aggregate already
     computes this). **RS256 cross-app tokens only** — CROSS-APP.md's own migration says new
     surfaces skip HS256, and Magpie post-dates the retirement plan. Registering this surface in
     CROSS-APP.md is part of the work (hub territory, so it's a Dragonfly-repo PR too).
-20. **Cookbook grocery actuals** — "planned vs spent": Cookbook asks Magpie for the Groceries
+21. **Cookbook grocery actuals** — "planned vs spent": Cookbook asks Magpie for the Groceries
     category's month-to-date actual to sit beside its planned grocery spend. Read-only, tiny
-    payload, the named use case from the old #27. Depends on #19's auth plumbing.
-21. **Hub Suite tile upgrade** — Dragonfly's Magpie tile shows alive/dead today; the summary
-    endpoint (#19) lets it show net-this-month like Spotter's tile shows last-workout.
+    payload, the named use case from the old #27. Depends on #20's auth plumbing.
+22. **Hub Suite tile upgrade** — Dragonfly's Magpie tile shows alive/dead today; the summary
+    endpoint (#20) lets it show net-this-month like Spotter's tile shows last-workout.
     (Candidate, not committed — hub design is Dragonfly-repo territory.)
-22. **Hawksnest home-costs view** (speculative candidate, decide when Hawksnest wants it):
+23. **Hawksnest home-costs view** (speculative candidate, decide when Hawksnest wants it):
     Housing-category actuals by month over cross-app, so the home app can put utility/maintenance
-    spend next to its device and project data. Same read-only summary shape as #20.
+    spend next to its device and project data. Same read-only summary shape as #21.
 
 ## Theme 5 — Operational loose ends (mostly [H], unchanged in substance)
 
-23. **[H] On-device batch:** formal SSO sign-in confirmation, split-sheet interaction, encrypted
+24. **[H] On-device batch:** formal SSO sign-in confirmation, split-sheet interaction, encrypted
     token store (F17), tap one real alert deep link, font-scale/TalkBack pass, eyeball the
     (now ~36) Roborazzi baselines.
-24. **[H] Ops:** verify the uptime-kuma monitor exists and pages; backup passphrase → password
+25. **[H] Ops:** verify the uptime-kuma monitor exists and pages; backup passphrase → password
     manager + offsite copy; update host `C:\Code\CLAUDE.md` + ROADMAP2's Magpie rows to "live".
-25. **Coverage matrix** (owed to ARCHITECTURE.md): per account — email alerts? CSV cadence?
+26. **Coverage matrix** (owed to ARCHITECTURE.md): per account — email alerts? CSV cadence?
     paycheck path? — checked against the Tier C triggers below.
-26. **Alert-narration rollout** (#19 shipped on category-overspend only): thread the optional
+27. **Alert-narration rollout** (shipped on category-overspend only): thread the optional
     LLM context line through missing-bill, paycheck-short, and price-hike once narration proves
     its keep on the first one.
 
@@ -156,5 +186,6 @@ read-only token in `server/.env`, a `simplefin` source in the same dedupe pipeli
 Plaid-style credential storage (permanently out); gross-pay/tax decomposition; investment
 tracking; multi-currency; receipt OCR; browser extensions; a web UI. **Deferred, not dead:**
 household second user (defer exactly as Cookbook deferred sharing); CSV mapping wizard (trigger:
-a third hand-written institution mapping); ask-anything beyond descriptive finance (the chat's
-§6 scope is a feature, not a limitation).
+a third hand-written institution mapping); per-transaction cardholder tag (the
+Christian/Elizabeth split surfaced during the Amex backfill — small, real, not blocking);
+ask-anything beyond descriptive finance (the chat's §6 scope is a feature, not a limitation).
