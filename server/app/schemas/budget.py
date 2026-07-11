@@ -10,6 +10,10 @@ class BudgetCreate(BaseModel):
     amount: int  # signed integer cents — a budget is a positive cap, stored as given
 
 
+class BudgetUpdate(BaseModel):
+    amount: int  # the new monthly cap, positive cents — how a coach cut draft is accepted
+
+
 class BudgetOut(BaseModel):
     id: uuid.UUID
     category_id: uuid.UUID

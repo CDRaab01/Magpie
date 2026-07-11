@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     anomaly_category_trailing_months: int = 6
     anomaly_category_min_months: int = 3
 
+    # AI budget coach. `coach_pace_factor` is shared by the status endpoint and (Stage 2) the
+    # pace sweep so the screen and the alert always agree on what counts as "over pace".
+    coach_pace_factor: float = 1.10
+
     # AI category drafts (CLAUDE.md §6/Phase 7). Local LM Studio only — never a hosted model,
     # this data never leaves the host. Unset ⇒ the AI stage never runs (rule evaluation just
     # falls through to needs_review with no draft, same as before Phase 7).

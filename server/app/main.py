@@ -18,6 +18,7 @@ from app.routers import (
     auth,
     bills,
     budgets,
+    coach,
     export,
     cashflow,
     chat,
@@ -130,6 +131,7 @@ app.include_router(ingest.router)
 app.include_router(rules.router)
 app.include_router(bills.router)
 app.include_router(budgets.router)
+app.include_router(coach.router)
 app.include_router(cashflow.router)
 app.include_router(chat.router)
 app.include_router(summary.router)

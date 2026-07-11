@@ -2,6 +2,7 @@ from app.models.account import Account
 from app.models.bill_statement import BillStatement
 from app.models.budget import Budget
 from app.models.category import Category
+from app.models.goal import Goal
 from app.models.import_batch import ImportBatch
 from app.models.ingest_event import IngestEvent
 from app.models.rule import Rule
@@ -15,6 +16,7 @@ __all__ = [
     "BillStatement",
     "Budget",
     "Category",
+    "Goal",
     "ImportBatch",
     "IngestEvent",
     "Rule",
