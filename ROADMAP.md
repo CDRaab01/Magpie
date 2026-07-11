@@ -164,6 +164,28 @@ theme is arming what's built, not building more.**
     next bill are all served; a Glance widget reinforces the daily-review habit. Reconsider
     once Theme 1 makes safe-to-spend real (it currently renders without paycheck/bill data).
 
+19a. **AI budget coach — SHIPPED 2026-07-11 (owner-requested large feature).** Goals + pace
+    awareness + coaching, in four stages, all deployed:
+    - **Server core:** `goals` table (one active monthly-savings target), pure `app/rules/pace.py`
+      (per-category pace with early/on_track/watch/over_pace/over; income = max(MTD, 3-mo median),
+      never extrapolated — leave-adaptive; spend = elapsed-weighted blend; greedy cut planner
+      floored at MTD spend, ≤50% cuts, bill-dominated categories untouchable), `GET /coach/status`
+      (FULL budget table w/ per-category trailing median + delta-vs-usual + uncategorized MTD),
+      `GET /coach/plan`, `GET /coach/category/{id}` (deep-dive: trend/budget history/merchants),
+      goal CRUD, `PATCH /budgets/{id}`; carry-forward proposals on month rollover.
+    - **Sweeps:** budget-pace nudge (day ≥ 10, $50 floor, latched per category+month, BATCHED into
+      one message per run) and savings-goal-risk (latched per month), both → `magpie://budgets`;
+      the monthly digest closes the loop with a goal hit/missed + budgets-held verdict.
+    - **AI (§6 amendment, owner-approved):** coach + chat may be prescriptive about the household's
+      OWN budgets/goal; `ai/coach.py` narrates status/plan/category on `?narrative=true`; chat is
+      grounded with the full budget table + goal and advises-never-acts. Insight stays descriptive.
+    - **Android:** GoalCard (projection vs goal, "How do I get there?"), pace lines + pace-aware
+      channels on budget rows, violet `aiVoice` CoachCard, plan sheet (cuts as one-tap drafts,
+      honest shortfall), category analysis sheet (Sparkline + merchants + coach's read),
+      uncategorized note, budgets deep link. 502 server tests green.
+    `[H]`: update the stale $50 Dining budget (real spend ~$800/mo — the first pace nudge will
+    correctly page about it) and set a savings goal to arm the goal sweep.
+
 ## Theme 4 — Dragonfly portfolio integrations
 
 Magpie is **absent from CROSS-APP.md** — it consumes suite SSO and SuiteConfig but provides no
