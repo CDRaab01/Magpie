@@ -20,9 +20,9 @@ cashflow, and the Android surfaces for all of it. Review queue: 0. 428 server te
 
 | Sweep / feature | Watches | In prod |
 |---|---|---|
-| paycheck-late, paycheck-short | `recurring_income` rules | **0 rules** |
-| missing-bill, cash-flow calendar, safe-to-spend | `bill_statements` + `recurring_bill` rules | **0 and 0** |
-| projected cashflow (#24) | `recurring_bill` rules | **0 rules** |
+| paycheck-late, paycheck-short | `recurring_income` rules | **1 rule** (INNAGO; BAE held for leave) |
+| missing-bill, cash-flow calendar, safe-to-spend | `bill_statements` + `recurring_bill` rules | **0 statements, 9 rules** |
+| projected cashflow (#24) | `recurring_bill` rules | **9 rules** |
 | statement parity (the v1 acceptance gate) | `statement_checkpoints` | **0 checkpoints** |
 
 All 399 rules are merchant→category. Nothing pages when a paycheck is late because Magpie has
@@ -54,11 +54,18 @@ theme is arming what's built, not building more.**
    owner's judgment is the only backstop, which is exactly why selective confirm (a) matters.
    Still open **[H]:** confirm US Bank *deposit* alerts arrive by email (parser handles "deposit
    of"; live evidence is debits only) — if not, paycheck detection is CSV-cadence-only.
-2. **Seed recurring-bill rules the same way.** The subscriptions detector already found 55
-   recurrences including AMER ELECT PWR, AT T, MAZDA FINANCIAL — those are bills. A "make this a
-   bill rule" promotion (cadence + band from history) arms missing-bill and the projected
-   calendar. Design note: subscriptions/detected-recurrences and bill rules should converge —
-   one detection, two confirmations.
+2. **Seed recurring-bill rules the same way — BUILT + ARMED 2026-07-10.** `bill_rule_service`
+   shares the `detect_recurring` detector with income; `POST /rules/from-bills` (with selective
+   `only=`) proposes bill-shaped spend, binds each rule to its payment rail (account with the most
+   charges for that biller, §2), skips the amount floor, and excludes dormant billers by the same
+   recency gate (the former-residence Ohio utilities). `run_bill_late_sweep` (latched, → `magpie://
+   bills`) pages once per episode when an expected payment doesn't land. Nine live bills armed:
+   MAZDA, DEPT EDUCATION, AMER ELECT PWR (band 0.27, seasonal), AT&T, Verizon, GEICO, Fort Wayne
+   Utilities, Frontier, NIPSCO (band 0.40). Card payments (BARCLAYCARD) and low-value recurrences
+   (coffee, gas, a $2.49 vending machine, Garmin/Plex subs) were deliberately NOT armed — the
+   detector finds all recurring spend; only real obligations become rules. Design note still open:
+   subscriptions/detected-recurrences and bill rules should converge — one detection, two
+   confirmations.
 3. **`bill_issued` parser** — blocked on **[H]**: the Discover statement-ready sender address
    (open since 2026-07-08; browser flakiness; don't guess). Without it, `bill_statements` only
    fills via manual POST.
