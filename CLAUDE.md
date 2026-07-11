@@ -175,6 +175,15 @@ model produces is persisted without explicit user confirmation**; no tool/DB/fil
 insights carry no product placements by definition — that's the point of the app. Scope:
 descriptive finance ("dining out doubled since March"), never investment/tax/legal advice.
 
+**Amendment (2026-07-11, owner-requested budget coach):** within the **coach and chat
+surfaces only** (`ai/coach.py`, `ai/chat.py`), the model MAY be prescriptive about the
+household's **own spending measured against its own budgets and stated savings goal**
+("dining is on pace for $180 against your $150 budget — tailor it back"), grounded strictly
+in the provided aggregates. Investment/tax/legal advice and product recommendations remain
+banned everywhere; the retrospective monthly insight (`ai/insight.py`) remains
+descriptive-only; and every AI-suggested budget or goal change remains a draft the owner
+explicitly confirms — the coach's plans are computed on request and never persisted at all.
+
 ## 7. Screens (Android)
 
 Home (month cash-flow panel: in vs out vs budget, review-queue badge, upcoming-bills strip) ·
@@ -372,3 +381,5 @@ running; a killed server pages the phone; ROADMAP2/host CLAUDE.md rows updated f
 - Keep the ARCHITECTURE.md in this repo updated as phases land (same-PR rule) — it starts
   as a design doc and must become as-built.
 - Personal-use tool, descriptive not advisory — no investment/tax advice in prompts or copy.
+  (Narrow exception: the budget coach/chat may coach against the owner's own budgets/goal —
+  see the §6 amendment, 2026-07-11.)

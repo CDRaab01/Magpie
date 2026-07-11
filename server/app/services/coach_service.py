@@ -454,3 +454,102 @@ async def build_savings_plan(
             for c in result.cuts
         ],
     )
+
+
+# --- LLM narration payloads (Stage 3) ---------------------------------------------------------
+# Dollars-rounded aggregates only — the exact figures the coach prose is allowed to use (§6
+# amendment). Full budget table, never truncated: the household is small, and the owner's
+# requirement is that the AI can analyze ALL budgets and any single category.
+
+
+def _dollars(cents: int | None) -> float | None:
+    return round(cents / 100, 2) if cents is not None else None
+
+
+def coach_status_payload(status_out: CoachStatusOut) -> dict:
+    return {
+        "month": str(status_out.month),
+        "day": f"{status_out.days_elapsed} of {status_out.days_in_month}",
+        "budgets": [
+            {
+                "category": b.category_name,
+                "budget": _dollars(b.budget_cents),
+                "spent": _dollars(b.spent_cents),
+                "projected": _dollars(b.projected_cents),
+                "status": b.status,
+                "usual_monthly_median": _dollars(b.trailing_median_cents),
+                "delta_vs_usual": _dollars(b.delta_vs_usual_cents),
+            }
+            for b in status_out.budgets
+        ],
+        "net": {
+            "mtd_income": _dollars(status_out.net.mtd_income_cents),
+            "mtd_spend": _dollars(status_out.net.mtd_spend_cents),
+            "projected_income": _dollars(status_out.net.projected_income_cents),
+            "projected_spend": _dollars(status_out.net.projected_spend_cents),
+            "projected_net": _dollars(status_out.net.projected_net_cents),
+        },
+        "savings_goal": (
+            {
+                "monthly_target": _dollars(status_out.goal.amount_cents),
+                "projected_delta": _dollars(status_out.net.goal_delta_cents),
+            }
+            if status_out.goal is not None
+            else None
+        ),
+        "uncategorized_mtd": _dollars(status_out.uncategorized_mtd_cents),
+    }
+
+
+def coach_plan_payload(plan_out: CoachPlanOut) -> dict:
+    return {
+        "monthly_savings_target": _dollars(plan_out.target_cents),
+        "baseline_net": _dollars(plan_out.baseline_net_cents),
+        "needed": _dollars(plan_out.needed_cents),
+        "achievable": _dollars(plan_out.achievable_cents),
+        "shortfall": _dollars(plan_out.shortfall_cents),
+        "proposed_cuts": [
+            {
+                "category": c.category_name,
+                "from": _dollars(c.from_cents),
+                "to": _dollars(c.to_cents),
+                "saves": _dollars(c.cut_cents),
+            }
+            for c in plan_out.cuts
+        ],
+    }
+
+
+def category_analysis_payload(analysis: CategoryAnalysisOut) -> dict:
+    return {
+        "category": analysis.category_name,
+        "month": str(analysis.month),
+        "budget": _dollars(analysis.budget_cents),
+        "spent_mtd": _dollars(analysis.spent_cents),
+        "pace": (
+            {
+                "projected": _dollars(analysis.pace.projected_cents),
+                "status": analysis.pace.status,
+                "daily_allowance": _dollars(analysis.pace.daily_allowance_cents),
+            }
+            if analysis.pace is not None
+            else None
+        ),
+        "usual_monthly_median": _dollars(analysis.trailing_median_cents),
+        "monthly_history": [
+            {"month": str(h.month), "spend": _dollars(h.spend_cents)}
+            for h in analysis.monthly_history
+        ],
+        "budget_history": [
+            {
+                "month": str(h.month),
+                "budget": _dollars(h.budget_cents),
+                "actual": _dollars(h.actual_cents),
+            }
+            for h in analysis.budget_history
+        ],
+        "top_merchants_this_month": [
+            {"merchant": m.merchant, "spend": _dollars(m.spend_cents), "charges": m.count}
+            for m in analysis.top_merchants
+        ],
+    }

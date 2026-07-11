@@ -11,17 +11,23 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.schemas.coach import CategoryAnalysisOut, CoachPlanOut, CoachStatusOut, GoalOut, GoalUpsert
 from app.security import CurrentUser
+from app.services.ai.coach import narrate_coach
 from app.services.coach_service import (
     build_category_analysis,
     build_coach_status,
     build_savings_plan,
+    category_analysis_payload,
     clear_goal,
+    coach_plan_payload,
+    coach_status_payload,
     get_goal,
     upsert_goal,
 )
+from app.services.ingest_service import make_llm_client
 
 router = APIRouter(prefix="/coach", tags=["coach"])
 
@@ -30,6 +36,25 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 def _now() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)
+
+
+async def _with_coaching(result, payload: dict):
+    """Attach the optional LLM coaching prose (§6 amendment: the coach may be prescriptive about
+    the owner's own budgets/goal). The default path never touches the model; a missing or failing
+    model leaves narrative_source="unavailable" and the deterministic figures carry the surface."""
+    client = make_llm_client(settings.llm_chat_timeout_seconds)
+    if client is None:
+        return result
+    narrative = await narrate_coach(client, payload)
+    if narrative is None:
+        return result
+    return result.model_copy(
+        update={
+            "narrative_headline": narrative.headline,
+            "narrative_coaching": narrative.coaching,
+            "narrative_source": "llm",
+        }
+    )
 
 
 @router.get("/status", response_model=CoachStatusOut)
@@ -41,7 +66,8 @@ async def coach_status(
     """Where the month stands: every budgeted category's pace + vs-usual context (the full table),
     the net projection, the goal delta, and the uncategorized blind-spot figure."""
     status_out = await build_coach_status(db, current_user.id, now=_now())
-    # Stage 3 wires `narrative=true` to ai/coach.narrate_coach; until then it's a no-op.
+    if narrative:
+        status_out = await _with_coaching(status_out, coach_status_payload(status_out))
     return status_out
 
 
@@ -63,7 +89,10 @@ async def coach_plan(
                 "No savings target: pass monthly_savings_cents or set a goal first.",
             )
         target = goal.amount_cents
-    return await build_savings_plan(db, current_user.id, target, now=_now())
+    plan = await build_savings_plan(db, current_user.id, target, now=_now())
+    if narrative:
+        plan = await _with_coaching(plan, coach_plan_payload(plan))
+    return plan
 
 
 @router.get("/category/{category_id}", response_model=CategoryAnalysisOut)
@@ -74,7 +103,10 @@ async def coach_category(
     narrative: Annotated[bool, Query()] = False,
 ):
     """One category in depth — trend, vs-usual, budget history, top merchants this month."""
-    return await build_category_analysis(db, current_user.id, category_id, now=_now())
+    analysis = await build_category_analysis(db, current_user.id, category_id, now=_now())
+    if narrative:
+        analysis = await _with_coaching(analysis, category_analysis_payload(analysis))
+    return analysis
 
 
 @router.get("/goal", response_model=GoalOut | None)

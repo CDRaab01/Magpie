@@ -69,6 +69,13 @@ async def build_ledger_context(
     merchants = await top_merchants(db, user_id, this_month, limit=8)
     subs = await list_subscriptions(db, user_id, now=now)
 
+    # The coach's full budget table + goal (§6 amendment) — the SAME per-category context the
+    # /coach endpoints see (never truncated), so "how are the budgets?" and "analyze dining"
+    # are groundable. Reused, not recomputed.
+    from app.services.coach_service import build_coach_status, coach_status_payload
+
+    coach = coach_status_payload(await build_coach_status(db, user_id, now=now))
+
     return {
         "as_of": today.isoformat(),
         "monthly_income_spend_net": monthly,
@@ -77,6 +84,10 @@ async def build_ledger_context(
             {"merchant": m, "spend": round(-cents / 100, 2)} for m, cents, _n in merchants
         ],
         "recurring_annual_total": round(sum(s.recurrence.annual_cost_cents for s in subs) / 100, 2),
+        "budgets_this_month": coach["budgets"],
+        "net_projection": coach["net"],
+        "savings_goal": coach["savings_goal"],
+        "uncategorized_mtd": coach["uncategorized_mtd"],
     }
 
 
