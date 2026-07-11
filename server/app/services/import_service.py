@@ -135,7 +135,9 @@ async def import_csv(
     rows = sorted(rows, key=lambda r: r.date)
 
     file_hash = hashlib.sha256(file_bytes).hexdigest()
-    batch = ImportBatch(file_hash=file_hash, institution=institution, row_count=len(rows))
+    batch = ImportBatch(
+        user_id=user_id, file_hash=file_hash, institution=institution, row_count=len(rows)
+    )
     db.add(batch)
     await db.flush()  # need batch.id before attaching rows to it
 
