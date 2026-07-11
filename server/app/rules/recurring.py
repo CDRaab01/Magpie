@@ -1,4 +1,4 @@
-"""Recurring-income detection (ROADMAP #1) — pure, no I/O. Infers a paycheck/rent-shaped income
+"""Recurring-stream detection (ROADMAP #1/#2) — income *and* bills — pure, no I/O. Infers a paycheck/rent-shaped income
 stream from a merchant's deposit history, so the owner can confirm it into a `recurring_income`
 rule that arms paycheck-late/short, next-paycheck-date, and safe-to-spend.
 
@@ -30,7 +30,7 @@ BAND_MAX_PCT = 0.40  # nor wider than this — beyond it, "short" loses meaning
 
 
 @dataclass(frozen=True)
-class IncomeShape:
+class RecurringShape:
     cadence: str
     slack_days: int
     typical_amount_cents: int  # median magnitude
@@ -48,7 +48,7 @@ def _robust_spread(amounts: list[int], median: float) -> float:
     return mad / median
 
 
-def detect_income(dated_amounts: list[tuple[datetime.date, int]]) -> IncomeShape | None:
+def detect_recurring(dated_amounts: list[tuple[datetime.date, int]]) -> RecurringShape | None:
     """Infer a recurring-income shape from a merchant's (date, signed amount) deposits, or None.
 
     Requires ≥ MIN_OCCURRENCES deposits landing on a regular cadence with a not-too-chaotic amount.
@@ -80,7 +80,7 @@ def detect_income(dated_amounts: list[tuple[datetime.date, int]]) -> IncomeShape
     cadence, slack = match
 
     band_pct = min(BAND_MAX_PCT, max(BAND_MIN_PCT, round(spread * 1.5, 2)))
-    return IncomeShape(
+    return RecurringShape(
         cadence=cadence,
         slack_days=slack,
         typical_amount_cents=int(round(median)),
