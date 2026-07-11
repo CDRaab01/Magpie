@@ -183,6 +183,14 @@ data class BudgetOut(
     @SerialName("actual_cents") val actualCents: Long,
 )
 
+@Serializable
+data class BudgetProposalOut(
+    @SerialName("category_id") val categoryId: String,
+    @SerialName("category_name") val categoryName: String,
+    // Trailing-3-month median spend for the category — the suggested monthly cap (#17).
+    @SerialName("suggested_amount_cents") val suggestedAmountCents: Long,
+)
+
 // --- Summary / analytics read models (ROADMAP.md Wave 1) ---
 
 @Serializable

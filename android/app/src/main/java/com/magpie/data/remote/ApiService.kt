@@ -132,6 +132,10 @@ interface ApiService {
     @POST("budgets")
     suspend fun createBudget(@Body req: BudgetCreate): BudgetOut
 
+    // #17: "set budgets from your history" — trailing-median spend per category with no budget yet.
+    @GET("budgets/proposals")
+    suspend fun budgetProposals(@Query("month") month: String): List<BudgetProposalOut>
+
     // --- Cash-flow calendar ---
     @GET("subscriptions")
     suspend fun getSubscriptions(): SubscriptionsOut

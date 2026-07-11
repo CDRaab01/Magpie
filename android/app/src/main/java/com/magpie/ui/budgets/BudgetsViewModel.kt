@@ -21,11 +21,20 @@ data class BudgetRow(
     val spentCents: Long,
 )
 
+/** A suggested budget from spending history (#17) — one confirm-per-row draft. */
+data class BudgetProposal(
+    val categoryId: String,
+    val categoryName: String,
+    val suggestedAmountCents: Long,
+)
+
 data class BudgetsUiState(
     val monthLabel: String = "",
     val rows: List<BudgetRow> = emptyList(),
     // The user's categories, for the add-budget picker.
     val categories: List<CategoryOut> = emptyList(),
+    // Trailing-median suggestions for categories with no budget this month (#17) — review, not enter.
+    val proposals: List<BudgetProposal> = emptyList(),
     val loading: Boolean = true,
     val error: String? = null,
 )
@@ -53,6 +62,8 @@ class BudgetsViewModel @Inject constructor(
             try {
                 val budgets = api.listBudgets(monthParam)
                 val categories = api.listCategories()
+                // Suggestions are nice-to-have — a failed proposals read never blocks the screen.
+                val proposals = runCatching { api.budgetProposals(monthParam) }.getOrDefault(emptyList())
                 val nameById = categories.associate { it.id to it.name }
                 val rows = budgets
                     .map { b ->
@@ -65,8 +76,18 @@ class BudgetsViewModel @Inject constructor(
                         )
                     }
                     .sortedBy { it.categoryName }
-                _state.value =
-                    _state.value.copy(rows = rows, categories = categories, loading = false)
+                // Only propose categories that don't already have a budget this month.
+                val budgetedIds = budgets.map { it.categoryId }.toSet()
+                val drafts = proposals
+                    .filter { it.categoryId !in budgetedIds }
+                    .map { BudgetProposal(it.categoryId, it.categoryName, it.suggestedAmountCents) }
+                    .sortedByDescending { it.suggestedAmountCents }
+                _state.value = _state.value.copy(
+                    rows = rows,
+                    categories = categories,
+                    proposals = drafts,
+                    loading = false,
+                )
             } catch (e: Exception) {
                 _state.value =
                     _state.value.copy(loading = false, error = e.message ?: "Couldn't load budgets")
@@ -83,5 +104,14 @@ class BudgetsViewModel @Inject constructor(
                 _state.value = _state.value.copy(error = e.message ?: "Couldn't save budget")
             }
         }
+    }
+
+    /** Accept one suggested budget (#17). Drop it from the drafts immediately so the row doesn't
+     *  linger while the reload lands. */
+    fun acceptProposal(categoryId: String, amountCents: Long) {
+        _state.value = _state.value.copy(
+            proposals = _state.value.proposals.filterNot { it.categoryId == categoryId },
+        )
+        addBudget(categoryId, amountCents)
     }
 }

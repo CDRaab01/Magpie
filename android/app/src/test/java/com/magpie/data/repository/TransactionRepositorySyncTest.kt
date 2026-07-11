@@ -157,6 +157,8 @@ private class FakeApi : ApiService {
     override suspend fun listBudgets(month: String): List<BudgetOut> = error("unused")
 
     override suspend fun createBudget(req: BudgetCreate): BudgetOut = error("unused")
+    override suspend fun budgetProposals(month: String): List<com.magpie.data.remote.BudgetProposalOut> =
+        error("unused")
 
     override suspend fun getSubscriptions(): SubscriptionsOut = error("unused")
 

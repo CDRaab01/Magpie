@@ -66,6 +66,7 @@ fun BudgetsScreen(navController: NavController) {
         state = state,
         onBack = { navController.popBackStack() },
         onAddBudget = viewModel::addBudget,
+        onAcceptProposal = viewModel::acceptProposal,
     )
 }
 
@@ -75,6 +76,7 @@ internal fun BudgetsContent(
     state: BudgetsUiState,
     onBack: () -> Unit,
     onAddBudget: (categoryId: String, amountCents: Long) -> Unit,
+    onAcceptProposal: (categoryId: String, amountCents: Long) -> Unit = { _, _ -> },
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     Scaffold(
@@ -101,14 +103,27 @@ internal fun BudgetsContent(
                 state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     CircularProgressIndicator()
                 }
-                state.rows.isEmpty() -> EmptyState(
+                state.rows.isEmpty() && state.proposals.isEmpty() -> EmptyState(
                     icon = Icons.Default.PieChart,
                     title = "No budgets for ${state.monthLabel}",
                     subtitle = "Tap + to set a monthly amount per category.",
                 )
                 else -> LazyColumn(modifier = Modifier.padding(MagpieTheme.spacing.md)) {
-                    item { BudgetsRingHeader(state.rows) }
-                    items(state.rows.size) { i -> BudgetRowCard(state.rows[i]) }
+                    if (state.proposals.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                label = "Suggested from your spending",
+                                channel = MagpieTheme.colors.money.base,
+                            )
+                        }
+                        items(state.proposals.size) { i ->
+                            BudgetSuggestionCard(state.proposals[i], onAcceptProposal)
+                        }
+                    }
+                    if (state.rows.isNotEmpty()) {
+                        item { BudgetsRingHeader(state.rows) }
+                        items(state.rows.size) { i -> BudgetRowCard(state.rows[i]) }
+                    }
                 }
             }
         }
@@ -163,6 +178,37 @@ private fun BudgetsRingHeader(rows: List<BudgetRow>) {
                     color = channel,
                 )
             }
+        }
+    }
+}
+
+/** A "set budgets from your history" draft (#17): the category, its trailing-median spend, and a
+ *  Set button that turns the suggestion into a real budget — review, not enter. */
+@Composable
+private fun BudgetSuggestionCard(proposal: BudgetProposal, onAccept: (String, Long) -> Unit) {
+    PanelCard(
+        channel = MagpieTheme.colors.money.base,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(proposal.categoryName)
+                Text(
+                    "Typically ${formatCents(proposal.suggestedAmountCents)}/mo",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            PulseButton(
+                text = "Set ${formatCents(proposal.suggestedAmountCents)}",
+                tonal = true,
+                compact = true,
+                onClick = { onAccept(proposal.categoryId, proposal.suggestedAmountCents) },
+            )
         }
     }
 }
