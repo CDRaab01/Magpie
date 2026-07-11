@@ -40,6 +40,33 @@ async def test_import_creates_transactions(auth_client):
     assert review_states == {"needs_review"}
 
 
+async def test_import_batch_is_scoped_to_the_user(auth_client):
+    """#7: the batch a CSV import creates carries its owner, so `import_batches` is no longer the
+    one unscoped table."""
+    import uuid as _uuid
+
+    from sqlalchemy import select
+
+    from app.database import AsyncSessionLocal
+    from app.models.account import Account
+    from app.models.import_batch import ImportBatch
+
+    account_id = await _make_account(auth_client)
+    await auth_client.post(
+        "/imports/csv",
+        data={"account_id": account_id, "institution": "US Bank"},
+        files=_csv_file("Date,Description,Amount\n2026-07-01,Coffee,-4.50\n"),
+    )
+    async with AsyncSessionLocal() as db:
+        acct = await db.get(Account, _uuid.UUID(account_id))
+        batches = (
+            (await db.execute(select(ImportBatch).where(ImportBatch.user_id == acct.user_id)))
+            .scalars()
+            .all()
+        )
+    assert len(batches) == 1  # this fresh user's single import, correctly attributed
+
+
 async def test_amex_positive_charge_imports_as_spend_not_income(auth_client):
     # F5: Amex exports a charge as a POSITIVE amount. Without the per-institution sign flip this
     # would book the charge as income (and a payment as spend) — a whole card backfill inverted.
