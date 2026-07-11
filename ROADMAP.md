@@ -102,8 +102,9 @@ theme is arming what's built, not building more.**
    store-number + city/state tokens when a longer-prefix match exists), then one
    `/admin/renormalize` dry-run → apply. The infrastructure for safe recompute already exists.
 9. **The mortgage counts twice in Subscriptions** (NSM/Mr. Cooper + Rocket Mortgage, ~$53k/yr
-   each — one loan across a servicer transfer). Needs a "same obligation" alias or a dismiss
-   (see #12); today the headline annual total is inflated by ~$53k.
+   each — one loan across a servicer transfer). **#12's mute now gives it a dismiss** (`[H]`:
+   tap "Not a subscription" on the stale servicer's row). A true "same obligation" alias is still
+   the deeper fix, but the headline total is no longer stuck inflated.
 10. **Rules the model got wrong, still live** `[H eyes, then one call]`: `WHATNOT INC → Other`
     (408 rows — it's a shopping marketplace), `PAYPAL → Other`, `MONTHLY MAINTENANCE FEE →
     Housing` (a bank fee), `ROCKET LAWYER → Housing` (arguably Legal). Fixing a rule +
@@ -113,10 +114,12 @@ theme is arming what's built, not building more.**
     `monthly_digest:<month>`). Harmless at household scale for years, but it's an append-only
     table with no cleanup — add a sweep-side TTL prune (e.g. resolved latches older than 12
     months) before it's an archaeology dig.
-12. **Subscription/anomaly dismissals don't exist.** The detector surfaces weekly gas stops and
-    Cash-App-to-a-person as "subscriptions" (honest per spec, noisy per life). Add a
-    per-merchant mute ("not a subscription") that both the screen and the two sweep alerts
-    respect. Same affordance solves #9's duplicate-mortgage row.
+12. **Subscription/anomaly dismissals — DONE 2026-07-11.** `subscription_mutes` (per-user,
+    per-merchant) + `POST`/`DELETE /subscriptions/mute` + `GET /subscriptions/mutes`.
+    `list_subscriptions` filters muted merchants, so one mute drops the merchant from the screen
+    AND both subscription sweeps. Android: a "Not a subscription" (Block icon) dismiss on each
+    recurring row, optimistic with restore-on-failure. Silences the weekly gas stop / person, and
+    gives #9's double-counted mortgage its dismiss.
 13. **Encoding fragility in the toolchain — GUARD ADDED 2026-07-11.** UTF-8 mojibake shipped to
     the Home screen twice (em-dashes written through cp1252). `scripts/check_encoding.py` (wired
     into CI as the "Encoding guard" job) now scans source for the cp1252-mangle marker sequences
