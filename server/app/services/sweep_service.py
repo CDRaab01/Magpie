@@ -3,7 +3,8 @@ unparsed-email backlog, **missing-bill** (the 'a simulated missing bill pages th
 CLAUDE.md Phase 6), **paycheck-late**, and **per-account freshness**. Latch state is persisted
 (F11) via `alert_latch_service`, so a redeploy never re-pages an already-open condition.
 **Auth-hold expiry** (2026-07-10) is the first sweep that mutates data rather than only alerting;
-**paycheck-short** (2026-07-10) pages when a recurring paycheck lands below its band. **Spending
+**paycheck-short** (2026-07-10) pages when a recurring paycheck lands below its band; **bill-late**
+(2026-07-11) pages when a recurring bill's expected payment is overdue (rule-driven missing-bill). **Spending
 anomalies** (2026-07-10) page on a large charge at a never-seen merchant and on a category running
 well over its trailing median — the proactive half of "watch my spending" (#19a).
 """
@@ -139,6 +140,39 @@ async def run_paycheck_late_sweep(
                 f"Expected income '{rule.matcher}' hasn't arrived — it was due around {expected}.",
                 title="Magpie: paycheck late",
                 click=LINK_CASHFLOW,
+            )
+
+
+async def run_bill_late_sweep(
+    db: AsyncSession, user_id: uuid.UUID, publisher: NtfyPublisher, *, now: datetime.datetime
+) -> None:
+    """A recurring-bill rule whose next expected payment is overdue pages once (ROADMAP #2) — the
+    "bill missing" alert driven by *rules*, not `bill_statements`. It's the analog of paycheck-late
+    and the only missing-bill path until the `bill_issued` email parser lands (blocked on the
+    Discover sender). When the payment lands, F6 advances the rule's `last_matched_at`, the expected
+    date rolls forward, and the latch clears — so a later miss is a fresh episode."""
+    today = owner_local_date(now, settings.owner_timezone)
+    result = await db.execute(
+        select(Rule).where(
+            Rule.user_id == user_id,
+            Rule.type == "recurring_bill",
+            Rule.enabled.is_(True),
+            Rule.last_matched_at.is_not(None),
+        )
+    )
+    for rule in result.scalars().all():
+        cadence = rule.cadence or {}
+        try:
+            expected = expected_next_date(rule.last_matched_at.date(), cadence)
+        except InvalidCadence:
+            continue
+        slack = datetime.timedelta(days=cadence.get("slack_days", 0))
+        late = today > expected + slack
+        if await latched_should_alert(db, user_id, f"bill_late:{rule.id}", late, now):
+            await publisher.publish(
+                f"Expected bill '{rule.matcher}' hasn't been paid — it was due around {expected}.",
+                title="Magpie: bill missing",
+                click=LINK_BILLS,
             )
 
 
@@ -573,6 +607,7 @@ async def sweep_loop() -> None:
                     await run_unparsed_backlog_sweep(db, user_id, publisher, now=now)
                     await run_missing_bill_sweep(db, user_id, publisher, now=now)
                     await run_paycheck_late_sweep(db, user_id, publisher, now=now)
+                    await run_bill_late_sweep(db, user_id, publisher, now=now)
                     await run_paycheck_short_sweep(db, user_id, publisher, now=now)
                     await run_large_charge_sweep(db, user_id, publisher, now=now)
                     await run_category_overspend_sweep(
