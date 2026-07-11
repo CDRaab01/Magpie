@@ -58,3 +58,19 @@ class PromotionResultOut(BaseModel):
     transactions_filed: int
     merchants_skipped: int
     applications: list[RuleApplicationOut]
+
+
+class IncomeProposalOut(BaseModel):
+    merchant: str
+    cadence: str
+    slack_days: int
+    typical_amount_cents: int
+    band_pct: float
+    occurrences: int
+    last_date: datetime.date
+
+
+class IncomeSeedResultOut(BaseModel):
+    dry_run: bool
+    rules_created: int
+    proposals: list[IncomeProposalOut]

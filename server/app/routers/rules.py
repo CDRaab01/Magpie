@@ -6,8 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.schemas.rule import PromotionResultOut, RuleCreate, RuleOut, RuleUpdate
+from app.schemas.rule import (
+    IncomeProposalOut,
+    IncomeSeedResultOut,
+    PromotionResultOut,
+    RuleCreate,
+    RuleOut,
+    RuleUpdate,
+)
 from app.security import CurrentUser
+from app.services.income_rule_service import seed_income_rules
 from app.services.rule_apply_service import (
     apply_rule_to_history,
     promote_confirmed_to_rules,
@@ -74,6 +82,42 @@ async def promote_confirmed(
         db, current_user.id, dry_run=dry_run, min_transactions=min_transactions
     )
     return PromotionResultOut(**dataclasses.asdict(summary))
+
+
+@router.post("/from-income", response_model=IncomeSeedResultOut)
+async def seed_income(
+    current_user: CurrentUser,
+    db: DbSession,
+    dry_run: Annotated[bool, Query()] = True,
+):
+    """Seed `recurring_income` rules from deposit history (ROADMAP #1), arming paycheck-late/short,
+    next-paycheck-date, and safe-to-spend. Proposes only *live* income streams — a former
+    employer's dormant deposits are excluded by a recency gate so arming can't false-alarm "late",
+    and small credits (interest, fee waivers) by an amount floor. Each rule's band is derived from
+    the deposit's own variance, and `last_matched_at` is anchored to the latest deposit so the
+    next-expected-date math starts from reality. `dry_run=true` (default) previews and writes
+    nothing."""
+    import datetime as _dt
+
+    summary = await seed_income_rules(
+        db, current_user.id, dry_run=dry_run, now=_dt.datetime.now(_dt.timezone.utc)
+    )
+    return IncomeSeedResultOut(
+        dry_run=summary.dry_run,
+        rules_created=summary.rules_created,
+        proposals=[
+            IncomeProposalOut(
+                merchant=p.merchant,
+                cadence=p.shape.cadence,
+                slack_days=p.shape.slack_days,
+                typical_amount_cents=p.shape.typical_amount_cents,
+                band_pct=p.shape.band_pct,
+                occurrences=p.shape.occurrences,
+                last_date=p.shape.last_date,
+            )
+            for p in summary.proposals
+        ],
+    )
 
 
 @router.post("/{rule_id}/apply-to-history", response_model=PromotionResultOut)
