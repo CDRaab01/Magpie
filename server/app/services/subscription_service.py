@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
+from app.models.subscription_mute import SubscriptionMute
 from app.models.transaction import COUNTABLE_STATUSES, Transaction
 from app.rules.subscriptions import Recurrence, detect_recurrence
 
@@ -50,9 +51,22 @@ async def list_subscriptions(
         )
     ).all()
 
+    # Merchants the owner marked "not a subscription" (#12) — skipped for both the screen and the
+    # sweeps, since every caller of this function goes through here.
+    muted = {
+        m
+        for m in (
+            await db.execute(
+                select(SubscriptionMute.merchant).where(SubscriptionMute.user_id == user_id)
+            )
+        )
+        .scalars()
+        .all()
+    }
+
     by_merchant: dict[str, list[tuple[datetime.date, int]]] = {}
     for name, date, amount in rows:
-        if name and name.strip():
+        if name and name.strip() and name not in muted:
             by_merchant.setdefault(name, []).append((date, amount))
 
     subs = []
