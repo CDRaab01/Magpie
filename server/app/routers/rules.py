@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.schemas.rule import (
+    BillProposalOut,
+    BillSeedResultOut,
     IncomeProposalOut,
     IncomeSeedResultOut,
     PromotionResultOut,
@@ -15,6 +17,7 @@ from app.schemas.rule import (
     RuleUpdate,
 )
 from app.security import CurrentUser
+from app.services.bill_rule_service import seed_bill_rules
 from app.services.income_rule_service import seed_income_rules
 from app.services.rule_apply_service import (
     apply_rule_to_history,
@@ -89,18 +92,26 @@ async def seed_income(
     current_user: CurrentUser,
     db: DbSession,
     dry_run: Annotated[bool, Query()] = True,
+    only: Annotated[list[str] | None, Query()] = None,
 ):
     """Seed `recurring_income` rules from deposit history (ROADMAP #1), arming paycheck-late/short,
     next-paycheck-date, and safe-to-spend. Proposes only *live* income streams — a former
     employer's dormant deposits are excluded by a recency gate so arming can't false-alarm "late",
     and small credits (interest, fee waivers) by an amount floor. Each rule's band is derived from
     the deposit's own variance, and `last_matched_at` is anchored to the latest deposit so the
-    next-expected-date math starts from reality. `dry_run=true` (default) previews and writes
-    nothing."""
+    next-expected-date math starts from reality.
+
+    `dry_run=true` (default) previews and writes nothing. Pass `only=<matcher>` (repeatable) to arm
+    just those proposals — the recency gate can't tell a former employer or temporary leave pay
+    from a live paycheck, so the owner picks which to confirm rather than arming every proposal."""
     import datetime as _dt
 
     summary = await seed_income_rules(
-        db, current_user.id, dry_run=dry_run, now=_dt.datetime.now(_dt.timezone.utc)
+        db,
+        current_user.id,
+        dry_run=dry_run,
+        only=set(only) if only else None,
+        now=_dt.datetime.now(_dt.timezone.utc),
     )
     return IncomeSeedResultOut(
         dry_run=summary.dry_run,
@@ -108,6 +119,48 @@ async def seed_income(
         proposals=[
             IncomeProposalOut(
                 merchant=p.merchant,
+                cadence=p.shape.cadence,
+                slack_days=p.shape.slack_days,
+                typical_amount_cents=p.shape.typical_amount_cents,
+                band_pct=p.shape.band_pct,
+                occurrences=p.shape.occurrences,
+                last_date=p.shape.last_date,
+            )
+            for p in summary.proposals
+        ],
+    )
+
+
+@router.post("/from-bills", response_model=BillSeedResultOut)
+async def seed_bills(
+    current_user: CurrentUser,
+    db: DbSession,
+    dry_run: Annotated[bool, Query()] = True,
+    only: Annotated[list[str] | None, Query()] = None,
+):
+    """Seed `recurring_bill` rules from spend history (ROADMAP #2), arming the projected cash-flow
+    calendar, auto-filing of bill payments, and the bill-late ("missing bill") sweep. Each rule is
+    bound to the account the biller is usually paid from (CLAUDE.md §2). A former residence's dormant
+    utilities are excluded by a recency gate; the band is derived from each biller's own (often
+    seasonal) variance. `dry_run=true` (default) previews; `only=<matcher>` (repeatable) arms just
+    those proposals."""
+    import datetime as _dt
+
+    summary = await seed_bill_rules(
+        db,
+        current_user.id,
+        dry_run=dry_run,
+        only=set(only) if only else None,
+        now=_dt.datetime.now(_dt.timezone.utc),
+    )
+    return BillSeedResultOut(
+        dry_run=summary.dry_run,
+        rules_created=summary.rules_created,
+        proposals=[
+            BillProposalOut(
+                merchant=p.merchant,
+                account_id=p.account_id,
+                account_name=p.account_name,
                 cadence=p.shape.cadence,
                 slack_days=p.shape.slack_days,
                 typical_amount_cents=p.shape.typical_amount_cents,

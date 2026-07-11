@@ -14,7 +14,7 @@ from app.models.account import Account
 from app.models.rule import Rule
 from app.models.transaction import Transaction
 from app.models.user import User
-from app.rules.income import detect_income
+from app.rules.recurring import detect_recurring
 from app.services.income_rule_service import propose_income_rules, seed_income_rules
 
 NOW = datetime.datetime(2026, 7, 15, 12, 0, tzinfo=datetime.timezone.utc)
@@ -31,7 +31,7 @@ def _biweekly(start: datetime.date, n: int, cents: int, jitter=0):
 
 
 def test_a_steady_biweekly_paycheck_is_detected():
-    shape = detect_income(_biweekly(datetime.date(2026, 1, 2), 8, 500000))
+    shape = detect_recurring(_biweekly(datetime.date(2026, 1, 2), 8, 500000))
     assert shape is not None
     assert shape.cadence == "biweekly"
     assert shape.typical_amount_cents == 500000
@@ -39,8 +39,8 @@ def test_a_steady_biweekly_paycheck_is_detected():
 
 
 def test_a_variable_paycheck_gets_a_wider_band_than_a_steady_one():
-    steady = detect_income(_biweekly(datetime.date(2026, 1, 2), 8, 500000, jitter=5000))
-    variable = detect_income(_biweekly(datetime.date(2026, 1, 2), 8, 500000, jitter=90000))
+    steady = detect_recurring(_biweekly(datetime.date(2026, 1, 2), 8, 500000, jitter=5000))
+    variable = detect_recurring(_biweekly(datetime.date(2026, 1, 2), 8, 500000, jitter=90000))
     assert variable.band_pct > steady.band_pct
 
 
@@ -50,11 +50,11 @@ def test_chaotic_amounts_are_not_income():
         (datetime.date(2026, 1, 2) + datetime.timedelta(days=14 * i), amt)
         for i, amt in enumerate([5000, 135000, 25000, 90000, 5000, 200000])
     ]
-    assert detect_income(chaotic) is None
+    assert detect_recurring(chaotic) is None
 
 
 def test_too_few_deposits_is_not_income():
-    assert detect_income(_biweekly(datetime.date(2026, 6, 1), 3, 500000)) is None
+    assert detect_recurring(_biweekly(datetime.date(2026, 6, 1), 3, 500000)) is None
 
 
 # --- service guards -----------------------------------------------------------------------

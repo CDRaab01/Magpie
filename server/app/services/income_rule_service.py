@@ -2,7 +2,7 @@
 next-paycheck-date, and the real safe-to-spend — none of which fire today because prod has zero
 `recurring_income` rules.
 
-Detection is pure (`app/rules/income.py`); this applies the two guards that need the DB and the
+Detection is pure (`app/rules/recurring.py`); this applies the two guards that need the DB and the
 clock: a **recency gate** (a former employer whose last deposit is old must NOT become a live
 "late paycheck" alert — this is the arming trap) and an **amount floor** (a paycheck/rent is a
 meaningful sum, not a $8 interest credit). Proposals are drafts the owner confirms; seeding
@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.account import Account
 from app.models.rule import Rule
 from app.models.transaction import COUNTABLE_STATUSES, Transaction
-from app.rules.income import IncomeShape, detect_income
+from app.rules.recurring import RecurringShape, detect_recurring
 from app.rules.merchant_match import matches, normalize_merchant
 
 LOOKBACK_DAYS = 500
@@ -31,7 +31,7 @@ FLOOR_CENTS = 50000  # $500 — below this it's a fee waiver / interest / small 
 @dataclass(frozen=True)
 class IncomeProposal:
     merchant: str
-    shape: IncomeShape
+    shape: RecurringShape
 
 
 async def propose_income_rules(
@@ -74,7 +74,7 @@ async def propose_income_rules(
 
     proposals: list[IncomeProposal] = []
     for name, dated_amounts in by_merchant.items():
-        shape = detect_income(dated_amounts)
+        shape = detect_recurring(dated_amounts)
         if shape is None:
             continue
         if shape.typical_amount_cents < FLOOR_CENTS:
@@ -98,13 +98,20 @@ class SeedSummary:
 
 
 async def seed_income_rules(
-    db: AsyncSession, user_id: uuid.UUID, *, dry_run: bool = True, now: datetime.datetime
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    dry_run: bool = True,
+    only: set[str] | None = None,
+    now: datetime.datetime,
 ) -> SeedSummary:
-    """Create a `recurring_income` rule per proposal. `last_matched_at` is anchored to the latest
-    deposit's date so paycheck-late's next-expected-date math starts from reality, not from now —
-    the arming safeguard. `dry_run` rolls back after reporting."""
+    """Create a `recurring_income` rule per proposal (or only those whose matcher is in `only` —
+    per-proposal selection, because not every detected stream is one to arm: a former employer's
+    recency-passing deposits, or temporary leave pay, should be left out). `last_matched_at` is
+    anchored to the latest deposit so paycheck-late starts from reality. `dry_run` rolls back."""
     proposals = await propose_income_rules(db, user_id, now=now)
-    for p in proposals:
+    chosen = [p for p in proposals if only is None or p.merchant in only]
+    for p in chosen:
         db.add(
             Rule(
                 user_id=user_id,
@@ -120,9 +127,8 @@ async def seed_income_rules(
                 enabled=True,
             )
         )
-    created = len(proposals)
     if dry_run:
         await db.rollback()
     else:
         await db.commit()
-    return SeedSummary(dry_run=dry_run, rules_created=created, proposals=proposals)
+    return SeedSummary(dry_run=dry_run, rules_created=len(chosen), proposals=proposals)

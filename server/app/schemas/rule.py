@@ -74,3 +74,21 @@ class IncomeSeedResultOut(BaseModel):
     dry_run: bool
     rules_created: int
     proposals: list[IncomeProposalOut]
+
+
+class BillProposalOut(BaseModel):
+    merchant: str
+    account_id: uuid.UUID
+    account_name: str
+    cadence: str
+    slack_days: int
+    typical_amount_cents: int
+    band_pct: float
+    occurrences: int
+    last_date: datetime.date
+
+
+class BillSeedResultOut(BaseModel):
+    dry_run: bool
+    rules_created: int
+    proposals: list[BillProposalOut]
