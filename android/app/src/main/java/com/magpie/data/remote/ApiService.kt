@@ -2,6 +2,7 @@ package com.magpie.data.remote
 
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -168,4 +169,10 @@ interface ApiService {
     // --- Ops ---
     @GET("version")
     suspend fun getVersion(): VersionOut
+
+    // --- Export (#16) ---
+    // One month's ledger as CSV. Returns the raw body (text/csv), so no JSON converter is involved;
+    // `month` is any day in the month (yyyy-MM-dd), normalized server-side to the first.
+    @GET("export/transactions.csv")
+    suspend fun exportTransactionsCsv(@Query("month") month: String): ResponseBody
 }

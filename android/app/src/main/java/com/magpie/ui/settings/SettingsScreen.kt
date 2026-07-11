@@ -26,28 +26,62 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import android.content.Intent
 import com.magpie.data.remote.CategoryOut
 import com.magpie.ui.theme.MagpieTheme
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
+import java.io.File
+import java.time.YearMonth
 
 /** Thin ViewModel-wired wrapper. [SettingsContent] below is the pure, screenshot-testable half. */
 @Composable
 fun SettingsScreen(navController: NavController) {
     val viewModel: SettingsViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    // #16: when an export CSV is ready, write it to cache/exports/ and hand it to the share sheet
+    // via a FileProvider content:// URI. This platform glue stays out of the testable Content.
+    LaunchedEffect(state.pendingExport) {
+        val payload = state.pendingExport ?: return@LaunchedEffect
+        try {
+            val dir = File(context.cacheDir, "exports").apply { mkdirs() }
+            val file = File(dir, payload.filename)
+            file.writeText(payload.csv)
+            val uri = FileProvider.getUriForFile(
+                context, "${context.packageName}.fileprovider", file,
+            )
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "text/csv"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(
+                Intent.createChooser(send, "Share ${payload.filename}")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        } catch (_: Exception) {
+            // Best-effort: a share failure must not crash Settings.
+        } finally {
+            viewModel.clearPendingExport()
+        }
+    }
 
     SettingsContent(
         state = state,
@@ -55,6 +89,7 @@ fun SettingsScreen(navController: NavController) {
         onAddCategory = viewModel::addCategory,
         onRenameCategory = viewModel::renameCategory,
         onDeleteCategory = viewModel::deleteCategory,
+        onExportMonth = viewModel::exportMonth,
     )
 }
 
@@ -66,6 +101,7 @@ internal fun SettingsContent(
     onAddCategory: (name: String) -> Unit,
     onRenameCategory: (id: String, name: String) -> Unit,
     onDeleteCategory: (id: String) -> Unit,
+    onExportMonth: (month: String) -> Unit = {},
 ) {
     // Dialog state lives here so the whole screen stays one testable Content — a default capture
     // renders the list with every dialog closed.
@@ -116,6 +152,10 @@ internal fun SettingsContent(
                             onRename = { renaming = category },
                             onDelete = { deleting = category },
                         )
+                    }
+                    item {
+                        Spacer(Modifier.height(24.dp))
+                        ExportBlock(exporting = state.exporting, onExportMonth = onExportMonth)
                     }
                     item {
                         Spacer(Modifier.height(24.dp))
@@ -211,6 +251,46 @@ private fun CategoryRow(
                         Icon(Icons.Default.Delete, contentDescription = "Delete ${category.name}")
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExportBlock(exporting: Boolean, onExportMonth: (month: String) -> Unit) {
+    var month by remember { mutableStateOf(YearMonth.now().toString()) }  // "yyyy-MM"
+    val valid = Regex("""\d{4}-\d{2}""").matches(month)
+    PanelCard(channel = MagpieTheme.colors.money.base, modifier = Modifier.fillMaxWidth()) {
+        SectionHeader(label = "Export", channel = MagpieTheme.colors.money.base)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Download a month's transactions as a CSV and share it — your data, always yours.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextField(
+                value = month,
+                onValueChange = { month = it },
+                label = { Text("Month (YYYY-MM)") },
+                singleLine = true,
+                isError = !valid,
+                modifier = Modifier.weight(1f),
+            )
+            if (exporting) {
+                CircularProgressIndicator(modifier = Modifier.height(24.dp))
+            } else {
+                PulseButton(
+                    text = "Export",
+                    enabled = valid,
+                    compact = true,
+                    onClick = { onExportMonth(month) },
+                )
             }
         }
     }

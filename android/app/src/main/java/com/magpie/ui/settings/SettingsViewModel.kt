@@ -12,6 +12,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
+/** A fetched CSV export waiting for the screen to hand it to the share sheet (#16). */
+data class ExportPayload(val filename: String, val csv: String)
+
 data class SettingsUiState(
     val categories: List<CategoryOut> = emptyList(),
     // Shown in About; best-effort, so a failed /version read never blocks the category editor.
@@ -19,6 +22,10 @@ data class SettingsUiState(
     val serverCommit: String? = null,
     val loading: Boolean = true,
     val error: String? = null,
+    val exporting: Boolean = false,
+    // Set when an export CSV is ready; the screen writes it to a file and launches the share sheet,
+    // then clears it. Kept out of the ViewModel because the share is platform glue (Context/Intent).
+    val pendingExport: ExportPayload? = null,
 )
 
 @HiltViewModel
@@ -90,6 +97,30 @@ class SettingsViewModel @Inject constructor(
                 _state.value = _state.value.copy(error = e.message ?: "Couldn't delete category")
             }
         }
+    }
+
+    /** Fetch one month's CSV (#16) and stash it as a pending share for the screen to hand off.
+     *  `month` is yyyy-MM; the endpoint takes any day in the month, so we send the first. */
+    fun exportMonth(month: String) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(exporting = true, error = null)
+            try {
+                val body = api.exportTransactionsCsv("$month-01")
+                _state.value = _state.value.copy(
+                    exporting = false,
+                    pendingExport = ExportPayload(filename = "magpie-$month.csv", csv = body.string()),
+                )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    exporting = false,
+                    error = e.message ?: "Couldn't export",
+                )
+            }
+        }
+    }
+
+    fun clearPendingExport() {
+        _state.value = _state.value.copy(pendingExport = null)
     }
 
     /** Re-read categories after a mutation without flipping the whole screen back to a spinner. */

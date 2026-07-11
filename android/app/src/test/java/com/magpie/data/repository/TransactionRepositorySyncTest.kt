@@ -180,6 +180,8 @@ private class FakeApi : ApiService {
         error("unused")
 
     override suspend fun getVersion(): VersionOut = error("unused")
+    override suspend fun exportTransactionsCsv(month: String): okhttp3.ResponseBody =
+        error("unused")
 }
 
 class TransactionRepositorySyncTest {

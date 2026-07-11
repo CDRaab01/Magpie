@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider paths for sharing exported CSVs (#16). Exports are written to cache/exports/ and
+     shared read-only via a content:// URI so no external storage permission is needed. -->
+<paths>
+    <cache-path name="exports" path="exports/" />
+</paths>

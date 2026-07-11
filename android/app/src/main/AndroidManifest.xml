@@ -38,6 +38,18 @@
             </intent-filter>
         </activity>
 
+        <!-- #16: share exported CSVs via a content:// URI. grantUriPermissions lets the share
+             target read the single file we hand it; no external-storage permission needed. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- AppAuth (suite SSO) themes its AuthorizationManagementActivity as AppCompat but
              leaves RedirectUriReceiverActivity to inherit the app theme, which isn't AppCompat
              -> it crashes on the redirect ("You need to use a Theme.AppCompat theme"). Force an
