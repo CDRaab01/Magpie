@@ -60,8 +60,10 @@ async def test_import_batch_is_scoped_to_the_user(auth_client):
     async with AsyncSessionLocal() as db:
         acct = await db.get(Account, _uuid.UUID(account_id))
         batches = (
-            await db.execute(select(ImportBatch).where(ImportBatch.user_id == acct.user_id))
-        ).scalars().all()
+            (await db.execute(select(ImportBatch).where(ImportBatch.user_id == acct.user_id)))
+            .scalars()
+            .all()
+        )
     assert len(batches) == 1  # this fresh user's single import, correctly attributed
 
 
