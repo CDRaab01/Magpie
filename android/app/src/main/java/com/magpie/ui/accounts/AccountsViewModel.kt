@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.magpie.data.remote.AccountCreate
 import com.magpie.data.remote.AccountOut
 import com.magpie.data.remote.ApiService
+import com.magpie.data.remote.CheckpointCreate
 import com.magpie.data.remote.ImportSummaryOut
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -78,6 +79,21 @@ class AccountsViewModel @Inject constructor(
                 load()
             } catch (e: Exception) {
                 _state.value = _state.value.copy(error = e.message ?: "Couldn't add account")
+            }
+        }
+    }
+
+    fun addCheckpoint(accountId: String, statementDate: String, statedBalanceCents: Long) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(error = null)
+            try {
+                api.addCheckpoint(
+                    accountId,
+                    CheckpointCreate(statementDate = statementDate, statedBalanceCents = statedBalanceCents),
+                )
+                load() // the delta/honesty meter and anchored balance change once a checkpoint lands
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(error = e.message ?: "Couldn't save balance")
             }
         }
     }

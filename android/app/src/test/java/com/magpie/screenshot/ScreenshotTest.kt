@@ -517,6 +517,7 @@ private fun AccountsScene() {
         onDismissImportResult = {},
         onAddAccount = { _, _, _, _ -> },
         onDelete = {},
+        onEnterBalance = { _, _, _ -> },
     )
 }
 

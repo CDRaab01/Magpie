@@ -31,6 +31,15 @@ interface ApiService {
     @DELETE("accounts/{id}")
     suspend fun deleteAccount(@Path("id") id: String)
 
+    @GET("accounts/{id}/checkpoints")
+    suspend fun listCheckpoints(@Path("id") id: String): List<CheckpointOut>
+
+    @POST("accounts/{id}/checkpoints")
+    suspend fun addCheckpoint(
+        @Path("id") id: String,
+        @Body req: CheckpointCreate,
+    ): CheckpointOut
+
     // --- Categories ---
     @GET("categories")
     suspend fun listCategories(): List<CategoryOut>
