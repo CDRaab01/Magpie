@@ -152,8 +152,10 @@ theme is arming what's built, not building more.**
 16. **Export share — DONE 2026-07-11.** Settings has an "Export" section (month field + button)
     that fetches `GET /export/transactions.csv` and hands the CSV to the system share sheet via a
     FileProvider `content://` URI (cache/exports/, ACTION_SEND, no storage permission).
-17. **Budget proposals UI** — `GET /budgets/proposals` is live; surface "Set budgets from your
-    history" in the Budgets screen as confirm-one-by-one drafts (review-not-enter for budgets).
+17. **Budget proposals UI — DONE 2026-07-11.** The Budgets screen shows a "Suggested from your
+    spending" section (from `GET /budgets/proposals`): one confirm-per-row draft per un-budgeted
+    category (trailing-median amount + Set button), review-not-enter. Accepting one creates the
+    budget and drops the draft.
 18. **Insight detail view** — the Home card shows the deterministic one-liner; tapping could
     open the full month breakdown with the LLM narrative (`narrative=true`), category deltas,
     and budget verdicts, instead of routing to Trends.
