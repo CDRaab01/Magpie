@@ -1,4 +1,5 @@
 import uuid
+from datetime import date as date_
 
 from pydantic import BaseModel, field_validator
 
@@ -42,3 +43,28 @@ class AccountOut(BaseModel):
     # account has a statement_checkpoint (i.e. has been through at least one CSV import).
     balance_cents: int
     balance_delta_cents: int | None
+
+
+class CheckpointCreate(BaseModel):
+    """A manually-entered statement balance anchor (ROADMAP #4). `stated_balance_cents` is signed
+    in the ledger's convention — for a card, what you owe reads negative, same as its derived
+    balance — so the reconciliation delta lines up with `AccountOut.balance_cents`."""
+
+    statement_date: date_
+    stated_balance_cents: int
+
+    @field_validator("statement_date")
+    @classmethod
+    def not_in_future(cls, v: date_) -> date_:
+        if v > date_.today():
+            raise ValueError("statement_date cannot be in the future")
+        return v
+
+
+class CheckpointOut(BaseModel):
+    id: uuid.UUID
+    account_id: uuid.UUID
+    statement_date: date_
+    stated_balance_cents: int
+    # None for a manually-entered checkpoint; set when it came from a CSV import batch.
+    import_batch_id: uuid.UUID | None

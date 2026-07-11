@@ -6,7 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.account import Account
-from app.schemas.account import AccountCreate, AccountOut, AccountUpdate
+from app.models.statement_checkpoint import StatementCheckpoint
+from app.schemas.account import (
+    AccountCreate,
+    AccountOut,
+    AccountUpdate,
+    CheckpointCreate,
+    CheckpointOut,
+)
 from app.security import CurrentUser
 from app.services.account_service import (
     compute_account_balance,
@@ -15,7 +22,9 @@ from app.services.account_service import (
     delete_account,
     get_account,
     list_accounts,
+    list_checkpoints,
     update_account,
+    upsert_checkpoint,
 )
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -67,3 +76,36 @@ async def patch_account(
 @router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_account(account_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
     await delete_account(db, current_user.id, account_id)
+
+
+def _checkpoint_out(cp: StatementCheckpoint) -> CheckpointOut:
+    return CheckpointOut(
+        id=cp.id,
+        account_id=cp.account_id,
+        statement_date=cp.statement_date,
+        stated_balance_cents=cp.stated_balance,
+        import_batch_id=cp.import_batch_id,
+    )
+
+
+@router.get("/{account_id}/checkpoints", response_model=list[CheckpointOut])
+async def account_checkpoints(account_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+    checkpoints = await list_checkpoints(db, current_user.id, account_id)
+    return [_checkpoint_out(cp) for cp in checkpoints]
+
+
+@router.post(
+    "/{account_id}/checkpoints",
+    response_model=CheckpointOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_checkpoint(
+    account_id: uuid.UUID, req: CheckpointCreate, current_user: CurrentUser, db: DbSession
+):
+    """Manually anchor a statement balance (ROADMAP #4). Re-posting the same statement_date corrects
+    the balance in place rather than creating a duplicate anchor. Once a second checkpoint exists,
+    the account's reconciliation delta becomes a real honesty signal and the v1 parity clock ticks."""
+    cp = await upsert_checkpoint(
+        db, current_user.id, account_id, req.statement_date, req.stated_balance_cents
+    )
+    return _checkpoint_out(cp)

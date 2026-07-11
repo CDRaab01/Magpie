@@ -1,4 +1,5 @@
 import uuid
+from datetime import date as date_
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -64,6 +65,58 @@ async def delete_account(db: AsyncSession, user_id: uuid.UUID, account_id: uuid.
     account = await get_account(db, user_id, account_id)
     await db.delete(account)
     await db.commit()
+
+
+async def list_checkpoints(
+    db: AsyncSession, user_id: uuid.UUID, account_id: uuid.UUID
+) -> list[StatementCheckpoint]:
+    """This account's statement checkpoints, earliest first. Raises 404 if the account isn't the
+    user's — the ownership check runs before any checkpoint is exposed."""
+    await get_account(db, user_id, account_id)
+    result = await db.execute(
+        select(StatementCheckpoint)
+        .where(StatementCheckpoint.account_id == account_id)
+        .order_by(StatementCheckpoint.statement_date, StatementCheckpoint.id)
+    )
+    return list(result.scalars().all())
+
+
+async def upsert_checkpoint(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+    statement_date: date_,
+    stated_balance_cents: int,
+) -> StatementCheckpoint:
+    """Record (or correct) a manually-entered statement balance anchor (ROADMAP #4 — the path that
+    was missing, so prod had 0 checkpoints and the parity gate could never start). Keyed on
+    (account_id, statement_date): re-entering the same closing date overwrites the balance rather
+    than stacking a duplicate anchor that would corrupt the reconciliation window. `import_batch_id`
+    is cleared to None to mark it hand-entered."""
+    await get_account(db, user_id, account_id)
+    existing = (
+        await db.execute(
+            select(StatementCheckpoint).where(
+                StatementCheckpoint.account_id == account_id,
+                StatementCheckpoint.statement_date == statement_date,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        existing.stated_balance = stated_balance_cents
+        existing.import_batch_id = None
+        checkpoint = existing
+    else:
+        checkpoint = StatementCheckpoint(
+            account_id=account_id,
+            statement_date=statement_date,
+            stated_balance=stated_balance_cents,
+            import_batch_id=None,
+        )
+        db.add(checkpoint)
+    await db.commit()
+    await db.refresh(checkpoint)
+    return checkpoint
 
 
 async def _checkpoint_anchors(
