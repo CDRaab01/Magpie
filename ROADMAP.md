@@ -23,7 +23,7 @@ cashflow, and the Android surfaces for all of it. Review queue: 0. 428 server te
 | paycheck-late, paycheck-short | `recurring_income` rules | **1 rule** (INNAGO; BAE held for leave) |
 | missing-bill, cash-flow calendar, safe-to-spend | `bill_statements` + `recurring_bill` rules | **0 statements, 9 rules** |
 | projected cashflow (#24) | `recurring_bill` rules | **9 rules** |
-| statement parity (the v1 acceptance gate) | `statement_checkpoints` | **0 checkpoints** |
+| statement parity (the v1 acceptance gate) | `statement_checkpoints` | **0 checkpoints** (manual-entry path now shipped; awaiting `[H]`) |
 
 All 399 rules are merchant→category. Nothing pages when a paycheck is late because Magpie has
 never been told (or never inferred) what a paycheck looks like. **The single highest-leverage
@@ -69,13 +69,16 @@ theme is arming what's built, not building more.**
 3. **`bill_issued` parser** — blocked on **[H]**: the Discover statement-ready sender address
    (open since 2026-07-08; browser flakiness; don't guess). Without it, `bill_statements` only
    fills via manual POST.
-4. **Anchor statement checkpoints and start the parity clock — needs code BEFORE the [H].**
-   Checkpoints are only created when an imported CSV row carries a balance column; none of the
-   owner's exports do (119 imports → 0 checkpoints), and there is **no manual entry path** — the
-   original "[H] just enter the balances" instruction was impossible as written (caught
-   2026-07-10). Build `POST /accounts/{id}/checkpoints` + a small Accounts-screen affordance,
-   THEN `[H]` enter each account's statement balance. The v1 acceptance gate — two consecutive
-   to-the-penny months — has never started counting.
+4. **Anchor statement checkpoints and start the parity clock — CODE BUILT 2026-07-10, awaiting
+   `[H]` balance entry.** Checkpoints were only created when an imported CSV row carried a balance
+   column; none of the owner's exports do (119 imports → 0 checkpoints), and there was **no manual
+   entry path** — the original "[H] just enter the balances" instruction was impossible as written
+   (caught 2026-07-10). Now built: `POST`/`GET /accounts/{id}/checkpoints` (upsert-by-date, signed
+   balances, future-date rejected, ownership-checked; deployed) and an Accounts-screen affordance
+   ("Enter statement balance" / "Update balance" per row, opening a date+amount dialog; merged).
+   **Remaining `[H]`:** open each account, enter its latest statement's closing balance, then do it
+   again next month — the v1 acceptance gate (two consecutive to-the-penny months) starts counting
+   only once each account has two checkpoints to reconcile between.
 5. **[H] The two remaining exports:** Savings history before 2025-03-31 (the account predates
    its 69 imported rows), and Amex 2024-06→2024-11 (six statements). The Amex gap is why four
    payments totaling $29k sit as unpaired transfers, and it hides whether Dec-2024/Dec-2025/
