@@ -606,7 +606,9 @@ async def run_savings_goal_sweep(
     )
     short = goal.amount_cents - net.projected_net_cents
     at_risk = short > settings.coach_goal_slack_cents
-    if await latched_should_alert(db, user_id, f"savings_goal_risk:{this_month:%Y-%m}", at_risk, now):
+    if await latched_should_alert(
+        db, user_id, f"savings_goal_risk:{this_month:%Y-%m}", at_risk, now
+    ):
         body = (
             f"{today:%B} is projecting ${net.projected_net_cents / 100:,.0f} net vs your"
             f" ${goal.amount_cents / 100:,.0f} savings goal — about ${short / 100:,.0f} short."

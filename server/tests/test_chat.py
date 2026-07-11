@@ -22,12 +22,17 @@ NOW = datetime.datetime(2026, 7, 15, 12, 0, tzinfo=datetime.timezone.utc)
 # --- pure guards --------------------------------------------------------------------------
 
 
-def test_the_system_prompt_forbids_advice_and_raw_data():
+def test_the_system_prompt_scopes_coaching_and_forbids_the_rest():
+    """§6 amendment (2026-07-11): budget coaching against the household's OWN budgets/goal is
+    allowed; investment/tax/legal advice and product recommendations stay banned, chat can never
+    act (it points at the Budgets screen), and the aggregates stay the only ground truth."""
     msgs = build_messages({"spend": 100}, [], "how much did I spend?")
     system = msgs[0]["content"]
     assert msgs[0]["role"] == "system"
-    assert "descriptive" in system.lower()
-    assert "no investment, tax" in system.lower() or "investment, tax" in system.lower()
+    assert "budget coaching" in system.lower()  # the narrow allowance is explicit
+    assert "investment, tax, or legal advice" in system.lower()  # the hard bans remain
+    assert "never recommend financial products" in system.lower()
+    assert "cannot change budgets or goals" in system.lower()  # advises, never acts
     assert "AGGREGATES" in system
     # The question is a separate user turn the system prompt precedes.
     assert msgs[-1] == {"role": "user", "content": "how much did I spend?"}
