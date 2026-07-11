@@ -90,10 +90,10 @@ theme is arming what's built, not building more.**
 
 ## Theme 2 — Bugs and bad code (found this session, unfixed)
 
-7. **`import_batches` has no `user_id` and no FK to anything.** The only unscoped table left;
-   ~88 of its 119 rows are test residue that cannot be attributed or safely pruned. Migration:
-   add nullable `user_id`, backfill via each batch's transactions where unambiguous, scope the
-   reads. (The residue cleanup deliberately skipped this table.)
+7. **`import_batches` user scoping — DONE 2026-07-11.** Added nullable `user_id` + FK, backfilled
+   from each batch's transactions where they resolve to one owner (prod: 20/121 rows attributed;
+   the ~101 test-residue rows with no surviving transactions stay NULL), and the import service
+   now sets `user_id` on every new batch. It's no longer the one unscoped table.
 8. **Merchant-variant collapsing.** `MEIJER FORT WAYNE IN` / `MEIJER STORE 138…` /
    `MEIJER EXPRESS 138…` are one merchant to a human and three to `merchant_norm`. This caused a
    large-charge false positive (papered over by raising the threshold to $500 — the roadmap
@@ -109,11 +109,9 @@ theme is arming what's built, not building more.**
     (408 rows — it's a shopping marketplace), `PAYPAL → Other`, `MONTHLY MAINTENANCE FEE →
     Housing` (a bank fee), `ROCKET LAWYER → Housing` (arguably Legal). Fixing a rule +
     `apply-to-history` re-files its rows in one step.
-11. **`alert_latches` grows without bound.** Several sweeps latch on per-row keys
-    (`large_new_charge:<txn>`, `price_hike:<merchant>:<amount>`, `paycheck_short:<rule>:<txn>`,
-    `monthly_digest:<month>`). Harmless at household scale for years, but it's an append-only
-    table with no cleanup — add a sweep-side TTL prune (e.g. resolved latches older than 12
-    months) before it's an archaeology dig.
+11. **`alert_latches` TTL prune — DONE 2026-07-11.** `prune_resolved_latches` (delete inactive
+    latches older than 365 days) runs once per sweep loop. Active latches (open conditions) are
+    never pruned; a resolved key that recurs re-materializes and fires a correct fresh rising edge.
 12. **Subscription/anomaly dismissals — DONE 2026-07-11.** `subscription_mutes` (per-user,
     per-merchant) + `POST`/`DELETE /subscriptions/mute` + `GET /subscriptions/mutes`.
     `list_subscriptions` filters muted merchants, so one mute drops the merchant from the screen
