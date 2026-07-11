@@ -23,6 +23,8 @@ import com.magpie.ui.accounts.AccountsContent
 import com.magpie.ui.accounts.AccountsUiState
 import com.magpie.ui.bills.BillsContent
 import com.magpie.ui.bills.BillsUiState
+import com.magpie.data.remote.GoalOut
+import com.magpie.data.remote.NetProjectionOut
 import com.magpie.ui.budgets.BudgetRow
 import com.magpie.ui.budgets.BudgetsContent
 import com.magpie.ui.budgets.BudgetsUiState
@@ -692,11 +694,37 @@ private fun BudgetsScene() {
         state = BudgetsUiState(
             monthLabel = "July 2026",
             rows = listOf(
-                BudgetRow(id = "1", categoryName = "Dining", amountCents = 20000, spentCents = 26500),
-                BudgetRow(id = "2", categoryName = "Groceries", amountCents = 60000, spentCents = 41200),
-                BudgetRow(id = "3", categoryName = "Transport", amountCents = 15000, spentCents = 3000),
+                BudgetRow(
+                    id = "1", categoryId = "c1", categoryName = "Dining",
+                    amountCents = 20000, spentCents = 26500,
+                    projectedCents = 54900, dailyAllowanceCents = 0, paceStatus = "over",
+                ),
+                BudgetRow(
+                    id = "2", categoryId = "c2", categoryName = "Groceries",
+                    amountCents = 60000, spentCents = 41200,
+                    projectedCents = 63800, dailyAllowanceCents = 1100, paceStatus = "watch",
+                ),
+                BudgetRow(
+                    id = "3", categoryId = "c3", categoryName = "Transport",
+                    amountCents = 15000, spentCents = 3000,
+                    projectedCents = 4600, dailyAllowanceCents = 750, paceStatus = "on_track",
+                ),
             ),
             categories = emptyList(),
+            goal = GoalOut(
+                id = "g1", kind = "monthly_savings", amountCents = 50000,
+                createdAt = "2026-07-01T00:00:00Z",
+            ),
+            net = NetProjectionOut(
+                mtdIncomeCents = 250000, mtdSpendCents = 190000,
+                projectedIncomeCents = 400000, projectedSpendCents = 368000,
+                projectedNetCents = 32000, basis = "blend", goalDeltaCents = -18000,
+            ),
+            daysLeft = 16,
+            coachHeadline = "Dining is running the month hot",
+            coachCoaching = "Dining is already $65 over its $200 budget and pacing toward " +
+                "$549. Groceries can still land on budget at about $11/day.",
+            uncategorizedMtdCents = 4200,
             loading = false,
         ),
         onBack = {},
