@@ -70,6 +70,18 @@ jobs:
       - run: alembic upgrade head
       - run: pytest tests/ -v --tb=short
 
+  encoding-guard:
+    name: "Encoding guard"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      # Fails if any source file contains UTF-8-through-cp1252 mojibake (#13) — the em-dash bug
+      # that shipped to Home twice, invisible in review.
+      - run: python scripts/check_encoding.py
+
   # ── Android ───────────────────────────────────────────────────────────────
 
   android-test:

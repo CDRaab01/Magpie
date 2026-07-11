@@ -117,10 +117,12 @@ theme is arming what's built, not building more.**
     Cash-App-to-a-person as "subscriptions" (honest per spec, noisy per life). Add a
     per-merchant mute ("not a subscription") that both the screen and the two sweep alerts
     respect. Same affordance solves #9's duplicate-mortgage row.
-13. **Encoding fragility in the toolchain.** UTF-8 mojibake shipped to the Home screen twice
-    this session (em-dashes written through cp1252). Fixed by going ASCII, but add the backstop:
-    a lint/CI check that source strings contain no `â€`/replacement-char sequences, so the next
-    corrupted write fails the build instead of the screenshot review.
+13. **Encoding fragility in the toolchain — GUARD ADDED 2026-07-11.** UTF-8 mojibake shipped to
+    the Home screen twice (em-dashes written through cp1252). `scripts/check_encoding.py` (wired
+    into CI as the "Encoding guard" job) now scans source for the cp1252-mangle marker sequences
+    and the U+FFFD replacement char, so the next corrupted write fails the build instead of the
+    screenshot review. (The check caught a literal mojibake example that had been sitting in this
+    very roadmap item.)
 14. **The chat/insight LLM timeout is 15s — the live probe needed 60s.** `LmStudioClient`
     defaults to 15 seconds and `make_llm_client` doesn't override it; the longer ask-your-ledger
     answers (the "biggest recurring charges" reply) can exceed that, so users will sometimes get
