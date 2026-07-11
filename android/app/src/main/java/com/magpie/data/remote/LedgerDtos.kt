@@ -187,6 +187,120 @@ data class BudgetOut(
 @Serializable
 data class MuteMerchantRequest(val merchant: String)
 
+// --- AI budget coach ---
+
+@Serializable
+data class BudgetUpdate(val amount: Long)
+
+@Serializable
+data class GoalUpsert(@SerialName("amount_cents") val amountCents: Long)
+
+@Serializable
+data class GoalOut(
+    val id: String,
+    val kind: String,
+    @SerialName("amount_cents") val amountCents: Long,
+    @SerialName("created_at") val createdAt: String,
+)
+
+/** One budgeted category's pace + vs-usual context — the coach analyzes the FULL table. */
+@Serializable
+data class BudgetPaceOut(
+    @SerialName("budget_id") val budgetId: String,
+    @SerialName("category_id") val categoryId: String,
+    @SerialName("category_name") val categoryName: String,
+    @SerialName("budget_cents") val budgetCents: Long,
+    @SerialName("spent_cents") val spentCents: Long,
+    @SerialName("projected_cents") val projectedCents: Long?,
+    @SerialName("remaining_cents") val remainingCents: Long,
+    @SerialName("daily_allowance_cents") val dailyAllowanceCents: Long,
+    val status: String, // early | on_track | watch | over_pace | over
+    @SerialName("trailing_median_cents") val trailingMedianCents: Long,
+    @SerialName("delta_vs_usual_cents") val deltaVsUsualCents: Long,
+)
+
+@Serializable
+data class NetProjectionOut(
+    @SerialName("mtd_income_cents") val mtdIncomeCents: Long,
+    @SerialName("mtd_spend_cents") val mtdSpendCents: Long,
+    @SerialName("projected_income_cents") val projectedIncomeCents: Long,
+    @SerialName("projected_spend_cents") val projectedSpendCents: Long,
+    @SerialName("projected_net_cents") val projectedNetCents: Long,
+    val basis: String,
+    @SerialName("goal_delta_cents") val goalDeltaCents: Long?,
+)
+
+@Serializable
+data class CoachStatusOut(
+    val month: String,
+    @SerialName("days_elapsed") val daysElapsed: Int,
+    @SerialName("days_in_month") val daysInMonth: Int,
+    val budgets: List<BudgetPaceOut>,
+    val goal: GoalOut?,
+    val net: NetProjectionOut,
+    @SerialName("uncategorized_mtd_cents") val uncategorizedMtdCents: Long,
+    @SerialName("narrative_headline") val narrativeHeadline: String? = null,
+    @SerialName("narrative_coaching") val narrativeCoaching: String? = null,
+    @SerialName("narrative_source") val narrativeSource: String = "unavailable",
+)
+
+@Serializable
+data class MonthSpendOut(val month: String, @SerialName("spend_cents") val spendCents: Long)
+
+@Serializable
+data class BudgetHistoryOut(
+    val month: String,
+    @SerialName("budget_cents") val budgetCents: Long,
+    @SerialName("actual_cents") val actualCents: Long,
+)
+
+@Serializable
+data class MerchantLineOut(
+    val merchant: String,
+    @SerialName("spend_cents") val spendCents: Long,
+    val count: Int,
+)
+
+@Serializable
+data class CategoryAnalysisOut(
+    @SerialName("category_id") val categoryId: String,
+    @SerialName("category_name") val categoryName: String,
+    val month: String,
+    @SerialName("budget_cents") val budgetCents: Long?,
+    @SerialName("spent_cents") val spentCents: Long,
+    val pace: BudgetPaceOut?,
+    @SerialName("monthly_history") val monthlyHistory: List<MonthSpendOut>,
+    @SerialName("trailing_median_cents") val trailingMedianCents: Long,
+    @SerialName("budget_history") val budgetHistory: List<BudgetHistoryOut>,
+    @SerialName("top_merchants") val topMerchants: List<MerchantLineOut>,
+    @SerialName("narrative_headline") val narrativeHeadline: String? = null,
+    @SerialName("narrative_coaching") val narrativeCoaching: String? = null,
+    @SerialName("narrative_source") val narrativeSource: String = "unavailable",
+)
+
+@Serializable
+data class ProposedCutOut(
+    @SerialName("category_id") val categoryId: String,
+    @SerialName("category_name") val categoryName: String,
+    @SerialName("budget_id") val budgetId: String?,
+    @SerialName("from_cents") val fromCents: Long,
+    @SerialName("to_cents") val toCents: Long,
+    @SerialName("cut_cents") val cutCents: Long,
+)
+
+@Serializable
+data class CoachPlanOut(
+    @SerialName("target_cents") val targetCents: Long,
+    @SerialName("baseline_net_cents") val baselineNetCents: Long,
+    @SerialName("needed_cents") val neededCents: Long,
+    @SerialName("achievable_cents") val achievableCents: Long,
+    @SerialName("shortfall_cents") val shortfallCents: Long,
+    val cuts: List<ProposedCutOut>,
+    @SerialName("narrative_headline") val narrativeHeadline: String? = null,
+    @SerialName("narrative_coaching") val narrativeCoaching: String? = null,
+    @SerialName("narrative_source") val narrativeSource: String = "unavailable",
+)
+
 @Serializable
 data class BudgetProposalOut(
     @SerialName("category_id") val categoryId: String,

@@ -9,6 +9,7 @@ import retrofit2.http.GET
 import retrofit2.http.Multipart
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -135,6 +136,35 @@ interface ApiService {
     // #17: "set budgets from your history" — trailing-median spend per category with no budget yet.
     @GET("budgets/proposals")
     suspend fun budgetProposals(@Query("month") month: String): List<BudgetProposalOut>
+
+    // AI budget coach: accepting a coach cut draft (or a manual edit) is a budget PATCH.
+    @PATCH("budgets/{id}")
+    suspend fun updateBudget(@Path("id") id: String, @Body req: BudgetUpdate): BudgetOut
+
+    // --- AI budget coach ---
+    @GET("coach/status")
+    suspend fun coachStatus(@Query("narrative") narrative: Boolean = false): CoachStatusOut
+
+    @GET("coach/plan")
+    suspend fun coachPlan(
+        @Query("monthly_savings_cents") monthlySavingsCents: Long? = null,
+        @Query("narrative") narrative: Boolean = false,
+    ): CoachPlanOut
+
+    @GET("coach/category/{id}")
+    suspend fun coachCategory(
+        @Path("id") id: String,
+        @Query("narrative") narrative: Boolean = false,
+    ): CategoryAnalysisOut
+
+    @GET("coach/goal")
+    suspend fun getGoal(): GoalOut?
+
+    @PUT("coach/goal")
+    suspend fun setGoal(@Body req: GoalUpsert): GoalOut
+
+    @DELETE("coach/goal")
+    suspend fun clearGoal()
 
     // --- Cash-flow calendar ---
     @GET("subscriptions")

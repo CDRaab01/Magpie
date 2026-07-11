@@ -160,6 +160,32 @@ private class FakeApi : ApiService {
     override suspend fun budgetProposals(month: String): List<com.magpie.data.remote.BudgetProposalOut> =
         error("unused")
 
+    override suspend fun updateBudget(
+        id: String,
+        req: com.magpie.data.remote.BudgetUpdate,
+    ): BudgetOut = error("unused")
+
+    override suspend fun coachStatus(narrative: Boolean): com.magpie.data.remote.CoachStatusOut =
+        error("unused")
+
+    override suspend fun coachPlan(
+        monthlySavingsCents: Long?,
+        narrative: Boolean,
+    ): com.magpie.data.remote.CoachPlanOut = error("unused")
+
+    override suspend fun coachCategory(
+        id: String,
+        narrative: Boolean,
+    ): com.magpie.data.remote.CategoryAnalysisOut = error("unused")
+
+    override suspend fun getGoal(): com.magpie.data.remote.GoalOut? = error("unused")
+
+    override suspend fun setGoal(
+        req: com.magpie.data.remote.GoalUpsert,
+    ): com.magpie.data.remote.GoalOut = error("unused")
+
+    override suspend fun clearGoal() = error("unused")
+
     override suspend fun getSubscriptions(): SubscriptionsOut = error("unused")
     override suspend fun muteSubscription(req: com.magpie.data.remote.MuteMerchantRequest) =
         error("unused")

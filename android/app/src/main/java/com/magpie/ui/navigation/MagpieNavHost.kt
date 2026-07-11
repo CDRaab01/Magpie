@@ -70,6 +70,7 @@ private fun routeForDeepLink(host: String?): String? = when (host) {
     "transactions" -> Routes.TRANSACTIONS
     "home" -> Routes.HOME
     "subscriptions" -> Routes.SUBSCRIPTIONS
+    "budgets" -> Routes.BUDGETS // coach pace / savings-goal nudges land on the Budgets screen
     else -> null
 }
 
