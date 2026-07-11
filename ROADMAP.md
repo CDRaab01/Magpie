@@ -31,15 +31,29 @@ theme is arming what's built, not building more.**
 
 ## Theme 1 — Arm the watchtower (the v1 exit, restated)
 
-1. **Seed recurring-income rules from history.** The ledger already shows BAE SYSTEMS (65
-   deposits) and VERANEX (39) as obvious paychecks; `detect_recurrence` already infers cadence
-   from history for spend. Build the income analog: propose income rules (matcher, cadence,
-   band) from deposit history as **drafts the owner confirms** — the same one-tap promotion shape
-   as `/rules/from-confirmed`. This arms paycheck-late, paycheck-short, next-paycheck-date, and
-   the real safe-to-spend in one stroke. Alongside it, **[H]** confirm US Bank *deposit* alerts
-   actually arrive by email (the parser handles "deposit of"; live evidence so far is debits
-   only) — if they don't, paycheck detection is CSV-cadence-only and the rule's slack should say
-   so.
+1. **Seed recurring-income rules from history — BUILT + PARTIALLY ARMED 2026-07-10.** Detection
+   (`app/rules/income.py`, its own module — a paycheck's *timing* is regular but its *amount*
+   swings, so the band is derived from robust spread, unlike subscription detection),
+   `income_rule_service` (recency gate + amount floor), `POST /rules/from-income` (dry-run
+   default, anchors `last_matched_at` to the latest deposit). Guards verified on real data:
+   VERANEX (former employer) excluded by recency, $8 interest/fee credits by the floor,
+   person-to-person Venmo by the chaotic-amount guard. **Arming outcome, after a fresh US Bank
+   import (2026-07-10, reconciled 2 pending rows to posted, no double-count of the $12k transfer):**
+   - **INNAGO (rent) — armed.** Monthly ±15%, anchored 2026-07-08. Sweep dry-run confirmed 0
+     false fires.
+   - **BAE — held, NOT armed.** It's the owner+wife's *current* dual-earner paycheck (two deposits
+     per date), but they're on **parental leave** right now, so BAE pay is paused (last 06-25) —
+     arming today would false-fire "late" during a known gap. Arm when leave ends and BAE resumes
+     its biweekly rhythm.
+   - **LINA NYL — excluded.** Maternity/paternity leave pay — *temporary* income; a permanent rule
+     would page "late" the moment leave correctly ends.
+   **Two gaps this surfaced:** (a) `/rules/from-income` arms **all** proposals at once; real use
+   needs **per-proposal selection** (the owner armed only INNAGO by hand) — the seed should
+   return proposals and take a confirm-these-IDs list, like a review queue. (b) The recency gate
+   (45d) cannot distinguish a just-ended job / a leave gap from a slightly-late paycheck — the
+   owner's judgment is the only backstop, which is exactly why selective confirm (a) matters.
+   Still open **[H]:** confirm US Bank *deposit* alerts arrive by email (parser handles "deposit
+   of"; live evidence is debits only) — if not, paycheck detection is CSV-cadence-only.
 2. **Seed recurring-bill rules the same way.** The subscriptions detector already found 55
    recurrences including AMER ELECT PWR, AT T, MAZDA FINANCIAL — those are bills. A "make this a
    bill rule" promotion (cadence + band from history) arms missing-bill and the projected
