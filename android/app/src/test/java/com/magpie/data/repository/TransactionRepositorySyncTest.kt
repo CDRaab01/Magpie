@@ -11,6 +11,8 @@ import com.magpie.data.remote.BudgetOut
 import com.magpie.data.remote.CashflowCalendarOut
 import com.magpie.data.remote.CategoryCreate
 import com.magpie.data.remote.CategoryOut
+import com.magpie.data.remote.CheckpointCreate
+import com.magpie.data.remote.CheckpointOut
 import com.magpie.data.remote.CategorySummaryOut
 import com.magpie.data.remote.CategoryUpdate
 import com.magpie.data.remote.HistoryOut
@@ -81,6 +83,8 @@ private class FakeApi : ApiService {
     override suspend fun createAccount(req: AccountCreate): AccountOut = error("unused")
 
     override suspend fun deleteAccount(id: String) = error("unused")
+    override suspend fun listCheckpoints(id: String): List<CheckpointOut> = error("unused")
+    override suspend fun addCheckpoint(id: String, req: CheckpointCreate): CheckpointOut = error("unused")
     override suspend fun splitTransaction(id: String, req: SplitRequest): SplitResult = error("unused")
     override suspend fun listCategories(): List<CategoryOut> = error("unused")
     override suspend fun createCategory(req: CategoryCreate): CategoryOut = error("unused")
