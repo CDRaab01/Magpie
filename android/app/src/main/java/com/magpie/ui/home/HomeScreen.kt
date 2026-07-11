@@ -69,6 +69,7 @@ fun HomeScreen(navController: NavController) {
         onViewCashflow = { navController.navigate(Routes.CASHFLOW) },
         onViewRules = { navController.navigate(Routes.RULES) },
         onViewTrends = { navController.navigate(Routes.TRENDS) },
+        onAskMagpie = { navController.navigate(Routes.CHAT) },
         onCreateFirstAccount = viewModel::createFirstAccount,
     )
 }
@@ -82,6 +83,7 @@ internal fun HomeContent(
     onViewCashflow: () -> Unit,
     onViewRules: () -> Unit,
     onViewTrends: () -> Unit,
+    onAskMagpie: () -> Unit = {},
     onCreateFirstAccount: (name: String, institution: String, type: String, last4: String?) -> Unit,
 ) {
     Scaffold(
@@ -120,6 +122,8 @@ internal fun HomeContent(
                     MonthPanel(state.summary, state.history)
                     InsightCard(state.insight, onClick = onViewTrends)
                     Spacer(Modifier.height(12.dp))
+                    AskMagpieCard(onClick = onAskMagpie)
+                    Spacer(Modifier.height(12.dp))
                     // Content, not links (#29): the review queue and the next bill are live cards
                     // showing their own data; only the two non-tab utilities (Accounts, Rules) stay
                     // as compact secondary links.
@@ -145,7 +149,7 @@ internal fun HomeContent(
 }
 
 /**
- * The Home hero (#28) — the personalized gradient panel every sibling opens with, using the
+ * The Home hero (#28)  -  the personalized gradient panel every sibling opens with, using the
  * indigo→teal→green "magpie" gradient that was added to Pulse for this app but until now went
  * unused. Greeting + a one-line money status ("$3,180 net this month · 3 to review · XCEL due
  * Jul 18"), the finance analogue of Plate's "TRAINED TODAY" line.
@@ -162,7 +166,7 @@ private fun MagpieHero(state: HomeUiState.Ready, onClick: () -> Unit) {
             .padding(20.dp),
     ) {
         Column {
-            // Sizes match Spotter's GreetingPanel — headlineMedium greeting, and a full-white
+            // Sizes match Spotter's GreetingPanel  -  headlineMedium greeting, and a full-white
             // (not alpha'd) status line so the subtitle clears AA contrast on the hero gradient.
             Text(
                 state.greeting,
@@ -211,7 +215,7 @@ private fun MonthPanel(
 ) {
     // 6-month trend series per tile (#13). Spend uses magnitudes so the bars read "how much"
     // rather than as an inverted dip; income/net use their signed values (net can go negative,
-    // and the filled sparkline's min–max normalization keeps that readable).
+    // and the filled sparkline's min-max normalization keeps that readable).
     val incomeSeries = history.map { it.incomeCents.toFloat() }
     val spendSeries = history.map { kotlin.math.abs(it.spendCents.toFloat()) }
     val netSeries = history.map { it.netCents.toFloat() }
@@ -219,7 +223,7 @@ private fun MonthPanel(
         SectionHeader(label = "This month", channel = MagpieTheme.colors.money.base)
         Spacer(Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Color grammar (#31): income green, net teal (money), but spend is neutral — with the
+            // Color grammar (#31): income green, net teal (money), but spend is neutral  -  with the
             // transaction rows now neutral too, red is reserved for real deviations.
             MonthStatTile("Income", formatCentsCompact(summary.incomeCents),
                 MagpieTheme.colors.underBudget.base, incomeSeries, Modifier.weight(1f))
@@ -234,7 +238,7 @@ private fun MonthPanel(
 /**
  * Local month-panel metric tile (#30). Mirrors Pulse's dense `StatTile` (mono numerals) but pins
  * the value to a single line (`maxLines = 1, softWrap = false`) at a slightly smaller size, so a
- * money value — inherently longer than the siblings' "148"/"101 g" — fits a 1/3-width column
+ * money value  -  inherently longer than the siblings' "148"/"101 g"  -  fits a 1/3-width column
  * instead of wrapping mid-number.
  */
 @Composable
@@ -304,7 +308,7 @@ private fun AutoFitValue(
 /**
  * The monthly-insight card (#18) in the AI voice (violet), sitting under the "This month" panel.
  * Shows the LLM "what changed" headline when one is present, otherwise a deterministic one-liner
- * about the month's biggest category move — so the card is useful even when the model is off.
+ * about the month's biggest category move  -  so the card is useful even when the model is off.
  * It hides itself entirely when there is neither prose nor a notable change, rather than showing a
  * vacuous AI card. Tapping opens Trends, where the full breakdown lives.
  */
@@ -342,7 +346,24 @@ internal fun insightLine(insight: MonthlyInsightOut?): String? {
     return "${mover.category} is running $amount $direction its usual this month."
 }
 
-/** Home's review-queue content card (#29) — the count as a live datum, tappable to the queue. */
+/** The "Ask Magpie" entry (#21)  -  a violet AI-voice card, so the assistant reads the same as the
+ *  insight card's voice. Tappable to the chat screen. */
+@Composable
+private fun AskMagpieCard(onClick: () -> Unit) {
+    val channel = MagpieTheme.colors.aiVoice.base
+    PanelCard(channel = channel, onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Column {
+            SectionHeader(label = "Ask Magpie", channel = channel)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Ask about your spending, like 'how much on dining vs May?'",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+/** Home's review-queue content card (#29)  -  the count as a live datum, tappable to the queue. */
 @Composable
 private fun ReviewQueueCard(count: Int, onClick: () -> Unit) {
     val channel =
@@ -361,7 +382,7 @@ private fun ReviewQueueCard(count: Int, onClick: () -> Unit) {
     }
 }
 
-/** Home's next-bill content card (#29) — the soonest upcoming bill, tappable to the cash-flow calendar. */
+/** Home's next-bill content card (#29)  -  the soonest upcoming bill, tappable to the cash-flow calendar. */
 @Composable
 private fun UpcomingBillCard(bill: com.magpie.data.remote.UpcomingBillOut?, onClick: () -> Unit) {
     val channel = MagpieTheme.colors.money.base
@@ -428,7 +449,7 @@ private fun CreateFirstAccountForm(
         TextField(
             value = last4,
             onValueChange = { if (it.length <= 4 && it.all(Char::isDigit)) last4 = it },
-            label = { Text("Last 4 (from card — how alerts match)") },
+            label = { Text("Last 4 (from card  -  how alerts match)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),

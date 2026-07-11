@@ -71,10 +71,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * JVM screenshot tests (Robolectric native graphics + Roborazzi) â€” render Magpie's first real
+ * JVM screenshot tests (Robolectric native graphics + Roborazzi) , render Magpie's first real
  * screen to PNGs without a device or emulator. Run with `:app:testDebugUnitTest`; images land
  * in `app/screenshots/`. Record with `-Proborazzi.test.record=true`. Mirrors the suite reference
- * (Plate/Cookbook's `ScreenshotTest`) â€” screenshot the pure Content composable, not the
+ * (Plate/Cookbook's `ScreenshotTest`) , screenshot the pure Content composable, not the
  * ViewModel-wired screen, so no Hilt DI is needed here.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -456,7 +456,7 @@ private fun HomeReadyScene() {
                 ),
                 budgetVerdicts = emptyList(),
                 narrativeHeadline = "Dining up this month",
-                narrativeSummary = "Dining ran higher than its usual $300 â€” about $400 over.",
+                narrativeSummary = "Dining ran higher than its usual $300, about $400 over.",
                 narrativeSource = "llm",
             ),
         ),
@@ -631,14 +631,14 @@ private fun RulesScene() {
                     id = "2",
                     typeLabel = "Bill",
                     matcher = "XCEL ENERGY",
-                    summary = "monthly Â±20% Â· â†’ Utilities",
+                    summary = "monthly Â±20% Â· â†' Utilities",
                     enabled = true,
                 ),
                 RuleRow(
                     id = "3",
                     typeLabel = "Category rule",
                     matcher = "SAMPLE BISTRO",
-                    summary = "â†’ Dining",
+                    summary = "â†' Dining",
                     enabled = false,
                 ),
             ),
