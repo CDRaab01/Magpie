@@ -186,8 +186,7 @@ async def _fixed_categories(
     return {
         cat_id
         for cat_id, total_spend in totals.items()
-        if total_spend > 0
-        and bill_spend.get(cat_id, 0) / total_spend > BILL_SHARE_FIXED_THRESHOLD
+        if total_spend > 0 and bill_spend.get(cat_id, 0) / total_spend > BILL_SHARE_FIXED_THRESHOLD
     }
 
 
@@ -195,7 +194,11 @@ async def _income_spend_medians(
     db: AsyncSession, user_id: uuid.UUID, *, now: datetime.datetime
 ) -> tuple[int, int, int, int]:
     """(mtd_income, mtd_spend, median_income_3mo, median_spend_6mo), magnitudes positive.
-    One spending_history call covers both the MTD month and the trailing windows."""
+    One spending_history call covers both the MTD month and the trailing windows.
+
+    The series is zero-filled per month; months BEFORE the ledger's history began are "no data",
+    not "zero spend" — counting them would drag a young ledger's medians toward zero and make
+    every projection optimistic. Slice the priors from the first month with any activity."""
     history = await spending_history(db, user_id, months=SPEND_MEDIAN_MONTHS + 1, now=now)
     if not history:
         return 0, 0, 0, 0
@@ -203,6 +206,11 @@ async def _income_spend_medians(
     priors = history[:-1]
     mtd_income = max(0, current.income_cents)
     mtd_spend = abs(current.spend_cents)
+    first_active = next(
+        (i for i, m in enumerate(priors) if m.income_cents != 0 or m.spend_cents != 0),
+        len(priors),
+    )
+    priors = priors[first_active:]
     income_priors = [max(0, m.income_cents) for m in priors[-INCOME_MEDIAN_MONTHS:]]
     spend_priors = [abs(m.spend_cents) for m in priors]
     median_income = int(round(median_cents(income_priors))) if income_priors else 0
@@ -393,7 +401,7 @@ async def build_category_analysis(
 async def build_savings_plan(
     db: AsyncSession, user_id: uuid.UUID, target_cents: int, *, now: datetime.datetime
 ) -> CoachPlanOut:
-    """"What would need to change" to save `target_cents` a month — pure computation, never
+    """ "What would need to change" to save `target_cents` a month — pure computation, never
     stored. Baselines are the owner's own budgets where set, else trailing medians; bill-dominated
     categories are untouchable; a cut never dips below what's already spent this month."""
     _today, this_month, _elapsed, _total_days = _month_frame(now)

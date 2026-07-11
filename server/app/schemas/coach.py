@@ -106,7 +106,7 @@ class ProposedCutOut(BaseModel):
 
 
 class CoachPlanOut(BaseModel):
-    """"What would need to change" for a monthly savings target — computed, never stored.
+    """ "What would need to change" for a monthly savings target — computed, never stored.
     Accepting a cut is the owner PATCHing/POSTing the budget; shortfall is reported honestly."""
 
     target_cents: int

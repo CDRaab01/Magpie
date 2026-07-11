@@ -52,7 +52,7 @@ async def coach_plan(
     monthly_savings_cents: Annotated[int | None, Query(gt=0)] = None,
     narrative: Annotated[bool, Query()] = False,
 ):
-    """"What would need to change" to hit a monthly savings target — computed, never stored.
+    """ "What would need to change" to hit a monthly savings target — computed, never stored.
     Defaults to the active goal's amount; 400 when neither a target nor a goal exists."""
     target = monthly_savings_cents
     if target is None:

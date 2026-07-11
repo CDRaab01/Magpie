@@ -175,7 +175,9 @@ async def carry_forward_proposals(
     if not prior:
         return []
     names = await category_names(db, user_id)
-    proposals = [(b.category_id, names.get(b.category_id, "Uncategorized"), b.amount) for b in prior]
+    proposals = [
+        (b.category_id, names.get(b.category_id, "Uncategorized"), b.amount) for b in prior
+    ]
     proposals.sort(key=lambda p: -p[2])
     return proposals
 
