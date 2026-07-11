@@ -123,18 +123,13 @@ theme is arming what's built, not building more.**
     and the U+FFFD replacement char, so the next corrupted write fails the build instead of the
     screenshot review. (The check caught a literal mojibake example that had been sitting in this
     very roadmap item.)
-14. **The chat/insight LLM timeout is 15s — the live probe needed 60s.** `LmStudioClient`
-    defaults to 15 seconds and `make_llm_client` doesn't override it; the longer ask-your-ledger
-    answers (the "biggest recurring charges" reply) can exceed that, so users will sometimes get
-    the fallback line for questions the model answers fine. Make the timeout config
-    (`LLM_TIMEOUT_SECONDS`, longer for /chat than for categorization drafts). While there:
-    `/chat` is the most expensive endpoint in the app and carries no per-route rate limit —
-    add a slowapi limit per the suite convention.
-14a. **Projected-bill suppression is too broad (nit).** `_projected_bills` drops a projection if
-    ANY concrete statement matches the biller anywhere in the calendar window, not near the
-    projected date — a paid-and-matched January bill correctly ages out, but an early-arriving
-    next statement plus an unpaid prior one can suppress a projection that should show. Tighten
-    to a ±window around the projected date.
+14. **The chat/insight LLM timeout — DONE (earlier this session).** `llm_timeout_seconds=15` /
+    `llm_chat_timeout_seconds=60` are config; `make_llm_client` takes a per-call override and
+    `/chat` uses the long one and carries a `20/minute` slowapi limit.
+14a. **Projected-bill suppression too broad — DONE 2026-07-11.** `_projected_bills` now only lets a
+    concrete statement suppress a projection when it lands within ±15 days of the projected date
+    (`PROJECTION_MATCH_WINDOW_DAYS`), so a distant early/late statement no longer hides a projection
+    it doesn't cover.
 15. **Deprecation debt (small):** `androidx.hilt.navigation.compose.hiltViewModel` is deprecated
     across every screen (moved to `androidx.hilt.lifecycle.viewmodel.compose`); one mechanical
     sweep. **Design debt (small):** Home now stacks hero + month panel + insight + Ask Magpie +
@@ -154,8 +149,9 @@ theme is arming what's built, not building more.**
     today — and Theme 1's seeded income/bill rules make band editing matter); the `flip_sign`
     override checkbox in the import dialog (server param exists). Subscriptions/Chat
     discoverability from Home folds into #15's placement pass.
-16. **Export share** — `GET /export/transactions.csv` is live; add the Android share action
-    (Settings → "Export month" → share sheet; FileProvider + ACTION_SEND).
+16. **Export share — DONE 2026-07-11.** Settings has an "Export" section (month field + button)
+    that fetches `GET /export/transactions.csv` and hands the CSV to the system share sheet via a
+    FileProvider `content://` URI (cache/exports/, ACTION_SEND, no storage permission).
 17. **Budget proposals UI** — `GET /budgets/proposals` is live; surface "Set budgets from your
     history" in the Budgets screen as confirm-one-by-one drafts (review-not-enter for budgets).
 18. **Insight detail view** — the Home card shows the deterministic one-liner; tapping could
