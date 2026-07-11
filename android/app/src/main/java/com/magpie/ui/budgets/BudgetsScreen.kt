@@ -428,7 +428,11 @@ private fun PlanSheet(
     onApplyCut: (ProposedCutOut) -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(MagpieTheme.spacing.md)) {
+        Column(
+            modifier = Modifier
+                .padding(MagpieTheme.spacing.md)
+                .verticalScroll(rememberScrollState()), // many cuts must stay reachable
+        ) {
             SectionHeader(label = "Getting to ${formatCents(plan.targetCents)}/mo", channel = MagpieTheme.colors.money.base)
             Spacer(Modifier.height(6.dp))
             if (plan.neededCents <= 0) {
@@ -567,7 +571,9 @@ private fun GoalDialog(
     onClear: (() -> Unit)?,
 ) {
     var amountText by remember {
-        mutableStateOf(currentCents?.let { "%.2f".format(it / 100.0) } ?: "")
+        // Locale.US: the field is parsed with toDoubleOrNull, which only accepts a dot decimal —
+        // a comma-decimal device locale would pre-fill "500,00" and break its own Save button.
+        mutableStateOf(currentCents?.let { "%.2f".format(java.util.Locale.US, it / 100.0) } ?: "")
     }
     val amountCents = amountText.toDoubleOrNull()?.let { (it * 100).toLong() }
     AlertDialog(
