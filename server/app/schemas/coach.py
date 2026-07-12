@@ -56,6 +56,10 @@ class CoachStatusOut(BaseModel):
     net: NetProjectionOut
     # Coaching accuracy is honest: spend the pace math can't see because it has no category.
     uncategorized_mtd_cents: int
+    # Federated awareness Link A (reported by Cookbook): home-cooked meals, last 14 days vs the
+    # prior 14. None means "Cookbook didn't say" (integration off / unreachable) — never zero.
+    cooked_meals_last_14d: int | None = None
+    cooked_meals_prior_14d: int | None = None
     narrative_headline: str | None = None
     narrative_coaching: str | None = None
     narrative_source: str = "unavailable"  # "llm" | "unavailable"

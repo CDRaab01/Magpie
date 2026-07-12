@@ -102,6 +102,16 @@ class Settings(BaseSettings):
     coach_pace_floor_cents: int = 5000  # $50
     coach_goal_slack_cents: int = 2500  # $25
 
+    # Federated awareness (CROSS-APP.md rule 7). Magpie is a cross-app CONSUMER here: Link A reads
+    # Cookbook's cooked-meal counts (the lever behind dining-out spend); Link G will read Spotter
+    # visit counts. RS256-only — Magpie post-dates the HS256 retirement plan, so there is no
+    # shared-secret fallback: unset client creds or base URLs simply mean the context is absent.
+    cookbook_base_url: str | None = None
+    spotter_base_url: str | None = None
+    cross_app_client_id: str | None = None
+    cross_app_client_secret: str | None = None
+    cross_app_timeout_seconds: float = 8.0
+
     # AI category drafts (CLAUDE.md §6/Phase 7). Local LM Studio only — never a hosted model,
     # this data never leaves the host. Unset ⇒ the AI stage never runs (rule evaluation just
     # falls through to needs_review with no draft, same as before Phase 7).

@@ -40,7 +40,11 @@ def build_coach_prompt(payload: dict) -> str:
         "- Any budget change you mention is a suggestion the owner confirms in the app — phrase "
         "it as an option, not a done deal.\n"
         "- If `uncategorized_mtd` is meaningful, note that some spend is uncategorized and the "
-        "picture sharpens once it's reviewed.\n\n"
+        "picture sharpens once it's reviewed.\n"
+        "- If `home_cooked_meals` is present (reported by Cookbook) and dining-out spend is over "
+        "pace, you MAY connect the two: fewer home-cooked meals than the prior stretch is the "
+        "lever — e.g. 'two home-cooked dinners in two weeks; cooking more is the cheapest fix.' "
+        "If it's absent, don't speculate about cooking.\n\n"
         f"Figures (JSON):\n{json.dumps(payload, indent=1, default=str)}\n\n"
         'Respond with only JSON: {"headline": "<=10 words", "coaching": "2-3 sentences"}.'
     )

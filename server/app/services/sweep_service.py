@@ -11,6 +11,7 @@ well over its trailing median — the proactive half of "watch my spending" (#19
 
 import asyncio
 import datetime
+import re
 import logging
 import uuid
 from calendar import monthrange
@@ -33,6 +34,7 @@ from app.rules.subscriptions import price_hike_cents
 from app.rules.bands import band_shortfall, median_cents
 from app.rules.merchant_match import matches
 from app.rules.recurrence import InvalidCadence, expected_next_date
+from app.services import cross_app_client
 from app.services.alert_latch_service import latched_should_alert
 from app.services.ai.llm_client import LlmClient
 from app.services.ai.narrate import narrate_deviation
@@ -532,6 +534,7 @@ async def run_budget_pace_sweep(
     days_left = total_days - today.day
 
     fired: list[str] = []
+    fired_names: list[str] = []
     facts: list[str] = []
     for budget in budgets:
         spent = max(0, -actual.get(budget.category_id, 0))
@@ -558,6 +561,7 @@ async def run_budget_pace_sweep(
                 f"{name} spent ${spent / 100:,.0f} of its ${budget.amount / 100:,.0f} budget,"
                 f" pace ${projected / 100:,.0f}"
             )
+            fired_names.append(name)
 
     if not fired:
         return
@@ -566,6 +570,24 @@ async def run_budget_pace_sweep(
     else:
         body = f"{len(fired)} budgets over pace: " + " ".join(fired)
         title = "Magpie: budgets over pace"
+
+    # Federated awareness Link A: when a dining-shaped budget fires, the lever fact rides along —
+    # "how often did we actually cook" (reported by Cookbook). Best-effort; absence adds nothing.
+    if any(re.search(r"dining|restaurant|eat(ing)? out|takeout", n, re.I) for n in fired_names):
+        email = await db.scalar(select(User.email).where(User.id == user_id))
+        cooked = (
+            await cross_app_client.fetch_cooked_window(email, now=now) if email else None
+        )
+        if cooked is not None:
+            body += (
+                f" Cookbook counts {cooked.last_14_days} home-cooked meal(s) in the last 14 days"
+                f" (vs {cooked.prior_14_days} the prior 14) — cooking is the lever."
+            )
+            facts.append(
+                f"home-cooked meals: {cooked.last_14_days} last 14d vs"
+                f" {cooked.prior_14_days} prior 14d"
+            )
+
     body = await _with_narration(llm_client, body, facts="; ".join(facts))
     await publisher.publish(body, title=title, click=LINK_BUDGETS)
 

@@ -59,6 +59,7 @@ from app.services.budget_service import (
     median_spend_by_category,
     monthly_spend_by_category,
 )
+from app.services import cross_app_client
 from app.services.summary_service import spending_history, top_merchants
 from app.time_util import owner_local_date
 
@@ -291,6 +292,14 @@ async def build_coach_status(
         total_days=total_days,
     )
     goal = await get_goal(db, user_id)
+
+    # Federated awareness Link A: how often the household actually cooked (reported by Cookbook).
+    # Best-effort — None means "Cookbook didn't say", and the coach simply lacks the lever fact.
+    from app.models.user import User
+
+    email = await db.scalar(select(User.email).where(User.id == user_id))
+    cooked = await cross_app_client.fetch_cooked_window(email, now=now) if email else None
+
     return CoachStatusOut(
         month=this_month,
         days_elapsed=elapsed,
@@ -309,6 +318,8 @@ async def build_coach_status(
             ),
         ),
         uncategorized_mtd_cents=await _uncategorized_mtd_cents(db, user_id, this_month, today),
+        cooked_meals_last_14d=cooked.last_14_days if cooked else None,
+        cooked_meals_prior_14d=cooked.prior_14_days if cooked else None,
     )
 
 
@@ -498,6 +509,15 @@ def coach_status_payload(status_out: CoachStatusOut) -> dict:
             else None
         ),
         "uncategorized_mtd": _dollars(status_out.uncategorized_mtd_cents),
+        # Link A (reported by Cookbook); absent key = the source didn't say, never zero.
+        "home_cooked_meals": (
+            {
+                "last_14_days": status_out.cooked_meals_last_14d,
+                "prior_14_days": status_out.cooked_meals_prior_14d,
+            }
+            if status_out.cooked_meals_last_14d is not None
+            else None
+        ),
     }
 
 
