@@ -247,3 +247,60 @@ async def test_goal_sweep_respects_min_day():
     publisher = FakeNtfyPublisher()
     await _sweep_goal(user_id, publisher, EARLY_MONTH)
     assert publisher.published == []
+
+
+# --- Link A: the cooking lever in the pace nudge ------------------------------------------
+
+
+async def test_dining_over_pace_carries_the_cooking_fact(monkeypatch):
+    from app.services import cross_app_client
+    from app.services.cross_app_client import CookedWindow
+
+    user_id, acct = await _user_account()
+    await _budgeted_spend(user_id, acct, "Dining out", 15000, 14000)
+
+    async def fake_window(email, *, now, client=None):
+        return CookedWindow(last_14_days=2, prior_14_days=8)
+
+    monkeypatch.setattr(cross_app_client, "fetch_cooked_window", fake_window)
+    publisher = FakeNtfyPublisher()
+    await _sweep_pace(user_id, publisher, MID_MONTH)
+    body = publisher.published[0][0]
+    assert "2 home-cooked meal(s) in the last 14 days" in body
+    assert "cooking is the lever" in body
+
+
+async def test_non_dining_over_pace_has_no_cooking_fact(monkeypatch):
+    from app.services import cross_app_client
+    from app.services.cross_app_client import CookedWindow
+
+    user_id, acct = await _user_account()
+    await _budgeted_spend(user_id, acct, "Hobbies", 15000, 14000)
+
+    called = {"n": 0}
+
+    async def fake_window(email, *, now, client=None):
+        called["n"] += 1
+        return CookedWindow(last_14_days=2, prior_14_days=8)
+
+    monkeypatch.setattr(cross_app_client, "fetch_cooked_window", fake_window)
+    publisher = FakeNtfyPublisher()
+    await _sweep_pace(user_id, publisher, MID_MONTH)
+    assert "cooking" not in publisher.published[0][0]
+    assert called["n"] == 0  # rule 7: no "read everything just in case"
+
+
+async def test_cookbook_silent_means_no_cooking_line(monkeypatch):
+    from app.services import cross_app_client
+
+    user_id, acct = await _user_account()
+    await _budgeted_spend(user_id, acct, "Dining out", 15000, 14000)
+
+    async def fake_window(email, *, now, client=None):
+        return None  # Cookbook didn't say
+
+    monkeypatch.setattr(cross_app_client, "fetch_cooked_window", fake_window)
+    publisher = FakeNtfyPublisher()
+    await _sweep_pace(user_id, publisher, MID_MONTH)
+    body = publisher.published[0][0]
+    assert "cooking" not in body and "Cookbook" not in body

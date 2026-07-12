@@ -575,9 +575,7 @@ async def run_budget_pace_sweep(
     # "how often did we actually cook" (reported by Cookbook). Best-effort; absence adds nothing.
     if any(re.search(r"dining|restaurant|eat(ing)? out|takeout", n, re.I) for n in fired_names):
         email = await db.scalar(select(User.email).where(User.id == user_id))
-        cooked = (
-            await cross_app_client.fetch_cooked_window(email, now=now) if email else None
-        )
+        cooked = await cross_app_client.fetch_cooked_window(email, now=now) if email else None
         if cooked is not None:
             body += (
                 f" Cookbook counts {cooked.last_14_days} home-cooked meal(s) in the last 14 days"
