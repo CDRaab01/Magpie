@@ -5,6 +5,7 @@ from app.models.category import Category
 from app.models.goal import Goal
 from app.models.import_batch import ImportBatch
 from app.models.ingest_event import IngestEvent
+from app.models.merchant_tag import MerchantTag
 from app.models.rule import Rule
 from app.models.statement_checkpoint import StatementCheckpoint
 from app.models.subscription_mute import SubscriptionMute
@@ -19,6 +20,7 @@ __all__ = [
     "Goal",
     "ImportBatch",
     "IngestEvent",
+    "MerchantTag",
     "Rule",
     "StatementCheckpoint",
     "SubscriptionMute",
