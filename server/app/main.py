@@ -21,6 +21,7 @@ from app.routers import (
     coach,
     export,
     cashflow,
+    cross_app,
     chat,
     categories,
     imports,
@@ -132,6 +133,7 @@ app.include_router(rules.router)
 app.include_router(bills.router)
 app.include_router(budgets.router)
 app.include_router(coach.router)
+app.include_router(cross_app.router)
 app.include_router(cashflow.router)
 app.include_router(chat.router)
 app.include_router(summary.router)

@@ -45,6 +45,43 @@ def _select_key(jwks: dict, kid: str | None) -> dict | None:
     return None
 
 
+# Cross-app service tokens carry their own audience so a user's SSO token (aud="suite") can never
+# be replayed on a provider surface, and vice versa (CROSS-APP.md).
+CROSS_APP_AUDIENCE = "cross-app"
+
+
+async def verify_cross_app_token(token: str) -> str | None:
+    """Return the subject email if `token` is a valid RS256 cross-app token from dragonfly-id,
+    else None.
+
+    Magpie's first PROVIDER surface (federated awareness Link D — Cookbook reads grocery spend).
+    RS256-only: Magpie post-dates the HS256 retirement plan (CROSS-APP.md), so there is no
+    shared-secret path. Validates against the same JWKS Magpie already trusts for SSO; requires
+    ``aud="cross-app"`` (distinct from SSO's ``aud="suite"``)."""
+    if not settings.suite_jwks_url or not settings.suite_issuer:
+        return None
+    try:
+        kid = jwt.get_unverified_header(token).get("kid")
+        jwks = await _fetch_jwks()
+        key = _select_key(jwks, kid)
+        if key is None:
+            jwks = await _fetch_jwks(force=True)  # unknown kid → possible rotation, refetch once
+            key = _select_key(jwks, kid)
+        if key is None:
+            return None
+        claims = jwt.decode(
+            token,
+            key,
+            algorithms=["RS256"],
+            audience=CROSS_APP_AUDIENCE,
+            issuer=settings.suite_issuer,
+        )
+    except (JWTError, JWKError, httpx.HTTPError):
+        return None
+    email = (claims.get("email") or "").strip().lower()
+    return email or None
+
+
 async def _verify_suite_token(token: str) -> dict:
     unauthorized = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid suite token")
     try:
