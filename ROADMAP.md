@@ -192,14 +192,18 @@ Magpie is **absent from CROSS-APP.md** — it consumes suite SSO and SuiteConfig
 surface. Per the cross-app design rules (point-to-point HTTPS, flag-gated, degrade-to-absence,
 read-only by preference), in priority order:
 
-20. **`GET /cross-app/summary?start=&end=`** — the suite weekly digest's money paragraph
-    (income/spend/net + biggest category move for the window; the insight aggregate already
-    computes this). **RS256 cross-app tokens only** — CROSS-APP.md's own migration says new
-    surfaces skip HS256, and Magpie post-dates the retirement plan. Registering this surface in
-    CROSS-APP.md is part of the work (hub territory, so it's a Dragonfly-repo PR too).
-21. **Cookbook grocery actuals** — "planned vs spent": Cookbook asks Magpie for the Groceries
-    category's month-to-date actual to sit beside its planned grocery spend. Read-only, tiny
-    payload, the named use case from the old #27. Depends on #20's auth plumbing.
+20. **DONE (2026-07-12) — `GET /cross-app/summary?start=&end=`** — income/spend/net + grocery
+    spend + savings-goal target for a window (federated-awareness Link D). **RS256 cross-app
+    tokens only**, aggregates-only, transfers excluded, 92-day cap. Registered in CROSS-APP.md.
+    Magpie's first provider surface.
+21. **DONE (2026-07-12) — Cookbook grocery actuals** — Cookbook reads this month's `grocery_spend`
+    from #20 and shows "$Y on groceries · via Magpie" on the shopping list; absent ⇒ tile hidden.
+    (The consumer half of Link D.)
+
+    **Also shipped (Link G, 2026-07-12):** `merchant_tags` table + `POST/DELETE /subscriptions/tag`
+    (v1 tag "fitness"); a fitness-tagged membership is decorated with this month's Spotter
+    training-day count and cost-per-visit ("$4.17/visit · 12 visits"). Android: FitnessCenter
+    toggle on the subscription card. Magpie consumes Spotter's `GET /workouts?start=&end=`.
 22. **Hub Suite tile upgrade** — Dragonfly's Magpie tile shows alive/dead today; the summary
     endpoint (#20) lets it show net-this-month like Spotter's tile shows last-workout.
     (Candidate, not committed — hub design is Dragonfly-repo territory.)
