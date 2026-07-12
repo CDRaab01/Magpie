@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -52,6 +53,7 @@ fun SubscriptionsScreen(navController: NavController) {
         state = state,
         onBack = { navController.popBackStack() },
         onMute = viewModel::mute,
+        onToggleFitness = viewModel::toggleFitness,
     )
 }
 
@@ -61,6 +63,7 @@ internal fun SubscriptionsContent(
     state: SubscriptionsUiState,
     onBack: () -> Unit,
     onMute: (merchant: String) -> Unit = {},
+    onToggleFitness: (merchant: String, currentlyTagged: Boolean) -> Unit = { _, _ -> },
 ) {
     Scaffold(
         topBar = {
@@ -91,7 +94,11 @@ internal fun SubscriptionsContent(
                 else -> LazyColumn(modifier = Modifier.padding(MagpieTheme.spacing.md)) {
                     item { AnnualTotalCard(state.totalAnnualCostCents) }
                     items(state.subscriptions) { sub ->
-                        SubscriptionCard(sub, onMute = { onMute(sub.merchant) })
+                        SubscriptionCard(
+                            sub,
+                            onMute = { onMute(sub.merchant) },
+                            onToggleFitness = { tagged -> onToggleFitness(sub.merchant, tagged) },
+                        )
                     }
                 }
             }
@@ -115,10 +122,15 @@ private fun AnnualTotalCard(totalAnnualCents: Long) {
 }
 
 @Composable
-private fun SubscriptionCard(sub: SubscriptionOut, onMute: () -> Unit) {
+private fun SubscriptionCard(
+    sub: SubscriptionOut,
+    onMute: () -> Unit,
+    onToggleFitness: (currentlyTagged: Boolean) -> Unit = {},
+) {
     // A charge above its usual is flagged (the price-hike signal, #22); teal otherwise.
     val hiked = sub.lastAmountCents > sub.typicalAmountCents * 11 / 10
     val channel = if (hiked) MagpieTheme.colors.overBudget.base else MagpieTheme.colors.money.base
+    val fitnessTagged = sub.tags.contains("fitness")
     PanelCard(channel = channel, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -133,12 +145,32 @@ private fun SubscriptionCard(sub: SubscriptionOut, onMute: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = if (hiked) channel else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Link G: cost-per-visit from Spotter, once the merchant is fitness-tagged.
+                fitnessVisitLabel(sub)?.let { label ->
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             Column(horizontalAlignment = Alignment.End) {
                 DataText(text = formatCents(-sub.annualCostCents), style = Pulse.dataType.dataSmall,
                     color = channel)
                 Text("per year", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            // Link G: tag/untag as a fitness membership to surface (or hide) $/visit from Spotter.
+            IconButton(onClick = { onToggleFitness(fitnessTagged) }) {
+                Icon(
+                    Icons.Default.FitnessCenter,
+                    contentDescription = if (fitnessTagged) "Remove fitness tag" else "Tag as gym",
+                    tint = if (fitnessTagged) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
             }
             // #12: dismiss a false positive (weekly gas, a person, a double-counted mortgage).
             IconButton(onClick = onMute) {
@@ -149,5 +181,19 @@ private fun SubscriptionCard(sub: SubscriptionOut, onMute: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+/** The Spotter line under a fitness-tagged subscription (Link G): cost-per-visit when we have both
+ *  a cost and visits, the bare count at 0 visits (paying, not going), and nothing when Spotter was
+ *  quiet (visits null) — the tag is still on, the number just isn't in yet. */
+private fun fitnessVisitLabel(sub: SubscriptionOut): String? {
+    if (!sub.tags.contains("fitness")) return null
+    val visits = sub.visitsThisMonth ?: return null
+    val perVisit = sub.costPerVisitCents
+    return if (perVisit != null) {
+        "${formatCents(perVisit)}/visit · $visits visits (Spotter)"
+    } else {
+        "$visits visits this month (Spotter)"
     }
 }

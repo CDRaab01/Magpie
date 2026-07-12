@@ -679,7 +679,11 @@ private fun SubscriptionsScene() {
             subscriptions = listOf(
                 SubscriptionOut("NETFLIX", "monthly", 1599, 12, "2026-07-01", 1899, 19188),
                 SubscriptionOut("SPOTIFY", "monthly", 1099, 10, "2026-07-01", 1099, 13188),
-                SubscriptionOut("THE GYM", "monthly", 5000, 8, "2026-06-15", 5000, 60000),
+                // Fitness-tagged: shows Spotter's cost-per-visit line (Link G).
+                SubscriptionOut(
+                    "THE GYM", "monthly", 5000, 8, "2026-06-15", 5000, 60000,
+                    tags = listOf("fitness"), visitsThisMonth = 12, costPerVisitCents = 417,
+                ),
             ),
             totalAnnualCostCents = 92376,
             loading = false,

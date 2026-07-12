@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.magpie.data.remote.ApiService
 import com.magpie.data.remote.MuteMerchantRequest
 import com.magpie.data.remote.SubscriptionOut
+import com.magpie.data.remote.TagMerchantRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -62,5 +63,23 @@ class SubscriptionsViewModel @Inject constructor(
                 load() // put it back if the mute didn't take
             }
         }
+    }
+
+    /** Toggle the "fitness" tag on a merchant (Link G). Reloads afterward so the server can attach
+     *  (or drop) this month's Spotter visit count and cost-per-visit. */
+    fun toggleFitness(merchant: String, currentlyTagged: Boolean) {
+        viewModelScope.launch {
+            try {
+                val req = TagMerchantRequest(merchant, FITNESS_TAG)
+                if (currentlyTagged) api.untagMerchant(req) else api.tagMerchant(req)
+                load()
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(error = e.message ?: "Couldn't update the tag")
+            }
+        }
+    }
+
+    private companion object {
+        const val FITNESS_TAG = "fitness"
     }
 }

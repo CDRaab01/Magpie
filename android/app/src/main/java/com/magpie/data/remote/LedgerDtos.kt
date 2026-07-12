@@ -187,6 +187,10 @@ data class BudgetOut(
 @Serializable
 data class MuteMerchantRequest(val merchant: String)
 
+/** Body for POST/DELETE /subscriptions/tag (Link G). v1 tag: "fitness". */
+@Serializable
+data class TagMerchantRequest(val merchant: String, val tag: String)
+
 // --- AI budget coach ---
 
 @Serializable
@@ -417,6 +421,11 @@ data class SubscriptionOut(
     @SerialName("last_date") val lastDate: String,
     @SerialName("last_amount_cents") val lastAmountCents: Long,
     @SerialName("annual_cost_cents") val annualCostCents: Long,
+    // User tags (Link G). v1: "fitness".
+    val tags: List<String> = emptyList(),
+    // Spotter decoration for fitness-tagged rows (Link G); null when not tagged / Spotter quiet.
+    @SerialName("visits_this_month") val visitsThisMonth: Int? = null,
+    @SerialName("cost_per_visit_cents") val costPerVisitCents: Long? = null,
 )
 
 @Serializable

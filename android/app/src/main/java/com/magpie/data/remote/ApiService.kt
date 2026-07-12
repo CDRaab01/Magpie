@@ -6,6 +6,7 @@ import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.Multipart
 import retrofit2.http.PATCH
 import retrofit2.http.POST
@@ -173,6 +174,13 @@ interface ApiService {
     // #12: mark a merchant "not a subscription" — drops it from the screen and both sweeps.
     @POST("subscriptions/mute")
     suspend fun muteSubscription(@Body req: MuteMerchantRequest)
+
+    // Link G: tag a merchant (v1 "fitness") to show Spotter cost-per-visit; DELETE removes it.
+    @POST("subscriptions/tag")
+    suspend fun tagMerchant(@Body req: TagMerchantRequest)
+
+    @HTTP(method = "DELETE", path = "subscriptions/tag", hasBody = true)
+    suspend fun untagMerchant(@Body req: TagMerchantRequest)
 
     @POST("chat")
     suspend fun chat(@Body req: ChatRequest): ChatResponse
