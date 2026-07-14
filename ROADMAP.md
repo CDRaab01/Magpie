@@ -24,6 +24,20 @@ merge-order discipline). Magpie's gate maps onto this file directly; nothing new
   (`[H]` eyes — the V1.md Tier-4 "acceptable, not perfect" leftover).
 - Version 0.1.x → **1.0.0** only after parity month two closes.
 
+**Gap review 2026-07-14 (host ROADMAP3 additions — commercial-peer expectations):**
+
+- **Biometric lock — GATES 1.0** (suite bar #12). A finance app with full ledger history and no
+  fingerprint/device-credential gate reads amateur instantly; there is zero `BiometricPrompt`
+  usage in the codebase today. AndroidX Biometric in front of the existing token store; unlock
+  once per app-foreground session; device-credential fallback.
+- **Cash-flow Sankey** — Copilot's signature screen: income → categories → savings/net as a flow
+  diagram for the selected month. Every number is already served (`/months`, category rollups);
+  this is the most screenshot-able "worth money" screen the suite could ship.
+- **Transaction search** — verify; add if absent. Merchant/description/amount over the ledger;
+  a finance app without search isn't done.
+- **Review-your-week nudge** via the suite push pipeline (host Tier W2b) — the gentle habit tier
+  below the sweeps' alarm tier; opt-in, quiet hours respected.
+
 ## Where the app actually stands (2026-07-10, verified against prod — not memory)
 
 Every feature wave is built and deployed: the correctness core (F1–F18 all closed), CSV backfill
