@@ -7,6 +7,23 @@
 > is as-built. Locked decisions (CLAUDE.md §2) and the non-goals at the bottom are unchanged and
 > not up for relitigation. `[H]` = needs the owner's hands, credentials, or eyes.
 
+## Road to 1.0 (suite pivot, 2026-07-13)
+
+The suite entered its **1.0 polish round** (host-level ROADMAP3, C:\Code): every app ships an
+official 1.0 once it passes the shared bar — onboarding, designed empty/loading/error states,
+motion/celebration + dark/light parity from Pulse, defined offline behavior, no dead settings,
+an on-device pass, gating screenshot baselines, an icon worth being proud of, truthful docs —
+with `versionName` 1.0.0 set deliberately as the **last** commit of the round (Hawksnest V1.md's
+merge-order discipline). Magpie's gate maps onto this file directly; nothing new is invented:
+
+- **The v1 acceptance gate IS the 1.0 gate:** Theme 1 arming + the two-month statement-parity
+  clock (#4 — `[H]` balance entry starts it).
+- Code-side polish before the bump: offline read cache (15a), violet `aiVoice` in the review
+  queue + inline rule band/cadence editing (15b), insight detail view (#18), home-screen widget
+  (#19, once safe-to-spend is armed), merchant-variant collapsing (#8), and the app icon
+  (`[H]` eyes — the V1.md Tier-4 "acceptable, not perfect" leftover).
+- Version 0.1.x → **1.0.0** only after parity month two closes.
+
 ## Where the app actually stands (2026-07-10, verified against prod — not memory)
 
 Every feature wave is built and deployed: the correctness core (F1–F18 all closed), CSV backfill
