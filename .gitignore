@@ -13,3 +13,7 @@ build/
 .idea/
 *.iml
 .DS_Store
+
+# never commit .env backups (they hold live secrets; timestamped .bak slips past *.env)
+.env.bak*
+*.env.bak-*
