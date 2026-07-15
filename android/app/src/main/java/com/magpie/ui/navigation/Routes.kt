@@ -9,6 +9,7 @@ object Routes {
     const val BILLS = "bills"
     const val CASHFLOW = "cashflow"
     const val FLOW = "flow"
+    const val INSIGHT = "insight"
     const val BUDGETS = "budgets"
     const val RULES = "rules"
     const val TRENDS = "trends"

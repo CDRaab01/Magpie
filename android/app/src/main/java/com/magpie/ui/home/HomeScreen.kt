@@ -70,6 +70,7 @@ fun HomeScreen(navController: NavController) {
         onViewReviewQueue = { navController.navigate(Routes.REVIEW_QUEUE) },
         onViewCashflow = { navController.navigate(Routes.CASHFLOW) },
         onViewFlow = { navController.navigate(Routes.FLOW) },
+        onViewInsight = { navController.navigate(Routes.INSIGHT) },
         onViewRules = { navController.navigate(Routes.RULES) },
         onViewTrends = { navController.navigate(Routes.TRENDS) },
         onAskMagpie = { navController.navigate(Routes.CHAT) },
@@ -85,6 +86,7 @@ internal fun HomeContent(
     onViewReviewQueue: () -> Unit,
     onViewCashflow: () -> Unit,
     onViewFlow: () -> Unit = {},
+    onViewInsight: () -> Unit = {},
     onViewRules: () -> Unit,
     onViewTrends: () -> Unit,
     onAskMagpie: () -> Unit = {},
@@ -124,7 +126,7 @@ internal fun HomeContent(
                 )
                 is HomeUiState.Ready -> {
                     MonthPanel(state.summary, state.history)
-                    InsightCard(state.insight, onClick = onViewTrends)
+                    InsightCard(state.insight, onClick = onViewInsight)
                     Spacer(Modifier.height(12.dp))
                     AskMagpieCard(onClick = onAskMagpie)
                     Spacer(Modifier.height(12.dp))
