@@ -15,6 +15,9 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.magpie.data.remote.AccountOut
 import com.magpie.data.remote.CategoryOut
 import com.magpie.data.remote.MonthlySummaryOut
+import com.magpie.ui.flow.CashFlowContent
+import com.magpie.ui.flow.CashFlowItem
+import com.magpie.ui.flow.FlowKind
 import com.magpie.data.remote.TransactionOut
 import com.magpie.data.remote.BillOut
 import com.magpie.data.remote.CashflowCalendarOut
@@ -158,6 +161,12 @@ class ScreenshotTest {
     @Test
     fun rules_dark() = capture("rules_dark", dark = true) { RulesScene() }
 
+    @Test
+    fun cash_flow_light() = capture("cash_flow_light", dark = false) { CashFlowSankeyScene() }
+
+    @Test
+    fun cash_flow_dark() = capture("cash_flow_dark", dark = true) { CashFlowSankeyScene() }
+
     @org.junit.Test
     fun subscriptions_light() = capture("subscriptions_light", dark = false) { SubscriptionsScene() }
 
@@ -285,6 +294,24 @@ private fun MerchantDetailScene() {
             loading = false,
         ),
         onBack = {},
+    )
+}
+
+@Composable
+private fun CashFlowSankeyScene() {
+    CashFlowContent(
+        monthLabel = "July 2026",
+        incomeCents = 450000,
+        items = listOf(
+            CashFlowItem("Housing", 145000, FlowKind.CATEGORY),
+            CashFlowItem("Groceries", 62000, FlowKind.CATEGORY),
+            CashFlowItem("Dining", 41000, FlowKind.CATEGORY),
+            CashFlowItem("Transport", 24000, FlowKind.CATEGORY),
+            CashFlowItem("Utilities", 18000, FlowKind.CATEGORY),
+            CashFlowItem("Subscriptions", 12000, FlowKind.CATEGORY),
+            CashFlowItem("Other", 16000, FlowKind.CATEGORY),
+            CashFlowItem("Saved", 132000, FlowKind.SAVINGS),
+        ),
     )
 }
 
