@@ -692,6 +692,9 @@ private fun RulesScene() {
                     matcher = "EMPLOYER PAYROLL",
                     summary = "biweekly Â±3d",
                     enabled = true,
+                    cadenceKind = "biweekly",
+                    slackDays = 3,
+                    bandPct = 0.1,
                 ),
                 RuleRow(
                     id = "2",
@@ -699,6 +702,9 @@ private fun RulesScene() {
                     matcher = "XCEL ENERGY",
                     summary = "monthly Â±20% Â· â†' Utilities",
                     enabled = true,
+                    cadenceKind = "monthly",
+                    slackDays = 5,
+                    bandPct = 0.2,
                 ),
                 RuleRow(
                     id = "3",
