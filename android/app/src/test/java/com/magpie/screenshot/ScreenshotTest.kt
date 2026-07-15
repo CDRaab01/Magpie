@@ -17,7 +17,9 @@ import com.magpie.data.remote.CategoryOut
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.ui.flow.CashFlowContent
 import com.magpie.ui.flow.CashFlowItem
+import com.magpie.data.remote.BudgetVerdictOut
 import com.magpie.ui.flow.FlowKind
+import com.magpie.ui.insight.InsightContent
 import com.magpie.data.remote.TransactionOut
 import com.magpie.data.remote.BillOut
 import com.magpie.data.remote.CashflowCalendarOut
@@ -167,6 +169,12 @@ class ScreenshotTest {
     @Test
     fun cash_flow_dark() = capture("cash_flow_dark", dark = true) { CashFlowSankeyScene() }
 
+    @Test
+    fun insight_light() = capture("insight_light", dark = false) { InsightScene() }
+
+    @Test
+    fun insight_dark() = capture("insight_dark", dark = true) { InsightScene() }
+
     @org.junit.Test
     fun subscriptions_light() = capture("subscriptions_light", dark = false) { SubscriptionsScene() }
 
@@ -311,6 +319,32 @@ private fun CashFlowSankeyScene() {
             CashFlowItem("Subscriptions", 12000, FlowKind.CATEGORY),
             CashFlowItem("Other", 16000, FlowKind.CATEGORY),
             CashFlowItem("Saved", 132000, FlowKind.SAVINGS),
+        ),
+    )
+}
+
+@Composable
+private fun InsightScene() {
+    InsightContent(
+        monthLabel = "July 2026",
+        insight = MonthlyInsightOut(
+            month = "2026-07",
+            incomeCents = 450000,
+            spendCents = 318000,
+            netCents = 132000,
+            categoryChanges = listOf(
+                CategoryChangeOut("Dining", thisMonthCents = 41000, trailingMedianCents = 28000, deltaCents = 13000),
+                CategoryChangeOut("Transport", thisMonthCents = 22000, trailingMedianCents = 15000, deltaCents = 7000),
+                CategoryChangeOut("Groceries", thisMonthCents = 52000, trailingMedianCents = 60000, deltaCents = -8000),
+            ),
+            budgetVerdicts = listOf(
+                BudgetVerdictOut("Dining", actualCents = 41000, budgetCents = 35000, overCents = 6000),
+                BudgetVerdictOut("Groceries", actualCents = 52000, budgetCents = 60000, overCents = 0),
+            ),
+            narrativeHeadline = "A solid month — you saved $1,320.",
+            narrativeSummary = "Spending held near your usual, with dining running a little hot. " +
+                "You cleared your grocery budget with room to spare.",
+            narrativeSource = "llm",
         ),
     )
 }
