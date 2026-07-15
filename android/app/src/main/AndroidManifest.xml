@@ -58,6 +58,19 @@
             android:name="net.openid.appauth.RedirectUriReceiverActivity"
             android:theme="@style/Theme.AppCompat.Translucent.NoTitleBar"
             tools:node="merge" />
+
+        <!-- Home-screen money glance (net / safe-to-spend / to-review), reads the last-known snapshot. -->
+        <receiver
+            android:name=".widget.MagpieWidgetReceiver"
+            android:exported="true"
+            android:label="Magpie money">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/magpie_widget_info" />
+        </receiver>
     </application>
 
 </manifest>
