@@ -3,6 +3,8 @@ package com.magpie.ui.rules
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.magpie.data.remote.ApiService
+import com.magpie.data.remote.RuleAmountBand
+import com.magpie.data.remote.RuleCadence
 import com.magpie.data.remote.RuleOut
 import com.magpie.data.remote.RuleUpdate
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,7 +20,14 @@ data class RuleRow(
     val matcher: String,
     val summary: String,
     val enabled: Boolean,
-)
+    // Raw editable values (for the inline band editor); null when the rule type has no band/cadence.
+    val cadenceKind: String? = null,
+    val slackDays: Int? = null,
+    val bandPct: Double? = null,
+) {
+    /** Recurring income/bill rules carry a tolerance band + cadence the owner can tune inline. */
+    val bandEditable: Boolean get() = cadenceKind != null || bandPct != null
+}
 
 data class RulesUiState(
     val rules: List<RuleRow> = emptyList(),
@@ -77,6 +86,9 @@ class RulesViewModel @Inject constructor(
                             matcher = r.matcher,
                             summary = summarize(r, r.categoryId?.let { nameById[it] }),
                             enabled = r.enabled,
+                            cadenceKind = r.cadence?.kind,
+                            slackDays = r.cadence?.slackDays,
+                            bandPct = r.amountBand?.pct,
                         )
                     }
                 _state.value = _state.value.copy(rules = rows, loading = false)
@@ -123,6 +135,21 @@ class RulesViewModel @Inject constructor(
             } catch (e: Exception) {
                 _state.value = _state.value.copy(error = e.message ?: "Couldn't update rule")
                 load()
+            }
+        }
+    }
+
+    /** Save an inline band edit: the recurring rule's cadence slack (± days) and amount tolerance (± %). */
+    fun updateBand(id: String, slackDays: Int?, bandPct: Double?) {
+        val row = _state.value.rules.find { it.id == id } ?: return
+        val cadence = row.cadenceKind?.let { RuleCadence(kind = it, slackDays = slackDays) }
+        val band = bandPct?.let { RuleAmountBand(pct = it) }
+        viewModelScope.launch {
+            try {
+                api.updateRule(id, RuleUpdate(cadence = cadence, amountBand = band))
+                load()
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(error = e.message ?: "Couldn't update rule")
             }
         }
     }

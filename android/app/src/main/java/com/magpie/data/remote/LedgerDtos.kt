@@ -479,7 +479,9 @@ data class RuleOut(
 
 @Serializable
 data class RuleUpdate(
-    val enabled: Boolean,
+    val enabled: Boolean? = null,
+    val cadence: RuleCadence? = null,
+    @SerialName("amount_band") val amountBand: RuleAmountBand? = null,
 )
 
 @Serializable
