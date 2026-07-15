@@ -3,6 +3,8 @@ package com.magpie.ui.home
 import androidx.compose.material.icons.filled.Refresh
 import design.pulse.ui.components.EmptyState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
