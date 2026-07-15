@@ -184,7 +184,9 @@ private fun ReviewQueueRow(
                     Text(
                         "AI suggests: $categoryName",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MagpieTheme.colors.money.base,
+                        // The AI's voice — violet aiVoice, consistent with chat/budgets/home, so a
+                        // model draft is never mistaken for a confirmed fact (teal/money).
+                        color = MagpieTheme.colors.aiVoice.base,
                     )
                 }
             }
@@ -196,6 +198,9 @@ private fun ReviewQueueRow(
                         text = "Accept AI suggestion",
                         tonal = true,
                         compact = true,
+                        channel = MagpieTheme.colors.aiVoice.base,
+                        onChannel = MagpieTheme.colors.aiVoice.on,
+                        dimChannel = MagpieTheme.colors.aiVoice.dim,
                         onClick = { onAcceptAiSuggestion(txn.aiSuggestedCategoryId) },
                     )
                 } else {
