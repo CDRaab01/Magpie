@@ -24,6 +24,9 @@ interface ApiService {
     @POST("auth/refresh")
     suspend fun refresh(@Body req: RefreshRequest): TokenResponse
 
+    @GET("auth/me")
+    suspend fun getMe(): UserOut
+
     // --- Accounts ---
     @GET("accounts")
     suspend fun listAccounts(): List<AccountOut>

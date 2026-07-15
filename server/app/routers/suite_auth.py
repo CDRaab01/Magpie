@@ -5,10 +5,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.limiter import limiter
-from app.schemas.auth import SuiteLoginRequest, TokenResponse
+from app.schemas.auth import SuiteLoginRequest, TokenResponse, UserOut
+from app.security import CurrentUser
 from app.services.suite_auth import suite_login
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("/me", response_model=UserOut)
+async def me(user: CurrentUser):
+    """The signed-in account (name + email), for the Settings header. Identity is the SSO user
+    linked at /auth/suite — Magpie stores no password of its own."""
+    return UserOut(name=user.name, email=user.email)
 
 
 @router.post("/suite", response_model=TokenResponse)

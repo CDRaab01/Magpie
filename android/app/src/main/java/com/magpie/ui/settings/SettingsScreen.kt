@@ -44,6 +44,7 @@ import android.content.Intent
 import com.magpie.data.remote.CategoryOut
 import com.magpie.ui.theme.MagpieTheme
 import design.pulse.ui.components.PanelCard
+import design.pulse.ui.components.ProfileHeader
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
 import java.io.File
@@ -90,6 +91,7 @@ fun SettingsScreen(navController: NavController) {
         onRenameCategory = viewModel::renameCategory,
         onDeleteCategory = viewModel::deleteCategory,
         onExportMonth = viewModel::exportMonth,
+        onLogout = viewModel::logout,
     )
 }
 
@@ -102,6 +104,7 @@ internal fun SettingsContent(
     onRenameCategory: (id: String, name: String) -> Unit,
     onDeleteCategory: (id: String) -> Unit,
     onExportMonth: (month: String) -> Unit = {},
+    onLogout: () -> Unit = {},
 ) {
     // Dialog state lives here so the whole screen stays one testable Content — a default capture
     // renders the list with every dialog closed.
@@ -127,6 +130,15 @@ internal fun SettingsContent(
                     CircularProgressIndicator()
                 }
                 else -> LazyColumn(modifier = Modifier.padding(MagpieTheme.spacing.md)) {
+                    item {
+                        ProfileHeader(
+                            name = state.userName ?: "Signed in",
+                            email = state.userEmail ?: "",
+                            channel = MagpieTheme.colors.money.base,
+                            channelDim = MagpieTheme.colors.money.dim,
+                        )
+                        Spacer(Modifier.height(24.dp))
+                    }
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -160,6 +172,10 @@ internal fun SettingsContent(
                     item {
                         Spacer(Modifier.height(24.dp))
                         AboutBlock(state.serverVersion, state.serverCommit)
+                    }
+                    item {
+                        Spacer(Modifier.height(24.dp))
+                        AccountBlock(onLogout = onLogout)
                     }
                 }
             }
@@ -315,6 +331,20 @@ private fun AboutBlock(serverVersion: String?, serverCommit: String?) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+@Composable
+private fun AccountBlock(onLogout: () -> Unit) {
+    PanelCard(channel = MagpieTheme.colors.money.base, modifier = Modifier.fillMaxWidth()) {
+        SectionHeader(label = "Account", channel = MagpieTheme.colors.money.base)
+        Spacer(Modifier.height(8.dp))
+        PulseButton(
+            text = "Sign out",
+            tonal = true,
+            compact = true,
+            onClick = onLogout,
+        )
     }
 }
 

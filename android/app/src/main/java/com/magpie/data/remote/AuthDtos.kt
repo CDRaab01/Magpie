@@ -22,6 +22,12 @@ data class TokenResponse(
 )
 
 @Serializable
+data class UserOut(
+    val name: String,
+    val email: String,
+)
+
+@Serializable
 data class VersionOut(
     val name: String = "",
     val version: String = "",

@@ -2,10 +2,12 @@ package com.magpie.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.magpie.data.local.TokenStore
 import com.magpie.data.remote.ApiService
 import com.magpie.data.remote.CategoryCreate
 import com.magpie.data.remote.CategoryOut
 import com.magpie.data.remote.CategoryUpdate
+import com.magpie.util.AuthEventBus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +19,9 @@ data class ExportPayload(val filename: String, val csv: String)
 
 data class SettingsUiState(
     val categories: List<CategoryOut> = emptyList(),
+    // The signed-in SSO account, shown in the Settings header. Best-effort like the version read.
+    val userName: String? = null,
+    val userEmail: String? = null,
     // Shown in About; best-effort, so a failed /version read never blocks the category editor.
     val serverVersion: String? = null,
     val serverCommit: String? = null,
@@ -31,6 +36,8 @@ data class SettingsUiState(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val api: ApiService,
+    private val tokenStore: TokenStore,
+    private val authEventBus: AuthEventBus,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SettingsUiState())
     val state: StateFlow<SettingsUiState> = _state
@@ -45,10 +52,13 @@ class SettingsViewModel @Inject constructor(
             _state.value = _state.value.copy(error = null)
             try {
                 val categories = api.listCategories()
-                // About is nice-to-have — don't let a version fetch failure fail the screen.
+                // Both are nice-to-have — a failed /me or /version read must not fail the screen.
+                val me = runCatching { api.getMe() }.getOrNull()
                 val version = runCatching { api.getVersion() }.getOrNull()
                 _state.value = _state.value.copy(
                     categories = categories.sortedBy { it.name.lowercase() },
+                    userName = me?.name,
+                    userEmail = me?.email,
                     serverVersion = version?.version,
                     serverCommit = version?.commit,
                     loading = false,
@@ -121,6 +131,15 @@ class SettingsViewModel @Inject constructor(
 
     fun clearPendingExport() {
         _state.value = _state.value.copy(pendingExport = null)
+    }
+
+    /** Sign out: drop the local session and let the nav graph bounce back to sign-in — the same
+     *  path a rejected refresh token takes (see TokenRefreshAuthenticator.signOut). */
+    fun logout() {
+        viewModelScope.launch {
+            tokenStore.clear()
+            authEventBus.emitLogout()
+        }
     }
 
     /** Re-read categories after a mutation without flipping the whole screen back to a spinner. */
