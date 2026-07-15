@@ -35,6 +35,7 @@ import com.magpie.data.remote.MonthlyInsightOut
 import com.magpie.data.remote.PromotionResultOut
 import com.magpie.data.remote.TransactionCreate
 import com.magpie.data.remote.TransactionOut
+import com.magpie.data.remote.UserOut
 import com.magpie.data.remote.VersionOut
 import java.io.IOException
 import java.util.UUID
@@ -79,6 +80,7 @@ private class FakeApi : ApiService {
 
     override suspend fun suiteLogin(req: SuiteLoginRequest): TokenResponse = error("unused")
     override suspend fun refresh(req: RefreshRequest): TokenResponse = error("unused")
+    override suspend fun getMe(): UserOut = error("unused")
     override suspend fun listAccounts(): List<AccountOut> = error("unused")
     override suspend fun createAccount(req: AccountCreate): AccountOut = error("unused")
 

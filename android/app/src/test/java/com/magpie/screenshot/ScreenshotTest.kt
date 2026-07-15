@@ -607,6 +607,8 @@ private fun SettingsScene() {
                 CategoryOut(id = "3", name = "Groceries", shared = true),
                 CategoryOut(id = "4", name = "Utilities", shared = true),
             ),
+            userName = "Chris Raab",
+            userEmail = "chris@dragonflymedia.org",
             serverVersion = "0.1.0",
             serverCommit = "2ebb651",
             loading = false,
