@@ -2,6 +2,7 @@ package com.magpie.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.magpie.data.local.SnapshotStore
 import com.magpie.data.remote.AccountCreate
 import com.magpie.data.remote.AccountOut
 import com.magpie.data.remote.ApiService
@@ -16,6 +17,10 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 private fun greetingForNow(): String = when (LocalTime.now().hour) {
     in 5..11 -> "Good morning"
@@ -51,12 +56,26 @@ sealed interface HomeUiState {
     data class Error(val message: String) : HomeUiState
 }
 
+/** The serializable slice of [HomeUiState.Ready] cached for offline (the greeting is recomputed). */
+@Serializable
+private data class HomeSnapshot(
+    val summary: MonthlySummaryOut,
+    val accounts: List<AccountOut>,
+    val reviewCount: Int,
+    val nextBill: UpcomingBillOut?,
+    val safeToSpendCents: Long?,
+    val history: List<MonthSummaryOut>,
+    val insight: MonthlyInsightOut?,
+)
+
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val api: ApiService,
+    private val snapshots: SnapshotStore,
 ) : ViewModel() {
     private val _state = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
     val state: StateFlow<HomeUiState> = _state
+    private val json = Json { ignoreUnknownKeys = true }
 
     init {
         load()
@@ -93,8 +112,27 @@ class HomeViewModel @Inject constructor(
                     summary, accounts, greetingForNow(), reviewCount, nextBill, safeToSpend,
                     history, insight,
                 )
+                // Cache this assembled view so a later offline open shows last-known, not an error.
+                runCatching {
+                    snapshots.save(
+                        SnapshotStore.HOME,
+                        json.encodeToString(
+                            HomeSnapshot(summary, accounts, reviewCount, nextBill, safeToSpend, history, insight),
+                        ),
+                    )
+                }
             } catch (e: Exception) {
-                _state.value = HomeUiState.Error(e.message ?: "Couldn't reach Magpie")
+                // Offline / server unreachable: fall back to the last-known Home instead of erroring.
+                val cached = snapshots.read(SnapshotStore.HOME)
+                    ?.let { runCatching { json.decodeFromString<HomeSnapshot>(it) }.getOrNull() }
+                _state.value = if (cached != null) {
+                    HomeUiState.Ready(
+                        cached.summary, cached.accounts, greetingForNow(), cached.reviewCount,
+                        cached.nextBill, cached.safeToSpendCents, cached.history, cached.insight,
+                    )
+                } else {
+                    HomeUiState.Error(e.message ?: "Couldn't reach Magpie")
+                }
             }
         }
     }
