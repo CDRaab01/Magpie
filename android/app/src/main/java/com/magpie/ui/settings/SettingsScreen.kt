@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.Switch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -84,6 +85,7 @@ fun SettingsScreen(navController: NavController) {
         }
     }
 
+    val appLockEnabled by viewModel.appLockEnabled.collectAsStateWithLifecycle()
     SettingsContent(
         state = state,
         onBack = { navController.popBackStack() },
@@ -92,6 +94,8 @@ fun SettingsScreen(navController: NavController) {
         onDeleteCategory = viewModel::deleteCategory,
         onExportMonth = viewModel::exportMonth,
         onLogout = viewModel::logout,
+        appLockEnabled = appLockEnabled,
+        onSetAppLock = viewModel::setAppLock,
     )
 }
 
@@ -105,6 +109,8 @@ internal fun SettingsContent(
     onDeleteCategory: (id: String) -> Unit,
     onExportMonth: (month: String) -> Unit = {},
     onLogout: () -> Unit = {},
+    appLockEnabled: Boolean = false,
+    onSetAppLock: (Boolean) -> Unit = {},
 ) {
     // Dialog state lives here so the whole screen stays one testable Content — a default capture
     // renders the list with every dialog closed.
@@ -168,6 +174,10 @@ internal fun SettingsContent(
                     item {
                         Spacer(Modifier.height(24.dp))
                         ExportBlock(exporting = state.exporting, onExportMonth = onExportMonth)
+                    }
+                    item {
+                        Spacer(Modifier.height(24.dp))
+                        SecurityBlock(enabled = appLockEnabled, onToggle = onSetAppLock)
                     }
                     item {
                         Spacer(Modifier.height(24.dp))
@@ -308,6 +318,25 @@ private fun ExportBlock(exporting: Boolean, onExportMonth: (month: String) -> Un
                     onClick = { onExportMonth(month) },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SecurityBlock(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    PanelCard(channel = MagpieTheme.colors.money.base, modifier = Modifier.fillMaxWidth()) {
+        SectionHeader(label = "Security", channel = MagpieTheme.colors.money.base)
+        Spacer(Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Require unlock", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Ask for your fingerprint, face, or device PIN to open Magpie.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = enabled, onCheckedChange = onToggle)
         }
     }
 }

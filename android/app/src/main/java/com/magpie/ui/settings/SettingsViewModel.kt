@@ -2,6 +2,7 @@ package com.magpie.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.magpie.data.local.AppLockStore
 import com.magpie.data.local.TokenStore
 import com.magpie.data.remote.ApiService
 import com.magpie.data.remote.CategoryCreate
@@ -11,7 +12,9 @@ import com.magpie.util.AuthEventBus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** A fetched CSV export waiting for the screen to hand it to the share sheet (#16). */
@@ -38,9 +41,18 @@ class SettingsViewModel @Inject constructor(
     private val api: ApiService,
     private val tokenStore: TokenStore,
     private val authEventBus: AuthEventBus,
+    private val appLockStore: AppLockStore,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SettingsUiState())
     val state: StateFlow<SettingsUiState> = _state
+
+    /** Whether biometric/device-credential app lock is on (Security section toggle). */
+    val appLockEnabled: StateFlow<Boolean> =
+        appLockStore.enabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun setAppLock(enabled: Boolean) {
+        viewModelScope.launch { appLockStore.setEnabled(enabled) }
+    }
 
     init {
         load()
