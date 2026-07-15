@@ -21,6 +21,7 @@ import com.magpie.ui.bills.BillsScreen
 import com.magpie.ui.budgets.BudgetsScreen
 import com.magpie.ui.cashentry.CashEntryScreen
 import com.magpie.ui.cashflow.CashflowScreen
+import com.magpie.ui.flow.CashFlowScreen
 import com.magpie.ui.home.HomeScreen
 import com.magpie.ui.reviewqueue.ReviewQueueScreen
 import com.magpie.ui.rules.RulesScreen
@@ -124,6 +125,7 @@ private fun SignedInGraph(deepLinkHost: StateFlow<String?> = MutableStateFlow(nu
             composable(Routes.REVIEW_QUEUE) { ReviewQueueScreen(navController) }
             composable(Routes.BILLS) { BillsScreen(navController) }
             composable(Routes.CASHFLOW) { CashflowScreen(navController) }
+            composable(Routes.FLOW) { CashFlowScreen(navController) }
             composable(Routes.BUDGETS) { BudgetsScreen(navController) }
             composable(Routes.RULES) { RulesScreen(navController) }
             composable(Routes.TRENDS) { TrendsScreen(navController) }

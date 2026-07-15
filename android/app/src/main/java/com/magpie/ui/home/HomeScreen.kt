@@ -67,6 +67,7 @@ fun HomeScreen(navController: NavController) {
         onViewAccounts = { navController.navigate(Routes.ACCOUNTS) },
         onViewReviewQueue = { navController.navigate(Routes.REVIEW_QUEUE) },
         onViewCashflow = { navController.navigate(Routes.CASHFLOW) },
+        onViewFlow = { navController.navigate(Routes.FLOW) },
         onViewRules = { navController.navigate(Routes.RULES) },
         onViewTrends = { navController.navigate(Routes.TRENDS) },
         onAskMagpie = { navController.navigate(Routes.CHAT) },
@@ -81,6 +82,7 @@ internal fun HomeContent(
     onViewAccounts: () -> Unit,
     onViewReviewQueue: () -> Unit,
     onViewCashflow: () -> Unit,
+    onViewFlow: () -> Unit = {},
     onViewRules: () -> Unit,
     onViewTrends: () -> Unit,
     onAskMagpie: () -> Unit = {},
@@ -131,9 +133,15 @@ internal fun HomeContent(
                     Spacer(Modifier.height(8.dp))
                     UpcomingBillCard(bill = state.nextBill, onClick = onViewCashflow)
                     Spacer(Modifier.height(16.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         PulseButton(
                             text = "Accounts", tonal = true, compact = true, onClick = onViewAccounts,
+                        )
+                        PulseButton(
+                            text = "Cash flow", tonal = true, compact = true, onClick = onViewFlow,
                         )
                         PulseButton(
                             text = "Trends", tonal = true, compact = true, onClick = onViewTrends,

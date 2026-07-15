@@ -8,6 +8,7 @@ object Routes {
     const val REVIEW_QUEUE = "review_queue"
     const val BILLS = "bills"
     const val CASHFLOW = "cashflow"
+    const val FLOW = "flow"
     const val BUDGETS = "budgets"
     const val RULES = "rules"
     const val TRENDS = "trends"
