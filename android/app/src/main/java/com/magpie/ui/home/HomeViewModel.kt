@@ -10,6 +10,7 @@ import com.magpie.data.remote.MonthSummaryOut
 import com.magpie.data.remote.MonthlyInsightOut
 import com.magpie.data.remote.MonthlySummaryOut
 import com.magpie.data.remote.UpcomingBillOut
+import com.magpie.widget.WidgetRefresher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.LocalDate
 import java.time.LocalTime
@@ -77,6 +78,7 @@ private data class HomeSnapshot(
 class HomeViewModel @Inject constructor(
     private val api: ApiService,
     private val snapshots: SnapshotStore,
+    private val widgetRefresher: WidgetRefresher,
 ) : ViewModel() {
     private val _state = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
     val state: StateFlow<HomeUiState> = _state
@@ -128,6 +130,9 @@ class HomeViewModel @Inject constructor(
                             ),
                         ),
                     )
+                    // Push the fresh snapshot to the home-screen widget so it updates now, not on
+                    // Android's next periodic tick.
+                    widgetRefresher.refresh()
                 }
             } catch (e: Exception) {
                 // Offline / server unreachable: fall back to the last-known Home instead of erroring.
