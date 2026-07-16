@@ -41,7 +41,7 @@ class InsightViewModel @Inject constructor(
 
     fun load() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(error = null)
+            _state.value = _state.value.copy(loading = true, error = null)
             try {
                 val insight = api.getMonthlyInsight(monthParam, narrative = true)
                 _state.value = _state.value.copy(insight = insight, loading = false)

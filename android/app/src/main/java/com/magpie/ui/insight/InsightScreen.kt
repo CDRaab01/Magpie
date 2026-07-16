@@ -38,6 +38,7 @@ import com.magpie.ui.theme.MagpieTheme
 import com.magpie.util.formatCents
 import design.pulse.ui.components.Caption
 import design.pulse.ui.components.PanelCard
+import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
 import kotlin.math.abs
 
@@ -67,6 +68,14 @@ fun InsightScreen(navController: NavController) {
             val insight = state.insight
             when {
                 state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                // A load failure surfaces as a retryable error, not a misleading "no insight" — the
+                // endpoint always returns a month object, so an empty result here means the fetch,
+                // not the data, came up short.
+                insight == null && state.error != null -> LoadError(
+                    message = state.error!!,
+                    onRetry = viewModel::load,
+                    modifier = Modifier.align(Alignment.Center),
+                )
                 insight == null -> Text(
                     "No insight yet for ${state.monthLabel}.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -76,6 +85,23 @@ fun InsightScreen(navController: NavController) {
                 else -> InsightContent(state.monthLabel, insight)
             }
         }
+    }
+}
+
+@Composable
+private fun LoadError(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        PulseButton(text = "Try again", tonal = true, compact = true, onClick = onRetry)
     }
 }
 
