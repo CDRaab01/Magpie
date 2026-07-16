@@ -34,6 +34,9 @@ data class SettingsUiState(
     // Set when an export CSV is ready; the screen writes it to a file and launches the share sheet,
     // then clears it. Kept out of the ViewModel because the share is platform glue (Context/Intent).
     val pendingExport: ExportPayload? = null,
+    // Family mode (household sharing). Null until loaded; best-effort like the other reads.
+    val household: com.magpie.data.remote.HouseholdOut? = null,
+    val householdError: String? = null,
 )
 
 @HiltViewModel
@@ -67,12 +70,14 @@ class SettingsViewModel @Inject constructor(
                 // Both are nice-to-have — a failed /me or /version read must not fail the screen.
                 val me = runCatching { api.getMe() }.getOrNull()
                 val version = runCatching { api.getVersion() }.getOrNull()
+                val household = runCatching { api.getHousehold() }.getOrNull()
                 _state.value = _state.value.copy(
                     categories = categories.sortedBy { it.name.lowercase() },
                     userName = me?.name,
                     userEmail = me?.email,
                     serverVersion = version?.version,
                     serverCommit = version?.commit,
+                    household = household,
                     loading = false,
                 )
             } catch (e: Exception) {
@@ -82,6 +87,52 @@ class SettingsViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    /** Share the ledger with another Magpie user by email (owner only, enforced server-side). */
+    fun addHouseholdMember(email: String) {
+        val trimmed = email.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(householdError = null)
+            try {
+                val household = api.addHouseholdMember(com.magpie.data.remote.AddMemberRequest(trimmed))
+                _state.value = _state.value.copy(household = household)
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    householdError = e.message ?: "Couldn't share with that email",
+                )
+            }
+        }
+    }
+
+    /** Remove a member (owner), or leave the household yourself. */
+    fun removeHouseholdMember(userId: String) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(householdError = null)
+            try {
+                api.removeHouseholdMember(userId)
+                _state.value = _state.value.copy(household = runCatching { api.getHousehold() }.getOrNull())
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(householdError = e.message ?: "Couldn't remove")
+            }
+        }
+    }
+
+    fun leaveHousehold() {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(householdError = null)
+            try {
+                api.leaveHousehold()
+                _state.value = _state.value.copy(household = runCatching { api.getHousehold() }.getOrNull())
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(householdError = e.message ?: "Couldn't leave")
+            }
+        }
+    }
+
+    fun clearHouseholdError() {
+        _state.value = _state.value.copy(householdError = null)
     }
 
     fun addCategory(name: String) {

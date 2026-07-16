@@ -27,6 +27,19 @@ interface ApiService {
     @GET("auth/me")
     suspend fun getMe(): UserOut
 
+    // --- Household (family mode) ---
+    @GET("household")
+    suspend fun getHousehold(): HouseholdOut
+
+    @POST("household/members")
+    suspend fun addHouseholdMember(@Body req: AddMemberRequest): HouseholdOut
+
+    @DELETE("household/members/{userId}")
+    suspend fun removeHouseholdMember(@Path("userId") userId: String)
+
+    @POST("household/leave")
+    suspend fun leaveHousehold()
+
     // --- Accounts ---
     @GET("accounts")
     suspend fun listAccounts(): List<AccountOut>

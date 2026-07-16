@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,7 +32,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -96,6 +100,9 @@ fun SettingsScreen(navController: NavController) {
         onLogout = viewModel::logout,
         appLockEnabled = appLockEnabled,
         onSetAppLock = viewModel::setAppLock,
+        onAddMember = viewModel::addHouseholdMember,
+        onRemoveMember = viewModel::removeHouseholdMember,
+        onLeaveHousehold = viewModel::leaveHousehold,
     )
 }
 
@@ -111,6 +118,9 @@ internal fun SettingsContent(
     onLogout: () -> Unit = {},
     appLockEnabled: Boolean = false,
     onSetAppLock: (Boolean) -> Unit = {},
+    onAddMember: (email: String) -> Unit = {},
+    onRemoveMember: (userId: String) -> Unit = {},
+    onLeaveHousehold: () -> Unit = {},
 ) {
     // Dialog state lives here so the whole screen stays one testable Content — a default capture
     // renders the list with every dialog closed.
@@ -178,6 +188,16 @@ internal fun SettingsContent(
                     item {
                         Spacer(Modifier.height(24.dp))
                         SecurityBlock(enabled = appLockEnabled, onToggle = onSetAppLock)
+                    }
+                    item {
+                        Spacer(Modifier.height(24.dp))
+                        HouseholdBlock(
+                            household = state.household,
+                            error = state.householdError,
+                            onAddMember = onAddMember,
+                            onRemoveMember = onRemoveMember,
+                            onLeave = onLeaveHousehold,
+                        )
                     }
                     item {
                         Spacer(Modifier.height(24.dp))
@@ -337,6 +357,76 @@ private fun SecurityBlock(enabled: Boolean, onToggle: (Boolean) -> Unit) {
                 )
             }
             Switch(checked = enabled, onCheckedChange = onToggle)
+        }
+    }
+}
+
+@Composable
+private fun HouseholdBlock(
+    household: com.magpie.data.remote.HouseholdOut?,
+    error: String?,
+    onAddMember: (String) -> Unit,
+    onRemoveMember: (String) -> Unit,
+    onLeave: () -> Unit,
+) {
+    PanelCard(channel = MagpieTheme.colors.money.base, modifier = Modifier.fillMaxWidth()) {
+        SectionHeader(label = "Family", channel = MagpieTheme.colors.money.base)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Share this ledger with your household — you'll both see and manage the same accounts, " +
+                "transactions, and budgets.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        household?.members?.forEach { m ->
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(m.name.ifBlank { m.email }, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        if (m.isOwner) "${m.email} · owner" else m.email,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (household.youAreOwner && !m.isOwner) {
+                    TextButton(onClick = { onRemoveMember(m.userId) }) { Text("Remove") }
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        if (household == null || household.youAreOwner) {
+            var email by remember { mutableStateOf("") }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Share by email") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = {
+                        onAddMember(email)
+                        email = ""
+                    },
+                    enabled = email.isNotBlank(),
+                ) { Text("Share") }
+            }
+        } else {
+            TextButton(onClick = onLeave) { Text("Leave household") }
+        }
+        if (error != null) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                error,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

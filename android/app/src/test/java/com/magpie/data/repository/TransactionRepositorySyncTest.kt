@@ -96,6 +96,10 @@ private class FakeApi : ApiService {
     override suspend fun suiteLogin(req: SuiteLoginRequest): TokenResponse = error("unused")
     override suspend fun refresh(req: RefreshRequest): TokenResponse = error("unused")
     override suspend fun getMe(): UserOut = error("unused")
+    override suspend fun getHousehold() = error("unused")
+    override suspend fun addHouseholdMember(req: com.magpie.data.remote.AddMemberRequest) = error("unused")
+    override suspend fun removeHouseholdMember(userId: String) = error("unused")
+    override suspend fun leaveHousehold() = error("unused")
     override suspend fun listAccounts(): List<AccountOut> = error("unused")
     override suspend fun createAccount(req: AccountCreate): AccountOut = error("unused")
 
