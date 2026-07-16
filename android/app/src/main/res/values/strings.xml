@@ -2,4 +2,13 @@
 <resources>
     <string name="app_name">Magpie</string>
     <string name="widget_description">This month\'s net, safe-to-spend, and what needs review</string>
+
+    <!-- Static launcher shortcuts (long-press the app icon). Short label shows in the popup;
+         long label is used where there is room (e.g. pinned shortcuts). -->
+    <string name="shortcut_review_short">Review</string>
+    <string name="shortcut_review_long">Review queue</string>
+    <string name="shortcut_add_cash_short">Add cash</string>
+    <string name="shortcut_add_cash_long">Add cash entry</string>
+    <string name="shortcut_search_short">Search</string>
+    <string name="shortcut_search_long">Search transactions</string>
 </resources>

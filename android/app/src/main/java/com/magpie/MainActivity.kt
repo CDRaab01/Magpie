@@ -38,8 +38,12 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var appLock: AppLock
     @Inject lateinit var appLockStore: AppLockStore
 
-    // #34: the host of the `magpie://<host>` deep link that launched (or re-launched) the app from
-    // an ntfy alert, e.g. "bills". MagpieNavHost observes this and routes once signed in.
+    // #34: the routing token of the `magpie://…` intent that launched (or re-launched) the app —
+    // either an ntfy alert deep link (`magpie://<host>`, e.g. "bills") or a static launcher
+    // shortcut (`magpie://shortcut/<target>`, long-press the icon). Held here in the Activity so a
+    // shortcut tapped from a cold start survives BOTH gates: MagpieNavHost is only composed once the
+    // app lock is unlocked, and its routing only fires once signed in — so the token is consumed
+    // (navigated to, then cleared) only after unlock AND sign-in, never dropped in between.
     private val deepLinkHost = MutableStateFlow(intentHost(intent))
 
     // Live snapshot of whether the lock is enabled, for the lifecycle callback.
@@ -116,6 +120,23 @@ class MainActivity : FragmentActivity() {
         deepLinkHost.value = intentHost(intent)
     }
 
-    private fun intentHost(intent: Intent?): String? =
-        intent?.data?.takeIf { it.scheme == "magpie" }?.host
+    /**
+     * The routing token for a `magpie://…` intent, or null. ntfy alert deep links arrive as
+     * `magpie://<host>` and route directly by host. Static launcher shortcuts arrive as
+     * `magpie://shortcut/<target>`; map each target onto the deep-link token MagpieNavHost already
+     * routes so the two paths share one gate-surviving consume flow.
+     */
+    private fun intentHost(intent: Intent?): String? {
+        val data = intent?.data?.takeIf { it.scheme == "magpie" } ?: return null
+        return if (data.host == "shortcut") {
+            when (data.lastPathSegment) {
+                "review" -> "review" // → Review queue
+                "add-cash" -> "cashentry" // → Cash entry
+                "search" -> "transactions" // → Transaction search
+                else -> null
+            }
+        } else {
+            data.host
+        }
+    }
 }

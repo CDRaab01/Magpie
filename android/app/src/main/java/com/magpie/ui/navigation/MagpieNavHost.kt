@@ -63,13 +63,18 @@ private fun SignedInOrOnboarding(deepLinkHost: StateFlow<String?>) {
     }
 }
 
-/** #34: map an ntfy `magpie://<host>` deep link to the route that lets the owner act on the alert. */
+/**
+ * Map a `magpie://…` routing token to its screen. Serves both #34 ntfy alert deep links
+ * (`magpie://<host>`) and the static launcher shortcuts (`magpie://shortcut/<target>`, translated
+ * to a token in MainActivity.intentHost — `cashentry` is the Add-cash shortcut's landing).
+ */
 private fun routeForDeepLink(host: String?): String? = when (host) {
     "bills" -> Routes.BILLS
     "cashflow" -> Routes.CASHFLOW
     "accounts" -> Routes.ACCOUNTS
     "review" -> Routes.REVIEW_QUEUE
     "transactions" -> Routes.TRANSACTIONS
+    "cashentry" -> Routes.CASH_ENTRY // Add-cash launcher shortcut
     "home" -> Routes.HOME
     "subscriptions" -> Routes.SUBSCRIPTIONS
     "budgets" -> Routes.BUDGETS // coach pace / savings-goal nudges land on the Budgets screen

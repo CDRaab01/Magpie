@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Static launcher shortcuts (long-press the app icon). Each opens MainActivity with a
+     magpie://shortcut/<target> URI that the activity captures and holds, then MagpieNavHost
+     routes it once the app is past BOTH gates — the biometric app lock and SSO sign-in — so
+     the target survives a cold start through the lock/unlock and is never dropped.
+     See MainActivity.intentHost + MagpieNavHost.routeForDeepLink. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="review"
+        android:enabled="true"
+        android:shortcutShortLabel="@string/shortcut_review_short"
+        android:shortcutLongLabel="@string/shortcut_review_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.magpie"
+            android:targetClass="com.magpie.MainActivity"
+            android:data="magpie://shortcut/review" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="add-cash"
+        android:enabled="true"
+        android:shortcutShortLabel="@string/shortcut_add_cash_short"
+        android:shortcutLongLabel="@string/shortcut_add_cash_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.magpie"
+            android:targetClass="com.magpie.MainActivity"
+            android:data="magpie://shortcut/add-cash" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="search"
+        android:enabled="true"
+        android:shortcutShortLabel="@string/shortcut_search_short"
+        android:shortcutLongLabel="@string/shortcut_search_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.magpie"
+            android:targetClass="com.magpie.MainActivity"
+            android:data="magpie://shortcut/search" />
+    </shortcut>
+</shortcuts>

@@ -27,6 +27,12 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Static launcher shortcuts (long-press the app icon): Review / Add cash / Search.
+                 Each is a magpie://shortcut/<target> VIEW intent MainActivity captures and threads
+                 through the app lock + SSO gate before routing. -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
             <!-- #34: ntfy alert deep links. Tapping a notification whose Click header is
                  magpie://<host> (bills/cashflow/accounts/review/home) opens the app on that
                  screen; MainActivity reads the host and MagpieNavHost routes it. -->
