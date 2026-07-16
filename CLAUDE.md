@@ -383,3 +383,30 @@ running; a killed server pages the phone; ROADMAP2/host CLAUDE.md rows updated f
 - Personal-use tool, descriptive not advisory — no investment/tax advice in prompts or copy.
   (Narrow exception: the budget coach/chat may coach against the owner's own budgets/goal —
   see the §6 amendment, 2026-07-11.)
+
+## 12. Build log (post-spec, dated — as-built truth lives in ARCHITECTURE.md)
+
+Phases 0–8 shipped and deployed per §10 (see ARCHITECTURE.md for the as-built detail). Notable
+work since, all deployed; `versionName` is still `0.1.0` (the deliberate 1.0.0 bump is the *last*
+commit of the polish round, gated on the statement-parity clock):
+
+- **2026-07-11 — AI budget coach** (owner-requested): goals + pace + plan (`goals` table, migration
+  `c9d2e4f7a1b8`; `coach_service`, `ai/coach.py`, `ai/chat.py`). Drove the §6 amendment.
+- **2026-07-11 — cleanup:** subscription mutes (`subscription_mutes`, `b4e1c7a9f2d3`),
+  alert-latch TTL prune, import-batch user-scope (`a2f9d3c1e8b7`), CI encoding guard.
+- **2026-07-12 — suite provider surface:** `GET /cross-app/summary` (RS256 cross-app tokens,
+  aggregates-only, `CrossAppUser`) consumed by Cookbook's grocery tile **and the Dragonfly weekly
+  digest**; Spotter fitness cost-per-visit (`merchant_tags`, `d5b8e1a4c96f`). Magpie is no longer
+  absent from CROSS-APP.md.
+- **2026-07-13→15 — 1.0 polish round:** cash-flow Sankey; violet `aiVoice` in the review queue;
+  offline read cache + "as of" indicator; **biometric app lock (on by default, fails open)**;
+  home-screen widget (refreshes on Home sync); launcher shortcuts; net-this-month hero + Savings
+  tile; inline rule band/cadence editing; monthly-insight detail view; opt-in local weekly-review
+  nudge. **Money-math re-audited clean** (no code change — the ledger/rules core verified correct).
+- **2026-07-15 — Family mode (full-shared household ledger):** `households` + `household_members`
+  (migration `a1b2c3d4e5f6`) + a `LedgerUser` request-boundary dependency
+  (`app/security.py::get_ledger_owner`) that resolves a member to the shared-ledger owner; financial
+  routers depend on `LedgerUser`, identity/membership routers keep `CurrentUser`. No financial table
+  changed. Settings → Family invites by email. **This is the realization of ROADMAP's old "household
+  second user — deferred" line — now shipped, not deferred.** As-built detail: ARCHITECTURE.md
+  "Family mode".

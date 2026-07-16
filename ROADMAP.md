@@ -22,21 +22,63 @@ merge-order discipline). Magpie's gate maps onto this file directly; nothing new
   queue + inline rule band/cadence editing (15b), insight detail view (#18), home-screen widget
   (#19, once safe-to-spend is armed), merchant-variant collapsing (#8), and the app icon
   (`[H]` eyes — the V1.md Tier-4 "acceptable, not perfect" leftover).
-- Version 0.1.x → **1.0.0** only after parity month two closes.
+- Version 0.1.x → **1.0.0** only after parity month two closes. (`versionName` is still `0.1.0` —
+  the deliberate last-commit bump has not happened; the arming clock below still gates it.)
+
+**✓ Family mode — full-shared household ledger — SHIPPED 2026-07-15** (commits `c8accf3`,
+`56bacd5`; migration `a1b2c3d4e5f6`). Two adults, one ledger: a member **sees AND acts on** the
+same accounts / transactions / budgets / rules / review queue. Design (mirrors Cookbook's list
+sharing but at the *whole-ledger* level): a `households` + `household_members` pair (a user is in
+**at most one** household — `user_id` unique), and a `LedgerUser` request-boundary dependency
+(`app.security.get_ledger_owner` → `resolve_ledger_owner_id`) that resolves a member to the
+shared-ledger **owner** before any financial router runs; the financial routers depend on
+`LedgerUser`, while identity/membership endpoints keep `CurrentUser` (the real caller). No financial
+table's data model changed — the sharing lives entirely at the request boundary. Settings → Family
+invites by email (`POST /household/members`; the invitee must have signed in once). This is a big
+new capability and the realization of the old "household second user — deferred" line, which is now
+**shipped, not deferred**.
+
+**✓ Static launcher shortcuts — SHIPPED 2026-07-15** (commit `a6624b8`, `res/xml/shortcuts.xml`):
+long-press the icon for Review / Add cash / Search.
+
+**✓ Suite digest source (2026-07-12→):** Magpie's existing `GET /cross-app/summary` (RS256
+cross-app tokens, aggregates-only, 92-day cap) is now **consumed by the Dragonfly weekly-digest
+service** as well as Cookbook's grocery tile (#20/#21) — Magpie is a first-class provider in the
+suite's federated awareness. The Dragonfly consumer half lives in that repo.
+
+**What actually remains for 1.0 (2026-07-16 — the code-side polish is done; the gate is data + hands):**
+the code polish this round targeted is shipped (biometric lock, offline read cache + "as of",
+cash-flow Sankey, widget + sync-refresh, insight detail, violet AI voice, inline rule editing, the
+net-this-month hero, Family mode, launcher shortcuts, the weekly nudge). The remaining 1.0 gate is
+NOT more features — it is:
+1. **The `[H]` arming items (Theme 1):** enter each account's latest statement balance to start the
+   two-month statement-parity clock (#4); arm BAE paycheck when parental leave ends (#1); confirm US
+   Bank deposit alerts arrive (#1); the Discover `bill_issued` sender (#3); the two remaining exports
+   (#5). The watchtower is still unarmed — the single highest-leverage theme.
+2. **The on-device verification pass (`[H]`, #24):** SSO sign-in, split-sheet interaction, encrypted
+   token store, a real alert deep-link tap, font-scale/TalkBack, eyeball the Roborazzi baselines.
+3. **The deliberate `versionName` → 1.0.0 bump** — set as the *last* commit of the round, only after
+   parity month two closes (still `0.1.0` today).
 
 **Gap review 2026-07-14 (host ROADMAP3 additions — commercial-peer expectations):**
 
-- **Biometric lock — GATES 1.0** (suite bar #12). A finance app with full ledger history and no
-  fingerprint/device-credential gate reads amateur instantly; there is zero `BiometricPrompt`
-  usage in the codebase today. AndroidX Biometric in front of the existing token store; unlock
-  once per app-foreground session; device-credential fallback.
-- **Cash-flow Sankey** — Copilot's signature screen: income → categories → savings/net as a flow
-  diagram for the selected month. Every number is already served (`/months`, category rollups);
-  this is the most screenshot-able "worth money" screen the suite could ship.
-- **Transaction search** — verify; add if absent. Merchant/description/amount over the ledger;
-  a finance app without search isn't done.
-- **Review-your-week nudge** via the suite push pipeline (host Tier W2b) — the gentle habit tier
-  below the sweeps' alarm tier; opt-in, quiet hours respected.
+- **Biometric lock — ✓ SHIPPED 2026-07-15** (suite bar #12; commits `825fd1c`→`85aaf8c`). AndroidX
+  Biometric (`androidx.biometric`) gates the app on foreground; `MainActivity.promptUnlock` allows
+  the device credential as fallback. **Defaults ON** (`AppLockStore.enabled` defaults `true`) and
+  **fails open** when the device has neither biometric nor credential enrolled, so the default can
+  never lock anyone out; disable in Settings → Security. Lesson: a security default is only safe if
+  it degrades open on unprovisioned hardware — the fail-open path is what let it default ON.
+- **Cash-flow Sankey — ✓ SHIPPED 2026-07-13** (commits `0c666b0`→`e07e100`). Income → categories →
+  saved as a flow diagram for the selected month (`ui/flow/CashFlowScreen.kt`), reached from Home;
+  light+dark Roborazzi baselines. Every number was already served, exactly as planned.
+- **Transaction search — ✓ VERIFIED PRESENT (already built, Tier 4 #32).** `GET /transactions`
+  carries `account_id` + `q` (case-insensitive over `merchant_raw`/`merchant_norm`); the Android
+  Transactions screen's filter chips + search box consume it under offset pagination. Nothing to
+  add — the gap-review flagged it "verify; add if absent," and it was present.
+- **Review-your-week nudge — ✓ SHIPPED 2026-07-15** (commit `de0da52`). Landed as an **opt-in local
+  Sunday-evening reminder** (`util/nudge/`, `AlarmManager` + boot-receiver reschedule), NOT via the
+  suite push pipeline — a device-local alarm is simpler, needs no server fan-out, and respects the
+  same gentle-habit intent (host Tier W2b). Opt-in in Settings; off by default.
 
 ## Where the app actually stands (2026-07-10, verified against prod — not memory)
 
@@ -170,17 +212,22 @@ theme is arming what's built, not building more.**
 
 ## Theme 3 — Client affordances for shipped server features
 
-15a. **Offline read cache — restored; the 2026-07-09 rewrite dropped it while still open.**
-    Magpie is tailnet-only, and the only offline surface is the cash-entry queue: off the
-    tailnet, the app shows *nothing* — a habit-killer for a ten-second daily review. Cache
-    last-known transactions + month summary + safe-to-spend in Room (Cookbook's read-cache
-    precedent) so the app opens to stale-but-real data and refreshes when reachable.
-15b. **Tier-4 UI leftovers (also dropped while open):** the review queue's AI-suggestion text
-    should use the violet `aiVoice` channel now that it exists (only the insight card and chat
-    use it); inline editing of a rule's band/cadence (the editor is enable/disable/delete
-    today — and Theme 1's seeded income/bill rules make band editing matter); the `flip_sign`
-    override checkbox in the import dialog (server param exists). Subscriptions/Chat
-    discoverability from Home folds into #15's placement pass.
+15a. **Offline read cache — ✓ SHIPPED 2026-07-14** (commits `4919f14`, `32c783e`). Home shows the
+    last-known snapshot instead of erroring offline (`data/local/SnapshotStore.kt`, plain DataStore —
+    the same aggregates the server returns, nothing security-sensitive) and the Transactions ledger
+    reads from a Room mirror (`CachedTransactionEntity`) with an **"offline · as of &lt;time&gt;"**
+    indicator. Graceful degradation, not a full mirror — reads never throw; the tailnet is nearly
+    always reachable. Lesson: cache only the assembled read view, keyed per screen; no write mirror.
+15b. **Tier-4 UI leftovers — mostly ✓ SHIPPED.** Review-queue AI text now speaks in the violet
+    `aiVoice` (✓ 2026-07-13, commit `434ad32`); inline band/cadence editing of a rule shipped
+    (✓ 2026-07-14, commit `5ad511a` — Theme 1's seeded income/bill rules made it matter). **Still
+    open:** the `flip_sign` override checkbox in the import dialog (server param exists);
+    Subscriptions/Chat discoverability from Home folds into #15's placement pass.
+15c. **Home hero re-lead — ✓ SHIPPED 2026-07-14** (commits `db16b85`, `cce7fbb`). The hero now leads
+    with **"Net this month"** (safe-to-spend demoted to the status line — it renders honestly even
+    before Theme 1 arms paycheck/bill data), and the "This month" panel's Net tile became
+    **"Savings"** (net as a % of income). A truer headline for a review-not-enter app: the month's
+    net, not a projected spend allowance built on unarmed data.
 16. **Export share — DONE 2026-07-11.** Settings has an "Export" section (month field + button)
     that fetches `GET /export/transactions.csv` and hands the CSV to the system share sheet via a
     FileProvider `content://` URI (cache/exports/, ACTION_SEND, no storage permission).
@@ -188,12 +235,15 @@ theme is arming what's built, not building more.**
     spending" section (from `GET /budgets/proposals`): one confirm-per-row draft per un-budgeted
     category (trailing-median amount + Set button), review-not-enter. Accepting one creates the
     budget and drops the draft.
-18. **Insight detail view** — the Home card shows the deterministic one-liner; tapping could
-    open the full month breakdown with the LLM narrative (`narrative=true`), category deltas,
-    and budget verdicts, instead of routing to Trends.
-19. **Home-screen widget** (carried candidate, now unblocked): net-this-month + safe-to-spend +
-    next bill are all served; a Glance widget reinforces the daily-review habit. Reconsider
-    once Theme 1 makes safe-to-spend real (it currently renders without paycheck/bill data).
+18. **Insight detail view — ✓ SHIPPED 2026-07-14** (commits `278620f`, `58d9fe8`). Tapping the Home
+    insight card opens the full month breakdown (LLM `narrative=true`, category deltas, budget
+    verdicts) instead of routing to Trends; month-detail load errors surface with a retry
+    (`58d9fe8`). `app/routers/insights.py` + `ai/insight.py` back it — this is also the "first
+    insights" item the older ARCHITECTURE status listed as never built; it is built.
+19. **Home-screen widget — ✓ SHIPPED 2026-07-14** (commits `0083fdc`, `c7b0a90`). A Glance widget
+    (`widget/MagpieWidget.kt`) shows net / safe-to-spend / to-review, and **refreshes when Home
+    syncs** (`c7b0a90`) so the glance never goes stale behind the app. Reinforces the daily-review
+    habit; safe-to-spend still renders honestly before Theme 1 arms it.
 
 19a. **AI budget coach — SHIPPED 2026-07-11 (owner-requested large feature).** Goals + pace
     awareness + coaching, in four stages, all deployed:
@@ -266,8 +316,10 @@ read-only token in `server/.env`, a `simplefin` source in the same dedupe pipeli
 ## Explicitly not worth it (unchanged, owner-locked — pre-empting scope pressure)
 
 Plaid-style credential storage (permanently out); gross-pay/tax decomposition; investment
-tracking; multi-currency; receipt OCR; browser extensions; a web UI. **Deferred, not dead:**
-household second user (defer exactly as Cookbook deferred sharing); CSV mapping wizard (trigger:
+tracking; multi-currency; receipt OCR; browser extensions; a web UI. **~~Deferred, not dead:~~
+household second user — ✓ SHIPPED 2026-07-15 as full-shared Family mode (see the callout under
+"Road to 1.0"); no longer deferred.** Also deferred, not dead:
+CSV mapping wizard (trigger:
 a third hand-written institution mapping); per-transaction cardholder tag (the
 Christian/Elizabeth split surfaced during the Amex backfill — small, real, not blocking);
 ask-anything beyond descriptive finance (the chat's §6 scope is a feature, not a limitation).

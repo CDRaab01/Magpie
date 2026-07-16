@@ -1,5 +1,40 @@
 # ARCHITECTURE.md — Magpie (software-level)
 
+> **Status update (2026-07-16 — 1.0 polish round, supersedes the 2026-07-09 block below where they
+> differ).** The suite's 1.0 polish round landed a wave of as-built changes on top of the v1 core;
+> the code-side 1.0 bar is now met (`versionName` is still `0.1.0` — the deliberate last-commit bump
+> awaits the statement-parity clock). New since 2026-07-09, all deployed:
+> - **Family mode (full-shared household ledger).** `households` + `household_members`
+>   (migration `a1b2c3d4e5f6`) and a `LedgerUser` request-boundary dependency
+>   (`app/security.py::get_ledger_owner` → `household_service.resolve_ledger_owner_id`) that resolves
+>   a member to the shared-ledger **owner**; the financial routers depend on `LedgerUser`, identity/
+>   membership endpoints keep `CurrentUser`. No financial table's data model changed. See "Family
+>   mode" below. Settings → Family invites by email (`app/routers/household.py`).
+> - **Biometric app lock** (Android `androidx.biometric`, `AppLockStore` — **on by default, fails
+>   open** on unprovisioned devices; Settings → Security to disable).
+> - **Offline read cache** — Home reads a last-known snapshot (`SnapshotStore`, DataStore) and the
+>   Transactions ledger a Room mirror (`CachedTransactionEntity`) with an "offline · as of &lt;time&gt;"
+>   indicator. Reads never throw offline. This closes ROADMAP Wave 1's remaining infra item.
+> - **Monthly insights ARE built** (`app/routers/insights.py` + `app/services/ai/insight.py`) with a
+>   Home insight card → **insight detail view** (LLM narrative, category deltas, budget verdicts).
+>   The "first insights never built" line in the 2026-07-09 block below is now stale.
+> - **AI budget coach** (goals, pace, plan; `app/services/coach_service.py`, `ai/coach.py`,
+>   `ai/chat.py`; migration `c9d2e4f7a1b8`), **subscription mutes** (`b4e1c7a9f2d3`),
+>   **merchant tags / fitness cost-per-visit** (`d5b8e1a4c96f`), **import-batch user-scope**
+>   (`a2f9d3c1e8b7`), and the **`/cross-app/summary` provider** (RS256, aggregates-only — consumed by
+>   Cookbook's grocery tile and the Dragonfly weekly digest; `CrossAppUser` / `get_cross_app_user`).
+> - **Android surfaces:** cash-flow Sankey (`ui/flow/`), home-screen Glance widget (refreshes on Home
+>   sync), static launcher shortcuts, opt-in local weekly-review nudge (`util/nudge/`), violet
+>   `aiVoice` in the review queue, inline rule band/cadence editing, net-this-month hero + Savings
+>   tile. **Money-math correctness was re-audited clean** this round (no code change — the ledger/
+>   rules core was verified correct).
+>
+> The data model is now **~17 tables** (the eleven below + `households`, `household_members`, `goals`,
+> `subscription_mutes`, `merchant_tags`, plus the scoping columns). The migration list in the ER
+> heading below predates these; the authoritative list is `server/alembic/versions/`.
+>
+> ---
+>
 > **Status (2026-07-09): v1 feature-complete through V1.md's tiers and live** at
 > `https://dragonfly.tail2ce561.ts.net` (tailnet-only, SSO-only; CI → Release → Deploy green;
 > the deployed `/version` tracks `main`). The 2026-07-05 deep-review findings F1–F18 are all
@@ -712,6 +747,33 @@ Hawksnest's bare-IP problem).
 client is registered on dragonfly-id (see "Operational fit"). The formal on-device
 confirmation of the full sign-in flow is still owed (`[H]`, ROADMAP.md Wave 0) — though the
 owner's real-device use of released builds implies it works.
+
+### Family mode — the full-shared household ledger (as-built 2026-07-15)
+
+Two adults, one ledger — a member **sees and acts on** the same accounts, transactions, budgets,
+rules, and review queue as the owner. The design mirrors Cookbook's list sharing but one level up,
+at the **whole-ledger** grain, and — crucially — **no financial table's data model changed.** The
+sharing is implemented entirely at the request boundary:
+
+- **Model (`app/models/household.py`, migration `a1b2c3d4e5f6`):** `households` (`owner_user_id` —
+  the member whose financial data *is* the ledger) + `household_members` (`user_id` **unique** — a
+  person belongs to at most one household; the owner has a row too, for listing).
+- **Resolution (`app/security.py`):** `get_ledger_owner` (exposed as `LedgerUser`) calls
+  `household_service.resolve_ledger_owner_id(caller)` → returns the household **owner** for a member,
+  else the caller. **Every financial router depends on `LedgerUser` instead of `CurrentUser`**, so a
+  member's reads and writes land on the one shared ledger. Identity/membership endpoints
+  (`app/routers/household.py`) deliberately keep `CurrentUser` — managing *who* shares the ledger is
+  an identity concern about the real caller, not the owner.
+- **Management:** `GET /household` (solo users present as a one-person, not-yet-shared household),
+  `POST /household/members` (owner invites by email — the invitee must have signed in once),
+  `DELETE /household/members/{id}`, `POST /household/leave` (the owner leaving disbands it). Settings
+  → Family is the Android surface.
+
+Why request-boundary resolution and not a `household_id` column on every table: it keeps the entire
+existing ledger/rules/scoping correctness core untouched (the `user_id`-in-the-query ownership
+pattern still holds — it just resolves to the owner's id), and it makes "leave/disband" a pure
+membership operation with zero data migration. The trade-off: the owner's `user_id` is the durable
+home of the data, so disbanding reverts members to their own (empty) solo ledgers, by design.
 
 ## Trust boundaries
 
