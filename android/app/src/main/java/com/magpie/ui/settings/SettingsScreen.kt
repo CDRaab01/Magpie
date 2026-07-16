@@ -132,6 +132,8 @@ fun SettingsScreen(navController: NavController) {
         onAddMember = viewModel::addHouseholdMember,
         onRemoveMember = viewModel::removeHouseholdMember,
         onLeaveHousehold = viewModel::leaveHousehold,
+        onAcceptInvite = viewModel::acceptInvite,
+        onDeclineInvite = viewModel::declineInvite,
     )
 }
 
@@ -155,6 +157,8 @@ internal fun SettingsContent(
     onAddMember: (email: String) -> Unit = {},
     onRemoveMember: (userId: String) -> Unit = {},
     onLeaveHousehold: () -> Unit = {},
+    onAcceptInvite: () -> Unit = {},
+    onDeclineInvite: () -> Unit = {},
 ) {
     // Dialog state lives here so the whole screen stays one testable Content — a default capture
     // renders the list with every dialog closed.
@@ -188,6 +192,16 @@ internal fun SettingsContent(
                             channelDim = MagpieTheme.colors.money.dim,
                         )
                         Spacer(Modifier.height(24.dp))
+                    }
+                    state.invite?.let { invite ->
+                        item {
+                            InviteBanner(
+                                invite = invite,
+                                onAccept = onAcceptInvite,
+                                onDecline = onDeclineInvite,
+                            )
+                            Spacer(Modifier.height(24.dp))
+                        }
                     }
                     item {
                         Row(
@@ -486,6 +500,31 @@ private fun HourStepper(
 }
 
 @Composable
+private fun InviteBanner(
+    invite: com.magpie.data.remote.InviteOut,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit,
+) {
+    PanelCard(channel = MagpieTheme.colors.money.base, modifier = Modifier.fillMaxWidth()) {
+        SectionHeader(label = "Household invite", channel = MagpieTheme.colors.money.base)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "${invite.ownerName.ifBlank { invite.ownerEmail }} invited you to share their " +
+                "Magpie ledger. If you accept, you'll both see and manage the same accounts, " +
+                "transactions, and budgets.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onAccept) { Text("Accept") }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = onDecline) { Text("Decline") }
+        }
+    }
+}
+
+@Composable
 private fun HouseholdBlock(
     household: com.magpie.data.remote.HouseholdOut?,
     error: String?,
@@ -510,14 +549,21 @@ private fun HouseholdBlock(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(m.name.ifBlank { m.email }, style = MaterialTheme.typography.bodyLarge)
+                    val suffix = when {
+                        m.isOwner -> " · owner"
+                        m.status == "pending" -> " · invited (not yet accepted)"
+                        else -> ""
+                    }
                     Text(
-                        if (m.isOwner) "${m.email} · owner" else m.email,
+                        "${m.email}$suffix",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 if (household.youAreOwner && !m.isOwner) {
-                    TextButton(onClick = { onRemoveMember(m.userId) }) { Text("Remove") }
+                    TextButton(onClick = { onRemoveMember(m.userId) }) {
+                        Text(if (m.status == "pending") "Cancel" else "Remove")
+                    }
                 }
             }
         }

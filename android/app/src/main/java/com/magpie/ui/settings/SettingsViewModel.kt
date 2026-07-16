@@ -40,6 +40,8 @@ data class SettingsUiState(
     // Family mode (household sharing). Null until loaded; best-effort like the other reads.
     val household: com.magpie.data.remote.HouseholdOut? = null,
     val householdError: String? = null,
+    // A pending invite awaiting this user's accept/decline (null when there is none).
+    val invite: com.magpie.data.remote.InviteOut? = null,
 )
 
 @HiltViewModel
@@ -104,6 +106,7 @@ class SettingsViewModel @Inject constructor(
                 val me = runCatching { api.getMe() }.getOrNull()
                 val version = runCatching { api.getVersion() }.getOrNull()
                 val household = runCatching { api.getHousehold() }.getOrNull()
+                val invite = runCatching { api.getHouseholdInvite() }.getOrNull()
                 _state.value = _state.value.copy(
                     categories = categories.sortedBy { it.name.lowercase() },
                     userName = me?.name,
@@ -111,6 +114,7 @@ class SettingsViewModel @Inject constructor(
                     serverVersion = version?.version,
                     serverCommit = version?.commit,
                     household = household,
+                    invite = invite,
                     loading = false,
                 )
             } catch (e: Exception) {
@@ -160,6 +164,32 @@ class SettingsViewModel @Inject constructor(
                 _state.value = _state.value.copy(household = runCatching { api.getHousehold() }.getOrNull())
             } catch (e: Exception) {
                 _state.value = _state.value.copy(householdError = e.message ?: "Couldn't leave")
+            }
+        }
+    }
+
+    /** Accept the pending invite — from now on this user shares the inviting household's ledger. */
+    fun acceptInvite() {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(householdError = null)
+            try {
+                val household = api.acceptHouseholdInvite()
+                _state.value = _state.value.copy(household = household, invite = null)
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(householdError = e.message ?: "Couldn't accept")
+            }
+        }
+    }
+
+    /** Decline the pending invite — it's removed and nothing is shared. */
+    fun declineInvite() {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(householdError = null)
+            try {
+                api.declineHouseholdInvite()
+                _state.value = _state.value.copy(invite = null)
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(householdError = e.message ?: "Couldn't decline")
             }
         }
     }

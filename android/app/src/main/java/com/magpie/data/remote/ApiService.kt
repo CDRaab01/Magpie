@@ -40,6 +40,16 @@ interface ApiService {
     @POST("household/leave")
     suspend fun leaveHousehold()
 
+    // The invite awaiting this user's response (null body when there is none).
+    @GET("household/invite")
+    suspend fun getHouseholdInvite(): InviteOut?
+
+    @POST("household/accept")
+    suspend fun acceptHouseholdInvite(): HouseholdOut
+
+    @POST("household/decline")
+    suspend fun declineHouseholdInvite()
+
     // --- Accounts ---
     @GET("accounts")
     suspend fun listAccounts(): List<AccountOut>
