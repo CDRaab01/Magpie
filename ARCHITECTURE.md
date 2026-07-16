@@ -768,6 +768,14 @@ sharing is implemented entirely at the request boundary:
   `POST /household/members` (owner invites by email — the invitee must have signed in once),
   `DELETE /household/members/{id}`, `POST /household/leave` (the owner leaving disbands it). Settings
   → Family is the Android surface.
+- **Consented invites (migration `b2c3d4e5f6a7`):** `household_members.status`
+  (`"pending"` | `"active"`). An invite is created **pending** and shares *nothing* — financial data
+  is never joined silently; resolution (`resolve_ledger_owner_id`, `_household_of`) and the `shared`
+  flag count only **active** members. The invitee sees the outstanding invite at `GET
+  /household/invite` (returns the inviting household's owner, or null) and responds with `POST
+  /household/accept` (pending → active — now the ledger is shared) or `POST /household/decline`
+  (deletes the pending row). A user with a pending invite can't start their own household until they
+  resolve it (409), so the "one household per user" invariant still holds across the pending state.
 
 Why request-boundary resolution and not a `household_id` column on every table: it keeps the entire
 existing ledger/rules/scoping correctness core untouched (the `user_id`-in-the-query ownership

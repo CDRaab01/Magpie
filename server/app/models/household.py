@@ -14,7 +14,7 @@ belong to one shared ledger, not several.
 import datetime
 import uuid
 
-from sqlalchemy import DateTime, ForeignKey, func
+from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -44,6 +44,9 @@ class HouseholdMember(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
     )
+    # "pending" until the invitee accepts, then "active". Only active members share the ledger; a
+    # pending invite grants nothing until accepted (no silent add). The owner's own row is active.
+    status: Mapped[str] = mapped_column(String(10), default="active", server_default="active")
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

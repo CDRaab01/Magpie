@@ -410,3 +410,8 @@ commit of the polish round, gated on the statement-parity clock):
   changed. Settings → Family invites by email. **This is the realization of ROADMAP's old "household
   second user — deferred" line — now shipped, not deferred.** As-built detail: ARCHITECTURE.md
   "Family mode".
+- **2026-07-16 — Consented invites (`household_members.status`, migration `b2c3d4e5f6a7`):** adding a
+  member now creates a **pending** invite that shares nothing until the invitee accepts it — financial
+  data is never joined silently. `GET /household/invite` + `POST /household/{accept,decline}`;
+  resolution counts only `active` members. Server side of the both-apps accept/decline flow (Cookbook
+  mirrors it).
