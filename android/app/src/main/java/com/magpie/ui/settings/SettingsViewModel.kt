@@ -3,17 +3,20 @@ package com.magpie.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.magpie.data.local.AppLockStore
+import com.magpie.data.local.NudgePreferences
 import com.magpie.data.local.TokenStore
 import com.magpie.data.remote.ApiService
 import com.magpie.data.remote.CategoryCreate
 import com.magpie.data.remote.CategoryOut
 import com.magpie.data.remote.CategoryUpdate
 import com.magpie.util.AuthEventBus
+import com.magpie.util.nudge.ReviewNudgeScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -45,6 +48,8 @@ class SettingsViewModel @Inject constructor(
     private val tokenStore: TokenStore,
     private val authEventBus: AuthEventBus,
     private val appLockStore: AppLockStore,
+    private val nudgePreferences: NudgePreferences,
+    private val reviewNudgeScheduler: ReviewNudgeScheduler,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SettingsUiState())
     val state: StateFlow<SettingsUiState> = _state
@@ -55,6 +60,34 @@ class SettingsViewModel @Inject constructor(
 
     fun setAppLock(enabled: Boolean) {
         viewModelScope.launch { appLockStore.setEnabled(enabled) }
+    }
+
+    /** Whether the weekly "Review your week" nudge is on (Reminders section toggle). */
+    val nudgesEnabled: StateFlow<Boolean> =
+        nudgePreferences.enabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Quiet-hours start hour (0–23). No nudge fires at/after this until [quietEndHour]. */
+    val quietStartHour: StateFlow<Int> =
+        nudgePreferences.quietStartHour.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 22)
+
+    /** Quiet-hours end hour (0–23). */
+    val quietEndHour: StateFlow<Int> =
+        nudgePreferences.quietEndHour.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 7)
+
+    /** Enable/disable the weekly review nudge. Persists the flag and (re)arms or cancels the alarm. */
+    fun setNudgesEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            nudgePreferences.setEnabled(enabled)
+            if (enabled) reviewNudgeScheduler.schedule() else reviewNudgeScheduler.cancel()
+        }
+    }
+
+    /** Update quiet hours and re-arm when the nudge is on (harmless, keeps everything consistent). */
+    fun setQuietHours(startHour: Int, endHour: Int) {
+        viewModelScope.launch {
+            nudgePreferences.setQuietHours(startHour, endHour)
+            if (nudgePreferences.enabled.first()) reviewNudgeScheduler.schedule()
+        }
     }
 
     init {

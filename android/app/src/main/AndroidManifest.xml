@@ -5,6 +5,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- "Review your week" nudge (Tier W2b): an opt-in local reminder via AlarmManager.
+         POST_NOTIFICATIONS is requested at runtime before the nudge can post; RECEIVE_BOOT_COMPLETED
+         lets us re-arm the (non-persistent) alarm after a reboot. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- No android:usesCleartextTraffic, no network_security_config. Magpie is tailnet-only
          via Tailscale Serve, which terminates real HTTPS at the host's MagicDNS name — unlike
          Hawksnest's bare-Tailscale-IP case, there is no cleartext exception to justify here.
@@ -76,6 +82,19 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/magpie_widget_info" />
+        </receiver>
+
+        <!-- "Review your week" nudge: an AlarmManager broadcast target that posts the reminder and
+             re-arms next Sunday's alarm, plus a boot receiver to restore the alarm after a reboot. -->
+        <receiver
+            android:name=".util.nudge.ReviewNudgeReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".util.nudge.NudgeBootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
         </receiver>
     </application>
 

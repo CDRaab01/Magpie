@@ -32,7 +32,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import android.os.Build
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
@@ -90,6 +95,25 @@ fun SettingsScreen(navController: NavController) {
     }
 
     val appLockEnabled by viewModel.appLockEnabled.collectAsStateWithLifecycle()
+    val nudgesEnabled by viewModel.nudgesEnabled.collectAsStateWithLifecycle()
+    val quietStartHour by viewModel.quietStartHour.collectAsStateWithLifecycle()
+    val quietEndHour by viewModel.quietEndHour.collectAsStateWithLifecycle()
+
+    // On Android 13+ posting notifications needs a runtime grant. Ask when the owner turns the nudge
+    // on; enable regardless of the outcome (the receiver never posts without the permission), so the
+    // toggle reflects intent and re-asking is a system-settings trip rather than a dead switch.
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { viewModel.setNudgesEnabled(true) }
+
+    val onSetNudges: (Boolean) -> Unit = { on ->
+        if (on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            viewModel.setNudgesEnabled(on)
+        }
+    }
+
     SettingsContent(
         state = state,
         onBack = { navController.popBackStack() },
@@ -100,6 +124,11 @@ fun SettingsScreen(navController: NavController) {
         onLogout = viewModel::logout,
         appLockEnabled = appLockEnabled,
         onSetAppLock = viewModel::setAppLock,
+        nudgesEnabled = nudgesEnabled,
+        quietStartHour = quietStartHour,
+        quietEndHour = quietEndHour,
+        onSetNudges = onSetNudges,
+        onSetQuietHours = viewModel::setQuietHours,
         onAddMember = viewModel::addHouseholdMember,
         onRemoveMember = viewModel::removeHouseholdMember,
         onLeaveHousehold = viewModel::leaveHousehold,
@@ -118,6 +147,11 @@ internal fun SettingsContent(
     onLogout: () -> Unit = {},
     appLockEnabled: Boolean = false,
     onSetAppLock: (Boolean) -> Unit = {},
+    nudgesEnabled: Boolean = false,
+    quietStartHour: Int = 22,
+    quietEndHour: Int = 7,
+    onSetNudges: (Boolean) -> Unit = {},
+    onSetQuietHours: (Int, Int) -> Unit = { _, _ -> },
     onAddMember: (email: String) -> Unit = {},
     onRemoveMember: (userId: String) -> Unit = {},
     onLeaveHousehold: () -> Unit = {},
@@ -188,6 +222,16 @@ internal fun SettingsContent(
                     item {
                         Spacer(Modifier.height(24.dp))
                         SecurityBlock(enabled = appLockEnabled, onToggle = onSetAppLock)
+                    }
+                    item {
+                        Spacer(Modifier.height(24.dp))
+                        RemindersBlock(
+                            enabled = nudgesEnabled,
+                            quietStartHour = quietStartHour,
+                            quietEndHour = quietEndHour,
+                            onToggle = onSetNudges,
+                            onSetQuietHours = onSetQuietHours,
+                        )
                     }
                     item {
                         Spacer(Modifier.height(24.dp))
@@ -357,6 +401,86 @@ private fun SecurityBlock(enabled: Boolean, onToggle: (Boolean) -> Unit) {
                 )
             }
             Switch(checked = enabled, onCheckedChange = onToggle)
+        }
+    }
+}
+
+@Composable
+private fun RemindersBlock(
+    enabled: Boolean,
+    quietStartHour: Int,
+    quietEndHour: Int,
+    onToggle: (Boolean) -> Unit,
+    onSetQuietHours: (Int, Int) -> Unit,
+) {
+    PanelCard(channel = MagpieTheme.colors.money.base, modifier = Modifier.fillMaxWidth()) {
+        SectionHeader(label = "Reminders", channel = MagpieTheme.colors.money.base)
+        Spacer(Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Review your week", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "A gentle Sunday-evening nudge to run your ten-second weekly review.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(checked = enabled, onCheckedChange = onToggle)
+        }
+        if (enabled) {
+            Spacer(Modifier.height(12.dp))
+            Text("Quiet hours", style = MaterialTheme.typography.labelLarge)
+            Text(
+                "No reminder is posted between these hours.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                HourStepper(
+                    label = "From",
+                    hour = quietStartHour,
+                    onChange = { onSetQuietHours(it, quietEndHour) },
+                    modifier = Modifier.weight(1f),
+                )
+                HourStepper(
+                    label = "To",
+                    hour = quietEndHour,
+                    onChange = { onSetQuietHours(quietStartHour, it) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HourStepper(
+    label: String,
+    hour: Int,
+    onChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedButton(onClick = { onChange((hour + 23) % 24) }) { Text("–") }
+            Text(
+                "%02d:00".format(hour),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedButton(onClick = { onChange((hour + 1) % 24) }) { Text("+") }
         }
     }
 }
