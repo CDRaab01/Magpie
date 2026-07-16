@@ -9,7 +9,7 @@ from app.database import get_db
 from app.models.bill_statement import BillStatement
 from app.rules.bill_matching import is_bill_missing
 from app.schemas.bill import BillStatementCreate, BillStatementOut
-from app.security import CurrentUser
+from app.security import LedgerUser
 from app.services.bill_service import create_bill, get_bill, list_bills, rematch_bill
 
 router = APIRouter(prefix="/bills", tags=["bills"])
@@ -32,25 +32,25 @@ def _to_out(bill: BillStatement, *, today: datetime.date) -> BillStatementOut:
 
 
 @router.get("", response_model=list[BillStatementOut])
-async def all_bills(current_user: CurrentUser, db: DbSession):
+async def all_bills(current_user: LedgerUser, db: DbSession):
     today = datetime.datetime.now(datetime.timezone.utc).date()
     return [_to_out(b, today=today) for b in await list_bills(db, current_user.id)]
 
 
 @router.post("", response_model=BillStatementOut, status_code=status.HTTP_201_CREATED)
-async def create_new_bill(req: BillStatementCreate, current_user: CurrentUser, db: DbSession):
+async def create_new_bill(req: BillStatementCreate, current_user: LedgerUser, db: DbSession):
     now = datetime.datetime.now(datetime.timezone.utc)
     bill = await create_bill(db, current_user.id, req, now=now)
     return _to_out(bill, today=now.date())
 
 
 @router.get("/{bill_id}", response_model=BillStatementOut)
-async def one_bill(bill_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+async def one_bill(bill_id: uuid.UUID, current_user: LedgerUser, db: DbSession):
     today = datetime.datetime.now(datetime.timezone.utc).date()
     return _to_out(await get_bill(db, current_user.id, bill_id), today=today)
 
 
 @router.post("/{bill_id}/rematch", response_model=BillStatementOut)
-async def rematch_one_bill(bill_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+async def rematch_one_bill(bill_id: uuid.UUID, current_user: LedgerUser, db: DbSession):
     today = datetime.datetime.now(datetime.timezone.utc).date()
     return _to_out(await rematch_bill(db, current_user.id, bill_id), today=today)

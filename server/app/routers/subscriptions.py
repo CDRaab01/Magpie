@@ -11,7 +11,7 @@ from app.database import get_db
 from app.models.merchant_tag import MerchantTag
 from app.models.subscription_mute import SubscriptionMute
 from app.schemas.subscription import SubscriptionOut, SubscriptionsOut
-from app.security import CurrentUser
+from app.security import LedgerUser
 from app.services import cross_app_client
 from app.services.subscription_service import (
     FITNESS_TAG,
@@ -37,7 +37,7 @@ class TagRequest(BaseModel):
 
 
 @router.get("", response_model=SubscriptionsOut)
-async def subscriptions(current_user: CurrentUser, db: DbSession):
+async def subscriptions(current_user: LedgerUser, db: DbSession):
     """Your recurring charges, totaled and sorted by annual cost (ROADMAP #22) — the single most
     actionable screen in consumer finance. Inferred from the ledger, no rule required.
 
@@ -76,7 +76,7 @@ async def subscriptions(current_user: CurrentUser, db: DbSession):
 
 
 @router.post("/tag", status_code=status.HTTP_204_NO_CONTENT)
-async def tag_merchant(req: TagRequest, current_user: CurrentUser, db: DbSession):
+async def tag_merchant(req: TagRequest, current_user: LedgerUser, db: DbSession):
     """Tag a merchant (Link G, v1 tag "fitness") so its subscription shows cost-per-visit from
     Spotter. Idempotent (ON CONFLICT DO NOTHING); unknown tags are rejected (422)."""
     if req.tag not in ALLOWED_TAGS:
@@ -91,7 +91,7 @@ async def tag_merchant(req: TagRequest, current_user: CurrentUser, db: DbSession
 
 
 @router.delete("/tag", status_code=status.HTTP_204_NO_CONTENT)
-async def untag_merchant(req: TagRequest, current_user: CurrentUser, db: DbSession):
+async def untag_merchant(req: TagRequest, current_user: LedgerUser, db: DbSession):
     """Remove a merchant tag. No error if it wasn't tagged."""
     await db.execute(
         delete(MerchantTag).where(
@@ -104,7 +104,7 @@ async def untag_merchant(req: TagRequest, current_user: CurrentUser, db: DbSessi
 
 
 @router.post("/mute", status_code=status.HTTP_204_NO_CONTENT)
-async def mute_subscription(req: MuteRequest, current_user: CurrentUser, db: DbSession):
+async def mute_subscription(req: MuteRequest, current_user: LedgerUser, db: DbSession):
     """Mark a merchant "not a subscription" (#12) so it drops off the screen and both subscription
     sweeps. Idempotent: muting an already-muted merchant is a no-op (ON CONFLICT DO NOTHING)."""
     stmt = (
@@ -117,7 +117,7 @@ async def mute_subscription(req: MuteRequest, current_user: CurrentUser, db: DbS
 
 
 @router.delete("/mute", status_code=status.HTTP_204_NO_CONTENT)
-async def unmute_subscription(req: MuteRequest, current_user: CurrentUser, db: DbSession):
+async def unmute_subscription(req: MuteRequest, current_user: LedgerUser, db: DbSession):
     """Un-mute a merchant — it can reappear as a subscription. No error if it wasn't muted."""
     await db.execute(
         delete(SubscriptionMute).where(
@@ -129,7 +129,7 @@ async def unmute_subscription(req: MuteRequest, current_user: CurrentUser, db: D
 
 
 @router.get("/mutes", response_model=list[str])
-async def list_muted(current_user: CurrentUser, db: DbSession) -> list[str]:
+async def list_muted(current_user: LedgerUser, db: DbSession) -> list[str]:
     """The merchants the owner has muted (#12) — lets the client show/undo them."""
     result = await db.execute(
         select(SubscriptionMute.merchant).where(SubscriptionMute.user_id == current_user.id)

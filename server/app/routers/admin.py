@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.schemas.admin import RenormalizeResultOut
-from app.security import CurrentUser
+from app.security import LedgerUser
 from app.services.renormalize_service import renormalize_merchants
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -16,7 +16,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 @router.post("/renormalize", response_model=RenormalizeResultOut)
 async def renormalize(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     dry_run: Annotated[bool, Query()] = True,
 ):

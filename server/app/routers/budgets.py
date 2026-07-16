@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.budget import Budget
 from app.schemas.budget import BudgetCreate, BudgetOut, BudgetProposalOut, BudgetUpdate
-from app.security import CurrentUser
+from app.security import LedgerUser
 from app.services.budget_service import (
     actual_spend_by_category,
     carry_forward_proposals,
@@ -35,7 +35,7 @@ def _to_out(budget: Budget, actual_by_category: dict) -> BudgetOut:
 
 @router.get("", response_model=list[BudgetOut])
 async def all_budgets(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     month: Annotated[datetime.date, Query()],
 ):
@@ -45,7 +45,7 @@ async def all_budgets(
 
 
 @router.post("", response_model=BudgetOut, status_code=status.HTTP_201_CREATED)
-async def create_new_budget(req: BudgetCreate, current_user: CurrentUser, db: DbSession):
+async def create_new_budget(req: BudgetCreate, current_user: LedgerUser, db: DbSession):
     budget = await create_budget(db, current_user.id, req)
     actual = await actual_spend_by_category(db, current_user.id, budget.month)
     return _to_out(budget, actual)
@@ -53,7 +53,7 @@ async def create_new_budget(req: BudgetCreate, current_user: CurrentUser, db: Db
 
 @router.patch("/{budget_id}", response_model=BudgetOut)
 async def patch_budget(
-    budget_id: uuid.UUID, req: BudgetUpdate, current_user: CurrentUser, db: DbSession
+    budget_id: uuid.UUID, req: BudgetUpdate, current_user: LedgerUser, db: DbSession
 ):
     """Change a budget's monthly cap — how a coach cut draft is accepted, and plain manual edits."""
     budget = await update_budget(db, current_user.id, budget_id, req.amount)
@@ -63,7 +63,7 @@ async def patch_budget(
 
 @router.get("/proposals", response_model=list[BudgetProposalOut])
 async def budget_proposals(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     month: Annotated[datetime.date, Query()],
 ):

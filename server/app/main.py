@@ -24,6 +24,7 @@ from app.routers import (
     cross_app,
     chat,
     categories,
+    household,
     imports,
     ingest,
     rules,
@@ -124,6 +125,7 @@ async def security_headers(request: Request, call_next) -> Response:
 
 app.include_router(suite_auth.router)
 app.include_router(auth.router)
+app.include_router(household.router)
 app.include_router(accounts.router)
 app.include_router(categories.router)
 app.include_router(transactions.router)

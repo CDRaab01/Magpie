@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.limiter import limiter
 from app.schemas.imports import ImportSummaryOut
-from app.security import CurrentUser
+from app.security import LedgerUser
 from app.services.import_service import import_csv
 
 router = APIRouter(prefix="/imports", tags=["imports"])
@@ -19,7 +19,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 @limiter.limit("10/minute")
 async def import_csv_endpoint(
     request: Request,
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     account_id: Annotated[uuid.UUID, Form()],
     institution: Annotated[str, Form()],

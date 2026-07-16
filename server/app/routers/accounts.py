@@ -14,7 +14,7 @@ from app.schemas.account import (
     CheckpointCreate,
     CheckpointOut,
 )
-from app.security import CurrentUser
+from app.security import LedgerUser
 from app.services.account_service import (
     compute_account_balance,
     compute_balance_delta,
@@ -48,33 +48,33 @@ async def _to_out(db: AsyncSession, account: Account) -> AccountOut:
 
 
 @router.get("", response_model=list[AccountOut])
-async def all_accounts(current_user: CurrentUser, db: DbSession):
+async def all_accounts(current_user: LedgerUser, db: DbSession):
     accounts = await list_accounts(db, current_user.id)
     return [await _to_out(db, a) for a in accounts]
 
 
 @router.post("", response_model=AccountOut, status_code=status.HTTP_201_CREATED)
-async def create_new_account(req: AccountCreate, current_user: CurrentUser, db: DbSession):
+async def create_new_account(req: AccountCreate, current_user: LedgerUser, db: DbSession):
     account = await create_account(db, current_user.id, req)
     return await _to_out(db, account)
 
 
 @router.get("/{account_id}", response_model=AccountOut)
-async def one_account(account_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+async def one_account(account_id: uuid.UUID, current_user: LedgerUser, db: DbSession):
     account = await get_account(db, current_user.id, account_id)
     return await _to_out(db, account)
 
 
 @router.patch("/{account_id}", response_model=AccountOut)
 async def patch_account(
-    account_id: uuid.UUID, req: AccountUpdate, current_user: CurrentUser, db: DbSession
+    account_id: uuid.UUID, req: AccountUpdate, current_user: LedgerUser, db: DbSession
 ):
     account = await update_account(db, current_user.id, account_id, req)
     return await _to_out(db, account)
 
 
 @router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_account(account_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+async def remove_account(account_id: uuid.UUID, current_user: LedgerUser, db: DbSession):
     await delete_account(db, current_user.id, account_id)
 
 
@@ -89,7 +89,7 @@ def _checkpoint_out(cp: StatementCheckpoint) -> CheckpointOut:
 
 
 @router.get("/{account_id}/checkpoints", response_model=list[CheckpointOut])
-async def account_checkpoints(account_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+async def account_checkpoints(account_id: uuid.UUID, current_user: LedgerUser, db: DbSession):
     checkpoints = await list_checkpoints(db, current_user.id, account_id)
     return [_checkpoint_out(cp) for cp in checkpoints]
 
@@ -100,7 +100,7 @@ async def account_checkpoints(account_id: uuid.UUID, current_user: CurrentUser, 
     status_code=status.HTTP_201_CREATED,
 )
 async def add_checkpoint(
-    account_id: uuid.UUID, req: CheckpointCreate, current_user: CurrentUser, db: DbSession
+    account_id: uuid.UUID, req: CheckpointCreate, current_user: LedgerUser, db: DbSession
 ):
     """Manually anchor a statement balance (ROADMAP #4). Re-posting the same statement_date corrects
     the balance in place rather than creating a duplicate anchor. Once a second checkpoint exists,

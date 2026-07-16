@@ -14,7 +14,7 @@ from app.schemas.transaction import (
     TransactionOut,
     TransactionUpdate,
 )
-from app.security import CurrentUser
+from app.security import LedgerUser
 from app.services.transaction_service import (
     create_transaction,
     delete_transaction,
@@ -34,7 +34,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 @router.get("", response_model=list[TransactionOut])
 async def all_transactions(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     start: datetime.date | None = Query(default=None),
     end: datetime.date | None = Query(default=None),
@@ -60,13 +60,13 @@ async def all_transactions(
 
 
 @router.post("", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
-async def create_new_transaction(req: TransactionCreate, current_user: CurrentUser, db: DbSession):
+async def create_new_transaction(req: TransactionCreate, current_user: LedgerUser, db: DbSession):
     return await create_transaction(db, current_user.id, req)
 
 
 @router.get("/summary", response_model=MonthlySummaryOut)
 async def summary(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     year: Annotated[int, Query(ge=2000, le=2100)],
     month: Annotated[int, Query(ge=1, le=12)],
@@ -84,19 +84,19 @@ async def summary(
 
 
 @router.get("/{transaction_id}", response_model=TransactionOut)
-async def one_transaction(transaction_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+async def one_transaction(transaction_id: uuid.UUID, current_user: LedgerUser, db: DbSession):
     return await get_transaction(db, current_user.id, transaction_id)
 
 
 @router.patch("/{transaction_id}", response_model=TransactionOut)
 async def patch_transaction(
-    transaction_id: uuid.UUID, req: TransactionUpdate, current_user: CurrentUser, db: DbSession
+    transaction_id: uuid.UUID, req: TransactionUpdate, current_user: LedgerUser, db: DbSession
 ):
     return await update_transaction(db, current_user.id, transaction_id, req)
 
 
 @router.post("/{transaction_id}/unpair", response_model=list[TransactionOut])
-async def unpair(transaction_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+async def unpair(transaction_id: uuid.UUID, current_user: LedgerUser, db: DbSession):
     """Dissolve the transfer pair this transaction belongs to (F12) — both legs revert to their
     sign-based kind and return to the review queue."""
     return await unpair_transaction(db, current_user.id, transaction_id)
@@ -104,7 +104,7 @@ async def unpair(transaction_id: uuid.UUID, current_user: CurrentUser, db: DbSes
 
 @router.post("/{transaction_id}/split", response_model=SplitResult)
 async def split(
-    transaction_id: uuid.UUID, req: SplitRequest, current_user: CurrentUser, db: DbSession
+    transaction_id: uuid.UUID, req: SplitRequest, current_user: LedgerUser, db: DbSession
 ):
     """Split one transaction across categories (#26). Parts must sum to the transaction's amount;
     the parent stays the ledger row and its parts hold the category breakdown."""
@@ -113,11 +113,11 @@ async def split(
 
 
 @router.delete("/{transaction_id}/split", response_model=TransactionOut)
-async def unsplit(transaction_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+async def unsplit(transaction_id: uuid.UUID, current_user: LedgerUser, db: DbSession):
     """Undo a split — delete the parts and return the parent to an ordinary row."""
     return await unsplit_transaction(db, current_user.id, transaction_id)
 
 
 @router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_transaction(transaction_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+async def remove_transaction(transaction_id: uuid.UUID, current_user: LedgerUser, db: DbSession):
     await delete_transaction(db, current_user.id, transaction_id)

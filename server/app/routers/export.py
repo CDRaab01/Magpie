@@ -6,7 +6,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.security import CurrentUser
+from app.security import LedgerUser
 from app.services.export_service import export_month_csv
 
 router = APIRouter(prefix="/export", tags=["export"])
@@ -16,7 +16,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 @router.get("/transactions.csv", response_class=PlainTextResponse)
 async def export_transactions(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     month: Annotated[datetime.date, Query()],
 ):

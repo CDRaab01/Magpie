@@ -64,6 +64,28 @@ async def get_current_user(
 CurrentUser = Annotated[object, Depends(get_current_user)]
 
 
+async def get_ledger_owner(
+    current_user: Annotated[object, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """The user whose financial data the request operates on (family mode, CLAUDE.md household
+    sharing): the household **owner** for a member, else the caller. Financial data endpoints depend
+    on this instead of :func:`get_current_user`, so a household member reads and writes the one
+    shared ledger. Identity/membership endpoints keep ``get_current_user`` (the real caller)."""
+    from app.models.user import User
+    from app.services.household_service import resolve_ledger_owner_id
+
+    owner_id = await resolve_ledger_owner_id(db, current_user.id)
+    if owner_id == current_user.id:
+        return current_user
+    owner = (await db.execute(select(User).where(User.id == owner_id))).scalar_one_or_none()
+    return owner or current_user
+
+
+# Financial data endpoints use this; it resolves a household member to the shared-ledger owner.
+LedgerUser = Annotated[object, Depends(get_ledger_owner)]
+
+
 async def get_cross_app_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],

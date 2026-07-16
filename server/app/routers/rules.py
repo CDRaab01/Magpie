@@ -16,7 +16,7 @@ from app.schemas.rule import (
     RuleOut,
     RuleUpdate,
 )
-from app.security import CurrentUser
+from app.security import LedgerUser
 from app.services.bill_rule_service import seed_bill_rules
 from app.services.income_rule_service import seed_income_rules
 from app.services.rule_apply_service import (
@@ -32,18 +32,18 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.get("", response_model=list[RuleOut])
-async def all_rules(current_user: CurrentUser, db: DbSession):
+async def all_rules(current_user: LedgerUser, db: DbSession):
     return await list_rules(db, current_user.id)
 
 
 @router.post("", response_model=RuleOut, status_code=status.HTTP_201_CREATED)
-async def create_new_rule(req: RuleCreate, current_user: CurrentUser, db: DbSession):
+async def create_new_rule(req: RuleCreate, current_user: LedgerUser, db: DbSession):
     return await create_rule(db, current_user.id, req)
 
 
 @router.post("/from-suggestions", response_model=PromotionResultOut)
 async def promote_suggestions(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     dry_run: Annotated[bool, Query()] = True,
     min_transactions: Annotated[int, Query(ge=1)] = 1,
@@ -67,7 +67,7 @@ async def promote_suggestions(
 
 @router.post("/from-confirmed", response_model=PromotionResultOut)
 async def promote_confirmed(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     dry_run: Annotated[bool, Query()] = True,
     min_transactions: Annotated[int, Query(ge=1)] = 2,
@@ -89,7 +89,7 @@ async def promote_confirmed(
 
 @router.post("/from-income", response_model=IncomeSeedResultOut)
 async def seed_income(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     dry_run: Annotated[bool, Query()] = True,
     only: Annotated[list[str] | None, Query()] = None,
@@ -133,7 +133,7 @@ async def seed_income(
 
 @router.post("/from-bills", response_model=BillSeedResultOut)
 async def seed_bills(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     dry_run: Annotated[bool, Query()] = True,
     only: Annotated[list[str] | None, Query()] = None,
@@ -176,7 +176,7 @@ async def seed_bills(
 @router.post("/{rule_id}/apply-to-history", response_model=PromotionResultOut)
 async def apply_to_history(
     rule_id: uuid.UUID,
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     dry_run: Annotated[bool, Query()] = True,
 ):
@@ -202,15 +202,15 @@ async def apply_to_history(
 
 
 @router.get("/{rule_id}", response_model=RuleOut)
-async def one_rule(rule_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+async def one_rule(rule_id: uuid.UUID, current_user: LedgerUser, db: DbSession):
     return await get_rule(db, current_user.id, rule_id)
 
 
 @router.patch("/{rule_id}", response_model=RuleOut)
-async def patch_rule(rule_id: uuid.UUID, req: RuleUpdate, current_user: CurrentUser, db: DbSession):
+async def patch_rule(rule_id: uuid.UUID, req: RuleUpdate, current_user: LedgerUser, db: DbSession):
     return await update_rule(db, current_user.id, rule_id, req)
 
 
 @router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_rule(rule_id: uuid.UUID, current_user: CurrentUser, db: DbSession):
+async def remove_rule(rule_id: uuid.UUID, current_user: LedgerUser, db: DbSession):
     await delete_rule(db, current_user.id, rule_id)

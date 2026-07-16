@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.schemas.coach import CategoryAnalysisOut, CoachPlanOut, CoachStatusOut, GoalOut, GoalUpsert
-from app.security import CurrentUser
+from app.security import LedgerUser
 from app.services.ai.coach import narrate_coach
 from app.services.coach_service import (
     build_category_analysis,
@@ -59,7 +59,7 @@ async def _with_coaching(result, payload: dict):
 
 @router.get("/status", response_model=CoachStatusOut)
 async def coach_status(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     narrative: Annotated[bool, Query()] = False,
 ):
@@ -73,7 +73,7 @@ async def coach_status(
 
 @router.get("/plan", response_model=CoachPlanOut)
 async def coach_plan(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     monthly_savings_cents: Annotated[int | None, Query(gt=0)] = None,
     narrative: Annotated[bool, Query()] = False,
@@ -98,7 +98,7 @@ async def coach_plan(
 @router.get("/category/{category_id}", response_model=CategoryAnalysisOut)
 async def coach_category(
     category_id: uuid.UUID,
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     narrative: Annotated[bool, Query()] = False,
 ):
@@ -110,7 +110,7 @@ async def coach_category(
 
 
 @router.get("/goal", response_model=GoalOut | None)
-async def read_goal(current_user: CurrentUser, db: DbSession):
+async def read_goal(current_user: LedgerUser, db: DbSession):
     goal = await get_goal(db, current_user.id)
     if goal is None:
         return None
@@ -120,7 +120,7 @@ async def read_goal(current_user: CurrentUser, db: DbSession):
 
 
 @router.put("/goal", response_model=GoalOut)
-async def set_goal(req: GoalUpsert, current_user: CurrentUser, db: DbSession):
+async def set_goal(req: GoalUpsert, current_user: LedgerUser, db: DbSession):
     """Set (or change) the monthly savings goal — one active goal, updated in place."""
     goal = await upsert_goal(db, current_user.id, req.amount_cents)
     return GoalOut(
@@ -129,5 +129,5 @@ async def set_goal(req: GoalUpsert, current_user: CurrentUser, db: DbSession):
 
 
 @router.delete("/goal", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_goal(current_user: CurrentUser, db: DbSession):
+async def remove_goal(current_user: LedgerUser, db: DbSession):
     await clear_goal(db, current_user.id)

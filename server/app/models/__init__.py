@@ -3,6 +3,7 @@ from app.models.bill_statement import BillStatement
 from app.models.budget import Budget
 from app.models.category import Category
 from app.models.goal import Goal
+from app.models.household import Household, HouseholdMember
 from app.models.import_batch import ImportBatch
 from app.models.ingest_event import IngestEvent
 from app.models.merchant_tag import MerchantTag
@@ -18,6 +19,8 @@ __all__ = [
     "Budget",
     "Category",
     "Goal",
+    "Household",
+    "HouseholdMember",
     "ImportBatch",
     "IngestEvent",
     "MerchantTag",

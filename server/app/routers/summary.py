@@ -15,7 +15,7 @@ from app.schemas.summary import (
     MonthSummaryOut,
     SafeToSpendOut,
 )
-from app.security import CurrentUser
+from app.security import LedgerUser
 from app.services.summary_service import (
     category_summary,
     safe_to_spend,
@@ -34,7 +34,7 @@ def _utc_now() -> datetime.datetime:
 
 @router.get("/history", response_model=HistoryOut)
 async def history(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     months: Annotated[int, Query(ge=1, le=36)] = 6,
 ):
@@ -56,7 +56,7 @@ async def history(
 
 @router.get("/categories", response_model=CategorySummaryOut)
 async def categories_breakdown(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     month: Annotated[datetime.date, Query()],
 ):
@@ -77,7 +77,7 @@ async def categories_breakdown(
 
 @router.get("/merchants", response_model=MerchantSummaryOut)
 async def merchants_breakdown(
-    current_user: CurrentUser,
+    current_user: LedgerUser,
     db: DbSession,
     month: Annotated[datetime.date, Query()],
     category_id: uuid.UUID | None = Query(default=None),
@@ -95,7 +95,7 @@ async def merchants_breakdown(
 
 
 @router.get("/safe-to-spend", response_model=SafeToSpendOut)
-async def safe_to_spend_endpoint(current_user: CurrentUser, db: DbSession):
+async def safe_to_spend_endpoint(current_user: LedgerUser, db: DbSession):
     """The headline number: depository balances minus bills due before the next paycheck."""
     result = await safe_to_spend(db, current_user.id, now=_utc_now())
     return SafeToSpendOut(**result)
