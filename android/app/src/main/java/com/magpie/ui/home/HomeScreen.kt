@@ -232,26 +232,35 @@ private fun MonthPanel(
     history: List<com.magpie.data.remote.MonthSummaryOut>,
 ) {
     // 6-month trend series per tile (#13). Spend uses magnitudes so the bars read "how much"
-    // rather than as an inverted dip; income/net use their signed values (net can go negative,
-    // and the filled sparkline's min-max normalization keeps that readable).
+    // rather than as an inverted dip; income uses its signed value; savings rate is net/income.
     val incomeSeries = history.map { it.incomeCents.toFloat() }
     val spendSeries = history.map { kotlin.math.abs(it.spendCents.toFloat()) }
-    val netSeries = history.map { it.netCents.toFloat() }
+    val savingsSeries = history.map { savingsRateFraction(it.netCents, it.incomeCents) }
     PanelCard(channel = MagpieTheme.colors.money.base) {
         SectionHeader(label = "This month", channel = MagpieTheme.colors.money.base)
         Spacer(Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Color grammar (#31): income green, net teal (money), but spend is neutral  -  with the
-            // transaction rows now neutral too, red is reserved for real deviations.
+            // Color grammar (#31): income green, savings teal (money), but spend is neutral  -  with
+            // the transaction rows now neutral too, red is reserved for real deviations. Net moved to
+            // the hero, so its tile is now "Savings" (how much of income you kept this month).
             MonthStatTile("Income", formatCentsCompact(summary.incomeCents),
                 MagpieTheme.colors.underBudget.base, incomeSeries, Modifier.weight(1f))
             MonthStatTile("Spend", formatCentsCompact(summary.spendCents),
                 MaterialTheme.colorScheme.onSurface, spendSeries, Modifier.weight(1f))
-            MonthStatTile("Net", formatCentsCompact(summary.netCents),
-                MagpieTheme.colors.money.base, netSeries, Modifier.weight(1f))
+            MonthStatTile("Savings", savingsRateLabel(summary.netCents, summary.incomeCents),
+                MagpieTheme.colors.money.base, savingsSeries, Modifier.weight(1f))
         }
     }
 }
+
+/** Savings rate = net / income, as a whole-percent label ("71%"); "—" when no income to divide by
+ * (and never a misleading 0% when there's simply no income yet this month). */
+private fun savingsRateLabel(netCents: Long, incomeCents: Long): String =
+    if (incomeCents <= 0L) "—" else "${Math.round(netCents.toDouble() / incomeCents * 100.0)}%"
+
+/** Savings rate as a fraction for the trend sparkline (0 when no income — a flat, honest baseline). */
+private fun savingsRateFraction(netCents: Long, incomeCents: Long): Float =
+    if (incomeCents <= 0L) 0f else (netCents.toDouble() / incomeCents).toFloat()
 
 /**
  * Local month-panel metric tile (#30). Mirrors Pulse's dense `StatTile` (mono numerals) but pins
