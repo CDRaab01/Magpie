@@ -188,36 +188,39 @@ private fun MagpieHero(state: HomeUiState.Ready, onClick: () -> Unit) {
                 style = MaterialTheme.typography.headlineMedium,
                 color = white,
             )
-            // The genre's headline number (#12a/#13): safe-to-spend as a rolling TickerNumber, the
-            // finance analogue of Plate's animated calorie hero. Tapping the hero opens the
-            // cash-flow calendar, where the "due before payday" breakdown behind the figure lives.
-            state.safeToSpendCents?.let { cents ->
-                Spacer(Modifier.height(12.dp))
+            // The headline number is NET THIS MONTH (income - spend so far): real money in vs out,
+            // grounded and always meaningful. Safe-to-spend is a forward projection that reads as
+            // noise until paychecks + bills are armed, so it moves to the secondary status line
+            // rather than dominating the hero. Tapping the hero opens the cash-flow calendar.
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "NET THIS MONTH",
+                style = MaterialTheme.typography.labelSmall,
+                color = white.copy(alpha = 0.85f),
+            )
+            val netDollars = (state.summary.netCents / 100).toInt()
+            TickerNumber(
+                target = kotlin.math.abs(netDollars),
+                prefix = if (netDollars < 0) "-$" else "$",
+                style = MagpieTheme.dataType.dataLarge,
+                color = white,
+            )
+            val status = heroStatusLine(state)
+            if (status.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
                 Text(
-                    "SAFE TO SPEND",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = white.copy(alpha = 0.85f),
-                )
-                val dollars = (cents / 100).toInt()
-                TickerNumber(
-                    target = kotlin.math.abs(dollars),
-                    prefix = if (dollars < 0) "-$" else "$",
-                    style = MagpieTheme.dataType.dataLarge,
+                    status,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = white,
                 )
             }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                heroStatusLine(state),
-                style = MaterialTheme.typography.bodyLarge,
-                color = white,
-            )
         }
     }
 }
 
 private fun heroStatusLine(state: HomeUiState.Ready): String {
-    val parts = mutableListOf("${formatCentsCompact(state.summary.netCents)} net this month")
+    val parts = mutableListOf<String>()
+    state.safeToSpendCents?.let { parts += "${formatCentsCompact(it)} safe to spend" }
     if (state.reviewCount > 0) parts += "${state.reviewCount} to review"
     state.nextBill?.let { bill -> parts += "${bill.biller} due ${formatShortDate(bill.dueDate)}" }
     return parts.joinToString("  ·  ")
