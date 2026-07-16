@@ -52,6 +52,9 @@ sealed interface HomeUiState {
         // never waits on a model call; null on any hiccup, and the card hides itself when there's
         // nothing notable to say.
         val insight: MonthlyInsightOut? = null,
+        // Non-null when this panel was restored from the offline snapshot rather than the server:
+        // the epoch-ms it was captured, for the subtle "as of <time>" stale indicator.
+        val asOfMs: Long? = null,
     ) : HomeUiState
     data class Error(val message: String) : HomeUiState
 }
@@ -66,6 +69,8 @@ private data class HomeSnapshot(
     val safeToSpendCents: Long?,
     val history: List<MonthSummaryOut>,
     val insight: MonthlyInsightOut?,
+    // When the snapshot was written, so an offline open can show "as of <time>".
+    val cachedAtMs: Long = 0L,
 )
 
 @HiltViewModel
@@ -117,7 +122,10 @@ class HomeViewModel @Inject constructor(
                     snapshots.save(
                         SnapshotStore.HOME,
                         json.encodeToString(
-                            HomeSnapshot(summary, accounts, reviewCount, nextBill, safeToSpend, history, insight),
+                            HomeSnapshot(
+                                summary, accounts, reviewCount, nextBill, safeToSpend, history,
+                                insight, cachedAtMs = System.currentTimeMillis(),
+                            ),
                         ),
                     )
                 }
@@ -129,6 +137,7 @@ class HomeViewModel @Inject constructor(
                     HomeUiState.Ready(
                         cached.summary, cached.accounts, greetingForNow(), cached.reviewCount,
                         cached.nextBill, cached.safeToSpendCents, cached.history, cached.insight,
+                        asOfMs = cached.cachedAtMs.takeIf { it > 0L },
                     )
                 } else {
                     HomeUiState.Error(e.message ?: "Couldn't reach Magpie")

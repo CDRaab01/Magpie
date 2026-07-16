@@ -1,7 +1,9 @@
 package com.magpie.data.repository
 
+import com.magpie.data.local.db.CachedTransactionEntity
 import com.magpie.data.local.db.CashEntryDao
 import com.magpie.data.local.db.PendingCashEntryEntity
+import com.magpie.data.local.db.TransactionCacheDao
 import com.magpie.data.remote.AccountCreate
 import com.magpie.data.remote.AccountOut
 import com.magpie.data.remote.ApiService
@@ -69,10 +71,23 @@ private class FakeCashEntryDao : CashEntryDao {
     }
 }
 
+/** In-memory transaction-cache DAO mirroring the real replaceAll (clear + insert) semantics. */
+private class FakeTransactionCacheDao : TransactionCacheDao {
+    val rows = mutableListOf<CachedTransactionEntity>()
+
+    override suspend fun getAll(): List<CachedTransactionEntity> = rows.sortedBy { it.position }
+    override suspend fun clear() = rows.clear()
+    override suspend fun insertAll(rows: List<CachedTransactionEntity>) {
+        this.rows += rows
+    }
+}
+
 /** Fake server: an in-memory transaction list + an `offline` switch that throws IOException. */
 private class FakeApi : ApiService {
     var offline = false
     val created = mutableListOf<TransactionCreate>()
+    // Rows the server returns from listTransactions (the default-page cache source).
+    var transactions: List<TransactionOut> = emptyList()
 
     private fun gate() {
         if (offline) throw IOException("offline")
@@ -104,7 +119,7 @@ private class FakeApi : ApiService {
         offset: Int?,
     ): List<TransactionOut> {
         gate()
-        return emptyList()
+        return transactions
     }
 
     override suspend fun createTransaction(req: TransactionCreate): TransactionOut {
@@ -224,7 +239,15 @@ class TransactionRepositorySyncTest {
 
     private val api = FakeApi()
     private val dao = FakeCashEntryDao()
-    private val repo = TransactionRepository(api, dao)
+    private val cacheDao = FakeTransactionCacheDao()
+    private val repo = TransactionRepository(api, dao, cacheDao)
+
+    private fun txn(id: String, merchant: String) = TransactionOut(
+        id = id, accountId = "acct-1", amount = -1200, currency = "USD", date = "2026-07-01",
+        status = "posted", merchantRaw = merchant, merchantNorm = merchant, categoryId = null,
+        kind = "spend", transferGroup = null, reviewState = "confirmed", source = "csv",
+        createdAt = "2026-07-01T00:00:00Z",
+    )
 
     @Test
     fun `online cash entry posts immediately and never queues`() = runTest {
@@ -281,7 +304,7 @@ class TransactionRepositorySyncTest {
                 throw IllegalStateException("422 sign mismatch")
             }
         }
-        val brokenRepo = TransactionRepository(brokenApi, dao)
+        val brokenRepo = TransactionRepository(brokenApi, dao, cacheDao)
 
         var threw = false
         try {
@@ -291,5 +314,42 @@ class TransactionRepositorySyncTest {
         }
         assertTrue(threw)
         assertEquals(0, dao.rows.size)
+    }
+
+    @Test
+    fun `defaultFirstPage online returns fresh rows and mirrors them for offline`() = runTest {
+        api.transactions = listOf(txn("1", "First"), txn("2", "Second"))
+
+        val page = repo.defaultFirstPage(limit = 50)
+
+        assertEquals(listOf("First", "Second"), page.items.map { it.merchantRaw })
+        assertEquals(null, page.staleAsOfMs) // fresh, not stale
+        // Written through to the mirror in order.
+        assertEquals(listOf("1", "2"), cacheDao.rows.sortedBy { it.position }.map { it.id })
+    }
+
+    @Test
+    fun `defaultFirstPage offline serves the cached rows with a stale timestamp`() = runTest {
+        api.transactions = listOf(txn("1", "First"), txn("2", "Second"))
+        repo.defaultFirstPage(limit = 50) // prime the mirror while online
+
+        api.offline = true
+        val page = repo.defaultFirstPage(limit = 50)
+
+        assertEquals(listOf("First", "Second"), page.items.map { it.merchantRaw })
+        assertTrue((page.staleAsOfMs ?: 0L) > 0L) // stale, stamped with the capture time
+    }
+
+    @Test
+    fun `defaultFirstPage offline with an empty mirror rethrows so the UI can error`() = runTest {
+        api.offline = true
+
+        var threw = false
+        try {
+            repo.defaultFirstPage(limit = 50)
+        } catch (e: IOException) {
+            threw = true
+        }
+        assertTrue(threw)
     }
 }

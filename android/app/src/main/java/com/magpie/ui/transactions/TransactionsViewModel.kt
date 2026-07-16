@@ -42,6 +42,9 @@ sealed interface TransactionsUiState {
         val query: String,
         val appending: Boolean = false,
         val endReached: Boolean = false,
+        // Non-null when these rows came from the offline read-mirror rather than the server: the
+        // epoch-ms the cache was captured, for the subtle "as of <time>" stale indicator.
+        val staleAsOfMs: Long? = null,
     ) : TransactionsUiState
     data class Error(val message: String) : TransactionsUiState
 }
@@ -70,7 +73,18 @@ class TransactionsViewModel @Inject constructor(
             try {
                 val accounts = runCatching { api.listAccounts() }.getOrDefault(emptyList())
                 val categories = runCatching { api.listCategories() }.getOrDefault(emptyList())
-                val page = fetchPage(offset = 0)
+                // The default view opens through the offline read-mirror; a filtered/searched view
+                // stays online-only (nothing sensible to cache per filter+offset combination).
+                val page: List<TransactionOut>
+                val staleAsOfMs: Long?
+                if (isDefaultView()) {
+                    val cached = transactionRepository.defaultFirstPage(PAGE_SIZE)
+                    page = cached.items
+                    staleAsOfMs = cached.staleAsOfMs
+                } else {
+                    page = fetchPage(offset = 0)
+                    staleAsOfMs = null
+                }
                 _state.value = TransactionsUiState.Ready(
                     items = page,
                     categoryNamesById = categories.associate { it.id to it.name },
@@ -79,7 +93,9 @@ class TransactionsViewModel @Inject constructor(
                     filter = filter,
                     accountId = accountId,
                     query = query,
-                    endReached = page.size < PAGE_SIZE,
+                    // Offline (stale) rows can't paginate — there is only the one cached page.
+                    endReached = staleAsOfMs != null || page.size < PAGE_SIZE,
+                    staleAsOfMs = staleAsOfMs,
                 )
             } catch (e: Exception) {
                 if (_state.value !is TransactionsUiState.Ready) {
@@ -88,6 +104,10 @@ class TransactionsViewModel @Inject constructor(
             }
         }
     }
+
+    /** The unfiltered, unsearched, all-accounts view — the only one backed by the offline mirror. */
+    private fun isDefaultView(): Boolean =
+        filter == TxnFilter.ALL && accountId == null && query.isBlank()
 
     private suspend fun fetchPage(offset: Int): List<TransactionOut> =
         transactionRepository.listTransactionsPage(
@@ -105,11 +125,23 @@ class TransactionsViewModel @Inject constructor(
         _state.value = cur.copy(filter = filter, accountId = accountId, query = query)
         viewModelScope.launch {
             try {
-                val page = fetchPage(offset = 0)
+                // A requery is a fresh online fetch (filter/search/account changed), so any prior
+                // stale marker is cleared.
+                val page: List<TransactionOut>
+                val staleAsOfMs: Long?
+                if (isDefaultView()) {
+                    val cached = transactionRepository.defaultFirstPage(PAGE_SIZE)
+                    page = cached.items
+                    staleAsOfMs = cached.staleAsOfMs
+                } else {
+                    page = fetchPage(offset = 0)
+                    staleAsOfMs = null
+                }
                 _state.value = (_state.value as? TransactionsUiState.Ready ?: cur).copy(
                     items = page,
                     appending = false,
-                    endReached = page.size < PAGE_SIZE,
+                    endReached = staleAsOfMs != null || page.size < PAGE_SIZE,
+                    staleAsOfMs = staleAsOfMs,
                 )
             } catch (e: Exception) {
                 _state.value = TransactionsUiState.Error(e.message ?: "Couldn't load transactions")
