@@ -2,23 +2,31 @@ package com.magpie.ui.budgets
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.magpie.data.local.SnapshotStore
 import com.magpie.data.remote.ApiService
 import com.magpie.data.remote.BudgetCreate
+import com.magpie.data.remote.BudgetOut
 import com.magpie.data.remote.BudgetUpdate
 import com.magpie.data.remote.CategoryAnalysisOut
 import com.magpie.data.remote.CategoryOut
 import com.magpie.data.remote.CoachPlanOut
+import com.magpie.data.remote.CoachStatusOut
 import com.magpie.data.remote.GoalOut
 import com.magpie.data.remote.GoalUpsert
 import com.magpie.data.remote.NetProjectionOut
 import com.magpie.data.remote.ProposedCutOut
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.io.IOException
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 /** One row of the month-vs-budget view — the category, its cap, what's been spent, and (when the
  *  coach status loads) the pace context: projection, daily allowance, and status. */
@@ -62,11 +70,28 @@ data class BudgetsUiState(
     val analysisLoading: Boolean = false,
     val loading: Boolean = true,
     val error: String? = null,
+    // Non-null when the screen was restored from the offline snapshot rather than the server: the
+    // epoch-ms it was captured, for the stale banner. While set, every mutation (add budget,
+    // accept proposal, goal edits, plan cuts) is inert — writes need the server.
+    val staleAsOfMs: Long? = null,
+)
+
+/** The serializable slice of the raw API responses cached for offline — rows are re-derived on
+ *  restore. Proposals and coaching prose are deliberately not cached: proposals exist only to be
+ *  accepted (a mutation, disabled while stale) and the prose is a live LLM read. */
+@Serializable
+private data class BudgetsSnapshot(
+    val budgets: List<BudgetOut>,
+    val categories: List<CategoryOut>,
+    val coach: CoachStatusOut?,
+    // When the snapshot was written, so an offline open can show "as of <time>".
+    val cachedAtMs: Long = 0L,
 )
 
 @HiltViewModel
 class BudgetsViewModel @Inject constructor(
     private val api: ApiService,
+    private val snapshots: SnapshotStore,
 ) : ViewModel() {
     private val month: LocalDate = LocalDate.now().withDayOfMonth(1)
     private val monthParam: String = month.toString() // yyyy-MM-dd
@@ -75,6 +100,7 @@ class BudgetsViewModel @Inject constructor(
         BudgetsUiState(monthLabel = month.format(DateTimeFormatter.ofPattern("MMMM yyyy"))),
     )
     val state: StateFlow<BudgetsUiState> = _state
+    private val json = Json { ignoreUnknownKeys = true }
 
     init {
         load()
@@ -90,25 +116,8 @@ class BudgetsViewModel @Inject constructor(
                 // Suggestions and coach status are nice-to-have — failures never block the screen.
                 val proposals = runCatching { api.budgetProposals(monthParam) }.getOrDefault(emptyList())
                 val coach = runCatching { api.coachStatus(narrative = false) }.getOrNull()
-                val paceByCategory = coach?.budgets.orEmpty().associateBy { it.categoryId }
 
-                val nameById = categories.associate { it.id to it.name }
-                val rows = budgets
-                    .map { b ->
-                        val pace = paceByCategory[b.categoryId]
-                        BudgetRow(
-                            id = b.id,
-                            categoryId = b.categoryId,
-                            categoryName = nameById[b.categoryId] ?: "Unknown",
-                            amountCents = b.amount,
-                            // actual_cents is spend (negative); show it as positive spent, floored at 0.
-                            spentCents = (-b.actualCents).coerceAtLeast(0),
-                            projectedCents = pace?.projectedCents,
-                            dailyAllowanceCents = pace?.dailyAllowanceCents,
-                            paceStatus = pace?.status,
-                        )
-                    }
-                    .sortedBy { it.categoryName }
+                val rows = buildRows(budgets, categories, coach)
                 // Only propose categories that don't already have a budget this month.
                 val budgetedIds = budgets.map { it.categoryId }.toSet()
                 val drafts = proposals
@@ -124,14 +133,75 @@ class BudgetsViewModel @Inject constructor(
                     daysLeft = coach?.let { it.daysInMonth - it.daysElapsed },
                     uncategorizedMtdCents = coach?.uncategorizedMtdCents ?: 0,
                     loading = false,
+                    staleAsOfMs = null, // a fresh load re-enables the screen
                 )
+                // Cache the raw responses so a later offline open shows last-known, not an error.
+                runCatching {
+                    snapshots.save(
+                        SnapshotStore.BUDGETS,
+                        json.encodeToString(
+                            BudgetsSnapshot(
+                                budgets, categories, coach, cachedAtMs = System.currentTimeMillis(),
+                            ),
+                        ),
+                    )
+                }
                 if (coach != null) loadCoaching()
+            } catch (e: IOException) {
+                // Server unreachable (a network failure, not a rejection): fall back to the
+                // last-known month read-only instead of erroring.
+                val cached = snapshots.read(SnapshotStore.BUDGETS)
+                    ?.let { runCatching { json.decodeFromString<BudgetsSnapshot>(it) }.getOrNull() }
+                _state.value = if (cached != null) {
+                    _state.value.copy(
+                        rows = buildRows(cached.budgets, cached.categories, cached.coach),
+                        categories = cached.categories,
+                        proposals = emptyList(), // drafts only exist to be accepted — a write
+                        goal = cached.coach?.goal,
+                        net = cached.coach?.net,
+                        daysLeft = cached.coach?.let { it.daysInMonth - it.daysElapsed },
+                        uncategorizedMtdCents = cached.coach?.uncategorizedMtdCents ?: 0,
+                        loading = false,
+                        staleAsOfMs = cached.cachedAtMs.takeIf { it > 0L },
+                    )
+                } else {
+                    _state.value.copy(loading = false, error = e.message ?: "Couldn't load budgets")
+                }
             } catch (e: Exception) {
                 _state.value =
                     _state.value.copy(loading = false, error = e.message ?: "Couldn't load budgets")
             }
         }
     }
+
+    /** The month-vs-budget rows from the raw responses — shared by the fresh and restored paths. */
+    private fun buildRows(
+        budgets: List<BudgetOut>,
+        categories: List<CategoryOut>,
+        coach: CoachStatusOut?,
+    ): List<BudgetRow> {
+        val paceByCategory = coach?.budgets.orEmpty().associateBy { it.categoryId }
+        val nameById = categories.associate { it.id to it.name }
+        return budgets
+            .map { b ->
+                val pace = paceByCategory[b.categoryId]
+                BudgetRow(
+                    id = b.id,
+                    categoryId = b.categoryId,
+                    categoryName = nameById[b.categoryId] ?: "Unknown",
+                    amountCents = b.amount,
+                    // actual_cents is spend (negative); show it as positive spent, floored at 0.
+                    spentCents = (-b.actualCents).coerceAtLeast(0),
+                    projectedCents = pace?.projectedCents,
+                    dailyAllowanceCents = pace?.dailyAllowanceCents,
+                    paceStatus = pace?.status,
+                )
+            }
+            .sortedBy { it.categoryName }
+    }
+
+    /** Offline-stale screen is read-only — the screen disables the actions; this is the backstop. */
+    private fun isStale(): Boolean = _state.value.staleAsOfMs != null
 
     /** Second phase: the LLM coaching prose (violet card). Never blocks the deterministic screen —
      *  the local model may be off, in which case the card simply doesn't appear. */
@@ -148,6 +218,7 @@ class BudgetsViewModel @Inject constructor(
     }
 
     fun addBudget(categoryId: String, amountCents: Long) {
+        if (isStale()) return
         viewModelScope.launch {
             try {
                 api.createBudget(BudgetCreate(categoryId, monthParam, amountCents))
@@ -161,6 +232,7 @@ class BudgetsViewModel @Inject constructor(
     /** Accept one suggested budget (#17). Drop it from the drafts immediately so the row doesn't
      *  linger while the reload lands. */
     fun acceptProposal(categoryId: String, amountCents: Long) {
+        if (isStale()) return
         _state.value = _state.value.copy(
             proposals = _state.value.proposals.filterNot { it.categoryId == categoryId },
         )
@@ -170,6 +242,7 @@ class BudgetsViewModel @Inject constructor(
     // --- goal ---
 
     fun setGoal(amountCents: Long) {
+        if (isStale()) return
         viewModelScope.launch {
             try {
                 api.setGoal(GoalUpsert(amountCents))
@@ -181,6 +254,7 @@ class BudgetsViewModel @Inject constructor(
     }
 
     fun clearGoal() {
+        if (isStale()) return
         viewModelScope.launch {
             try {
                 api.clearGoal()
@@ -197,6 +271,7 @@ class BudgetsViewModel @Inject constructor(
     /** "How do I get there?" — fetch the cut plan for the active goal. Computed server-side on
      *  request, never persisted; each cut is a draft applied one by one below. */
     fun loadPlan() {
+        if (isStale()) return
         viewModelScope.launch {
             _state.value = _state.value.copy(planLoading = true, error = null)
             try {
@@ -217,6 +292,7 @@ class BudgetsViewModel @Inject constructor(
     /** Accept one cut: PATCH the existing budget or create one at the cut amount. Optimistically
      *  drop the cut from the plan (the acceptProposal shape). */
     fun applyCut(cut: ProposedCutOut) {
+        if (isStale()) return
         val plan = _state.value.plan
         if (plan != null) {
             _state.value = _state.value.copy(

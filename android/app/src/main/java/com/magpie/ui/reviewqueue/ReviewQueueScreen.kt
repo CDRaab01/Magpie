@@ -50,6 +50,7 @@ import design.pulse.ui.components.EmptyState
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
+import design.pulse.ui.components.StaleBanner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,6 +87,9 @@ internal fun ReviewQueueContent(
     // Which row's correction sheet is open (null = none). Held here so [ReviewQueueContent]
     // stays the one screenshot-testable surface — the sheet is closed in a default capture.
     var correcting by remember { mutableStateOf<TransactionOut?>(null) }
+    // Offline-stale queue is read-only: approving/correcting a draft is a server write, so every
+    // mutation entry point below goes inert until a fresh load clears the stale marker.
+    val mutationsEnabled = state.staleAsOfMs == null
 
     Scaffold(
         topBar = {
@@ -107,6 +111,19 @@ internal fun ReviewQueueContent(
                     modifier = Modifier.padding(MagpieTheme.spacing.md),
                 )
             }
+            state.staleAsOfMs?.let {
+                StaleBanner(
+                    asOfMs = it,
+                    channel = MagpieTheme.colors.needsReview.base,
+                    modifier = Modifier.padding(horizontal = MagpieTheme.spacing.md, vertical = 4.dp),
+                )
+                Text(
+                    "Server unreachable — changes need a connection.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = MagpieTheme.spacing.md),
+                )
+            }
             when {
                 state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     CircularProgressIndicator()
@@ -121,6 +138,7 @@ internal fun ReviewQueueContent(
                         ReviewQueueRow(
                             txn,
                             categoryNamesById = state.categoryNamesById,
+                            actionsEnabled = mutationsEnabled,
                             onConfirm = { onConfirm(txn.id, null, null, null) },
                             onAcceptAiSuggestion = { categoryId ->
                                 onConfirm(txn.id, categoryId, null, null)
@@ -151,6 +169,7 @@ internal fun ReviewQueueContent(
 private fun ReviewQueueRow(
     txn: TransactionOut,
     categoryNamesById: Map<String, String>,
+    actionsEnabled: Boolean,
     onConfirm: () -> Unit,
     onAcceptAiSuggestion: (categoryId: String) -> Unit,
     onCorrect: () -> Unit,
@@ -198,20 +217,27 @@ private fun ReviewQueueRow(
                         text = "Accept AI suggestion",
                         tonal = true,
                         compact = true,
+                        enabled = actionsEnabled,
                         channel = MagpieTheme.colors.aiVoice.base,
                         onChannel = MagpieTheme.colors.aiVoice.on,
                         dimChannel = MagpieTheme.colors.aiVoice.dim,
                         onClick = { onAcceptAiSuggestion(txn.aiSuggestedCategoryId) },
                     )
                 } else {
-                    PulseButton(text = "Confirm", tonal = true, compact = true, onClick = onConfirm)
+                    PulseButton(
+                        text = "Confirm", tonal = true, compact = true,
+                        enabled = actionsEnabled, onClick = onConfirm,
+                    )
                 }
                 Spacer(Modifier.height(4.dp))
                 // The "correct" half of approve/correct: one extra tap opens the picker, so the
                 // happy path stays one tap and a correction is at most two (open → tap category).
                 // Tonal (like Confirm) keeps the list calm — a per-row solid button would be the
                 // channel-density noise the Tier 4 UI pass is meant to avoid.
-                PulseButton(text = "Correct", tonal = true, compact = true, onClick = onCorrect)
+                PulseButton(
+                    text = "Correct", tonal = true, compact = true,
+                    enabled = actionsEnabled, onClick = onCorrect,
+                )
             }
         }
     }

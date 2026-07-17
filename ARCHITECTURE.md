@@ -12,9 +12,19 @@
 >   mode" below. Settings → Family invites by email (`app/routers/household.py`).
 > - **Biometric app lock** (Android `androidx.biometric`, `AppLockStore` — **on by default, fails
 >   open** on unprovisioned devices; Settings → Security to disable).
-> - **Offline read cache** — Home reads a last-known snapshot (`SnapshotStore`, DataStore) and the
->   Transactions ledger a Room mirror (`CachedTransactionEntity`) with an "offline · as of &lt;time&gt;"
->   indicator. Reads never throw offline. This closes ROADMAP Wave 1's remaining infra item.
+> - **Offline read cache** — the read screens degrade to last-known data instead of erroring when
+>   the tailnet is unreachable. `SnapshotStore` (DataStore JSON, one key per screen, interface +
+>   `DataStoreSnapshotStore`) now covers **Home, Review queue, Budgets, Bills, and Accounts**; the
+>   Transactions ledger uses a Room mirror (`CachedTransactionEntity`). Every restored screen shows
+>   the shared Pulse `StaleBanner` ("Offline — as of &lt;time&gt;", `defaultFormatAsOf`; the old
+>   per-screen private banners and `util/Money.formatAsOf` were retired in its favor). **Reads
+>   degrade, writes disable:** while a screen is stale (`staleAsOfMs != null`) its mutations
+>   (review-queue confirm/correct, budget/goal/plan edits, account add/import/checkpoint/delete)
+>   are inert — buttons disabled/hidden with "Server unreachable — changes need a connection.";
+>   a fresh successful load clears the marker. Only a genuine network failure (`IOException`)
+>   triggers the fallback — an HTTP error from a reachable server is a real rejection and still
+>   surfaces as an error (the `TransactionRepository` write-through distinction, applied to reads).
+>   This closes ROADMAP Wave 1's remaining infra item.
 > - **Monthly insights ARE built** (`app/routers/insights.py` + `app/services/ai/insight.py`) with a
 >   Home insight card → **insight detail view** (LLM narrative, category deltas, budget verdicts).
 >   The "first insights never built" line in the 2026-07-09 block below is now stale.
@@ -736,10 +746,22 @@ is needed in the screenshot test. **A real layout bug was caught this way in Pha
 was the thing that surfaced it, not code review.
 
 Offline model: the **only entry surface that's offline is cash entry** (the Room queue above);
-everything else is online-first against the tailnet — no broader read cache yet (unlike
-Cookbook's recipe cache). Acceptable because the phone is on Tailscale wherever it has signal.
-Because Tailscale Serve provides HTTPS, the manifest needs **no cleartext exception** (unlike
-Hawksnest's bare-IP problem).
+every other write is online-only against the tailnet. Reads, however, degrade gracefully
+(the 1.0 offline round, extended 2026-07-17): **Home, Review queue, Budgets, Bills, and
+Accounts** each save their last successful raw API responses to `SnapshotStore` (DataStore
+JSON, key per screen) and, when a load fails with an `IOException` (server unreachable — a
+Retrofit `HttpException` is a server *rejection* and keeps the normal error path), restore
+that snapshot into the normal loaded state with a `staleAsOfMs` marker. The marker renders
+the shared Pulse `StaleBanner` and **disables every mutation entry point on the stale screen**
+(confirm/correct, budget/goal/plan edits, account add/import/checkpoint/delete) until a fresh
+load succeeds — a queued financial mutation against stale data is a correctness trap, so
+writes-need-a-connection is deliberate. The Transactions screen's default view uses a Room
+mirror instead (`TransactionRepository.defaultFirstPage`); its **filtered/searched/paginated
+views stay online-only** — caching arbitrary filter+offset combinations would be a
+correctness trap, and the default view is the daily-review surface. Per-VM tests fake
+`ApiService`/`SnapshotStore` and pin the IOException-vs-HttpException distinction. Acceptable
+because the phone is on Tailscale wherever it has signal. Because Tailscale Serve provides
+HTTPS, the manifest needs **no cleartext exception** (unlike Hawksnest's bare-IP problem).
 
 ### Resolved: the `magpie` suite OAuth client (registered 2026-07-05)
 

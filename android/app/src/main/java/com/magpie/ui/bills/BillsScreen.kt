@@ -34,6 +34,7 @@ import com.magpie.ui.util.RefreshOnResume
 import com.magpie.ui.theme.MagpieTheme
 import com.magpie.util.formatCents
 import design.pulse.ui.components.PanelCard
+import design.pulse.ui.components.StaleBanner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +60,15 @@ internal fun BillsContent(state: BillsUiState, onBack: () -> Unit) {
                     it,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(MagpieTheme.spacing.md),
+                )
+            }
+            // Offline read-cache indicator: the list below is the last-known snapshot. Bills is a
+            // read-only screen, so there's nothing to disable — just the honesty banner.
+            state.staleAsOfMs?.let {
+                StaleBanner(
+                    asOfMs = it,
+                    channel = MagpieTheme.colors.needsReview.base,
+                    modifier = Modifier.padding(horizontal = MagpieTheme.spacing.md, vertical = 4.dp),
                 )
             }
             when {

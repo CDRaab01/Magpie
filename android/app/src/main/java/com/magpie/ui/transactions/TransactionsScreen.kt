@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -43,13 +42,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.magpie.data.remote.SplitPart
 import com.magpie.data.remote.TransactionOut
-import androidx.compose.material.icons.filled.CloudOff
 import com.magpie.ui.theme.MagpieTheme
 import com.magpie.ui.util.RefreshOnResume
-import com.magpie.util.formatAsOf
 import com.magpie.util.formatCents
 import design.pulse.ui.components.EmptyState
 import design.pulse.ui.components.PanelCard
+import design.pulse.ui.components.StaleBanner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,7 +96,19 @@ internal fun TransactionsContent(
             )
 
             is TransactionsUiState.Ready -> Column(Modifier.padding(padding).fillMaxSize()) {
-                s.staleAsOfMs?.let { StaleBanner(it) }
+                // The offline read-cache indicator (#B): shown only when the list is being served
+                // from the last-known Room mirror because the tailnet is unreachable — the rows are
+                // stale-but-real, with their capture time. Hidden entirely when online. Pulse's
+                // shared banner, in Magpie's needs-review amber.
+                s.staleAsOfMs?.let {
+                    StaleBanner(
+                        asOfMs = it,
+                        channel = MagpieTheme.colors.needsReview.base,
+                        modifier = Modifier.padding(
+                            horizontal = MagpieTheme.spacing.md, vertical = 4.dp,
+                        ),
+                    )
+                }
                 SearchField(query = s.query, onQuery = onSetQuery)
                 if (s.accounts.size > 1) {
                     AccountFilterRow(s.accounts.map { it.id to it.name }, s.accountId, onSetAccount)
@@ -166,35 +176,6 @@ internal fun TransactionsContent(
                 }
             }
         }
-    }
-}
-
-/**
- * The offline read-cache indicator (#B): a subtle amber strip shown only when the list is being
- * served from the last-known Room mirror because the tailnet is unreachable, so the user knows the
- * rows are stale-but-real and when they were captured. Hidden entirely when online.
- */
-@Composable
-private fun StaleBanner(asOfMs: Long) {
-    val channel = MagpieTheme.colors.needsReview.base
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = MagpieTheme.spacing.md, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Icon(
-            Icons.Default.CloudOff,
-            contentDescription = null,
-            tint = channel,
-            modifier = Modifier.size(16.dp),
-        )
-        Text(
-            "Offline — ${formatAsOf(asOfMs)}",
-            style = MaterialTheme.typography.labelMedium,
-            color = channel,
-        )
     }
 }
 
