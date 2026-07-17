@@ -2,16 +2,22 @@ package com.magpie.ui.reviewqueue
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.magpie.data.local.SnapshotStore
 import com.magpie.data.remote.ApiService
 import com.magpie.data.remote.CategoryOut
 import com.magpie.data.remote.RuleCreate
 import com.magpie.data.remote.TransactionOut
 import com.magpie.data.remote.TransactionUpdate
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.io.IOException
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 data class ReviewQueueUiState(
     val transactions: List<TransactionOut> = emptyList(),
@@ -21,14 +27,29 @@ data class ReviewQueueUiState(
     val categoryNamesById: Map<String, String> = emptyMap(),
     val loading: Boolean = true,
     val error: String? = null,
+    // Non-null when the queue was restored from the offline snapshot rather than the server: the
+    // epoch-ms it was captured, for the stale banner. While set, confirm/correct are inert —
+    // approving a draft needs the server (the mutation would silently vanish otherwise).
+    val staleAsOfMs: Long? = null,
+)
+
+/** The serializable slice of [ReviewQueueUiState] cached for offline (maps are re-derived). */
+@Serializable
+private data class ReviewQueueSnapshot(
+    val transactions: List<TransactionOut>,
+    val categories: List<CategoryOut>,
+    // When the snapshot was written, so an offline open can show "as of <time>".
+    val cachedAtMs: Long = 0L,
 )
 
 @HiltViewModel
 class ReviewQueueViewModel @Inject constructor(
     private val api: ApiService,
+    private val snapshots: SnapshotStore,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ReviewQueueUiState())
     val state: StateFlow<ReviewQueueUiState> = _state
+    private val json = Json { ignoreUnknownKeys = true }
 
     init {
         load()
@@ -46,7 +67,36 @@ class ReviewQueueViewModel @Inject constructor(
                     categories = categories,
                     categoryNamesById = categories.associate { it.id to it.name },
                     loading = false,
+                    staleAsOfMs = null, // a fresh load re-enables the queue
                 )
+                // Cache the raw lists so a later offline open shows last-known, not an error.
+                runCatching {
+                    snapshots.save(
+                        SnapshotStore.REVIEW_QUEUE,
+                        json.encodeToString(
+                            ReviewQueueSnapshot(txns, categories, cachedAtMs = System.currentTimeMillis()),
+                        ),
+                    )
+                }
+            } catch (e: IOException) {
+                // Server unreachable (a network failure, not a rejection): fall back to the
+                // last-known queue read-only instead of erroring.
+                val cached = snapshots.read(SnapshotStore.REVIEW_QUEUE)
+                    ?.let { runCatching { json.decodeFromString<ReviewQueueSnapshot>(it) }.getOrNull() }
+                _state.value = if (cached != null) {
+                    _state.value.copy(
+                        transactions = cached.transactions,
+                        categories = cached.categories,
+                        categoryNamesById = cached.categories.associate { it.id to it.name },
+                        loading = false,
+                        staleAsOfMs = cached.cachedAtMs.takeIf { it > 0L },
+                    )
+                } else {
+                    _state.value.copy(
+                        loading = false,
+                        error = e.message ?: "Couldn't load the review queue",
+                    )
+                }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     loading = false,
@@ -78,6 +128,8 @@ class ReviewQueueViewModel @Inject constructor(
         kind: String? = null,
         ruleMatcher: String? = null,
     ) {
+        // Offline-stale queue is read-only (the screen disables the buttons; this is the backstop).
+        if (_state.value.staleAsOfMs != null) return
         viewModelScope.launch {
             try {
                 api.updateTransaction(

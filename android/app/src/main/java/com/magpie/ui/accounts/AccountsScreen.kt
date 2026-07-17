@@ -54,6 +54,7 @@ import design.pulse.ui.components.EmptyState
 import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
+import design.pulse.ui.components.StaleBanner
 
 /** Thin ViewModel-wired wrapper. [AccountsContent] below is the pure, screenshot-testable half. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -152,6 +153,9 @@ internal fun AccountsContent(
     var showAddDialog by remember { mutableStateOf(false) }
     var deletingAccount by remember { mutableStateOf<AccountOut?>(null) }
     var enteringBalanceFor by remember { mutableStateOf<AccountOut?>(null) }
+    // Offline-stale screen is read-only: add/import/checkpoint/delete are server writes, so every
+    // mutation entry point goes inert until a fresh load clears the stale marker.
+    val mutationsEnabled = state.staleAsOfMs == null
     Scaffold(
         topBar = {
             TopAppBar(
@@ -164,8 +168,10 @@ internal fun AccountsContent(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Add account")
+            if (mutationsEnabled) {
+                FloatingActionButton(onClick = { showAddDialog = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "Add account")
+                }
             }
         },
     ) { padding ->
@@ -175,6 +181,19 @@ internal fun AccountsContent(
                     it,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(MagpieTheme.spacing.md),
+                )
+            }
+            state.staleAsOfMs?.let {
+                StaleBanner(
+                    asOfMs = it,
+                    channel = MagpieTheme.colors.needsReview.base,
+                    modifier = Modifier.padding(horizontal = MagpieTheme.spacing.md, vertical = 4.dp),
+                )
+                Text(
+                    "Server unreachable — changes need a connection.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = MagpieTheme.spacing.md),
                 )
             }
             Box(modifier = Modifier.fillMaxSize()) {
@@ -191,6 +210,7 @@ internal fun AccountsContent(
                         items(state.accounts, key = { it.id }) { account ->
                             AccountRow(
                                 account,
+                                actionsEnabled = mutationsEnabled,
                                 onImport = { onStartImport(account.id) },
                                 onDelete = { deletingAccount = account },
                                 onEnterBalance = { enteringBalanceFor = account },
@@ -334,6 +354,7 @@ private fun AddAccountDialog(
 @Composable
 private fun AccountRow(
     account: AccountOut,
+    actionsEnabled: Boolean,
     onImport: () -> Unit,
     onDelete: () -> Unit,
     onEnterBalance: () -> Unit,
@@ -373,6 +394,7 @@ private fun AccountRow(
                     text = if (account.balanceDeltaCents == null) "Enter statement balance" else "Update balance",
                     tonal = true,
                     compact = true,
+                    enabled = actionsEnabled,
                     onClick = onEnterBalance,
                 )
             }
@@ -380,10 +402,11 @@ private fun AccountRow(
                 text = "Import CSV",
                 tonal = true,
                 compact = true,
+                enabled = actionsEnabled,
                 leadingIcon = { Icon(Icons.Default.UploadFile, contentDescription = null) },
                 onClick = onImport,
             )
-            IconButton(onClick = onDelete) {
+            IconButton(onClick = onDelete, enabled = actionsEnabled) {
                 Icon(Icons.Default.Delete, contentDescription = "Delete account")
             }
         }

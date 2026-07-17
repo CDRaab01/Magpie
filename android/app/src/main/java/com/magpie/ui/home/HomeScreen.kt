@@ -17,10 +17,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -55,6 +53,7 @@ import design.pulse.ui.components.PanelCard
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
 import design.pulse.ui.components.Sparkline
+import design.pulse.ui.components.StaleBanner
 import design.pulse.ui.components.TickerNumber
 import design.pulse.ui.theme.Pulse
 
@@ -111,7 +110,17 @@ internal fun HomeContent(
         ) {
             if (state is HomeUiState.Ready) {
                 MagpieHero(state, onClick = onViewCashflow)
-                state.asOfMs?.let { StaleBanner(it) }
+                // The offline read-cache indicator (#B): shown only when Home was restored from the
+                // last-known snapshot because the tailnet was unreachable — stale-but-real, with the
+                // capture time. Hidden entirely when online. Pulse's shared banner, in Magpie's
+                // needs-review amber (Pulse knows hues, Magpie binds the meaning).
+                state.asOfMs?.let {
+                    StaleBanner(
+                        asOfMs = it,
+                        channel = MagpieTheme.colors.needsReview.base,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             } else {
                 Text("Magpie", style = MaterialTheme.typography.headlineMedium)
             }
@@ -439,33 +448,6 @@ private fun UpcomingBillCard(bill: com.magpie.data.remote.UpcomingBillOut?, onCl
                 Text("Nothing due soon", style = MaterialTheme.typography.bodyLarge)
             }
         }
-    }
-}
-
-/**
- * The offline read-cache indicator (#B): a subtle amber strip under the hero, shown only when Home
- * was restored from the last-known snapshot because the tailnet was unreachable — so the daily
- * glance reads as stale-but-real, with the time it was captured. Hidden entirely when online.
- */
-@Composable
-private fun StaleBanner(asOfMs: Long) {
-    val channel = MagpieTheme.colors.needsReview.base
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Icon(
-            Icons.Default.CloudOff,
-            contentDescription = null,
-            tint = channel,
-            modifier = Modifier.size(16.dp),
-        )
-        Text(
-            "Offline — ${com.magpie.util.formatAsOf(asOfMs)}",
-            style = MaterialTheme.typography.labelMedium,
-            color = channel,
-        )
     }
 }
 

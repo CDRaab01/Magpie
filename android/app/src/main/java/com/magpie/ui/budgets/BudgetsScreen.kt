@@ -58,6 +58,7 @@ import design.pulse.ui.components.ProgressRing
 import design.pulse.ui.components.PulseButton
 import design.pulse.ui.components.SectionHeader
 import design.pulse.ui.components.Sparkline
+import design.pulse.ui.components.StaleBanner
 import design.pulse.ui.theme.Pulse
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -99,12 +100,15 @@ internal fun BudgetsContent(
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var showGoalDialog by remember { mutableStateOf(false) }
+    // Offline-stale screen is read-only: budget/goal/plan edits are server writes, so every
+    // mutation entry point goes inert until a fresh load clears the stale marker.
+    val mutationsEnabled = state.staleAsOfMs == null
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("Budgets · ${state.monthLabel}") })
         },
         floatingActionButton = {
-            if (!state.loading && state.categories.isNotEmpty()) {
+            if (!state.loading && state.categories.isNotEmpty() && mutationsEnabled) {
                 FloatingActionButton(onClick = { showAddDialog = true }) {
                     Icon(Icons.Default.Add, contentDescription = "Add budget")
                 }
@@ -117,6 +121,19 @@ internal fun BudgetsContent(
                     it,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(MagpieTheme.spacing.md),
+                )
+            }
+            state.staleAsOfMs?.let {
+                StaleBanner(
+                    asOfMs = it,
+                    channel = MagpieTheme.colors.needsReview.base,
+                    modifier = Modifier.padding(horizontal = MagpieTheme.spacing.md, vertical = 4.dp),
+                )
+                Text(
+                    "Server unreachable — changes need a connection.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = MagpieTheme.spacing.md),
                 )
             }
             when {
@@ -218,6 +235,8 @@ private fun GoalCard(state: BudgetsUiState, onEdit: () -> Unit, onLoadPlan: () -
     val net = state.net
     val short = net?.goalDeltaCents?.let { it < 0 } ?: false
     val channel = if (short) MagpieTheme.colors.overBudget.base else MagpieTheme.colors.money.base
+    // Offline-stale: goal edits and the plan are server calls — inert until back online.
+    val actionsEnabled = state.staleAsOfMs == null
     PanelCard(channel = channel, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -230,6 +249,7 @@ private fun GoalCard(state: BudgetsUiState, onEdit: () -> Unit, onLoadPlan: () -
                     text = if (goal == null) "Set goal" else "Edit",
                     tonal = true,
                     compact = true,
+                    enabled = actionsEnabled,
                     onClick = onEdit,
                 )
             }
@@ -256,6 +276,7 @@ private fun GoalCard(state: BudgetsUiState, onEdit: () -> Unit, onLoadPlan: () -
                         text = "How do I get there?",
                         tonal = true,
                         compact = true,
+                        enabled = actionsEnabled,
                         onClick = onLoadPlan,
                     )
                 }
